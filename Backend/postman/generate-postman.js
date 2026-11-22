@@ -1,0 +1,939 @@
+const fs = require('fs');
+const path = require('path');
+
+const collection = {
+  info: {
+    _postman_id: "8c7f49d0-8c77-49d0-8c77-propertycfo-v1",
+    name: "Property Investor CFO Platform (V1) API",
+    description: "Production Postman collection for the Property Investor CFO Platform backend API built with NestJS, Prisma ORM, and PostgreSQL.\n\nAll endpoints follow strict adviser authentication, calculation engine rules, dual-snapshot architecture, and workflow state machine locks.",
+    schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  auth: {
+    type: "bearer",
+    bearer: [
+      {
+        key: "token",
+        value: "{{accessToken}}",
+        type: "string"
+      }
+    ]
+  },
+  variable: [
+    { key: "baseUrl", value: "http://localhost:3001/api/v1", type: "string" },
+    { key: "accessToken", value: "", type: "string" },
+    { key: "refreshToken", value: "", type: "string" },
+    { key: "householdId", value: "", type: "string" },
+    { key: "reviewId", value: "", type: "string" },
+    { key: "propertyId", value: "", type: "string" },
+    { key: "loanId", value: "", type: "string" },
+    { key: "criterionId", value: "", type: "string" },
+    { key: "benchmarkId", value: "", type: "string" }
+  ],
+  item: [
+    {
+      name: "1. Authentication (Adviser Only)",
+      item: [
+        {
+          name: "POST /auth/login (Seed Adviser)",
+          event: [
+            {
+              listen: "test",
+              script: {
+                exec: [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('accessToken', json.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', json.refreshToken);",
+                  "    pm.environment.set('accessToken', json.accessToken);",
+                  "    pm.environment.set('refreshToken', json.refreshToken);",
+                  "    console.log('Access token stored successfully');",
+                  "}"
+                ],
+                type: "text/javascript"
+              }
+            }
+          ],
+          request: {
+            auth: { type: "noauth" },
+            method: "POST",
+            header: [{ key: "Content-Type", value: "application/json" }],
+            body: {
+              mode: "raw",
+              raw: JSON.stringify({
+                email: "adviser@propertycfo.com.au",
+                password: "Password123!"
+              }, null, 2)
+            },
+            url: {
+              raw: "{{baseUrl}}/auth/login",
+              host: ["{{baseUrl}}"],
+              path: ["auth", "login"]
+            },
+            description: "Authenticates an adviser and stores the access token into the collection and environment variables."
+          }
+        },
+        {
+          name: "GET /auth/me",
+          request: {
+            method: "GET",
+            header: [],
+            url: {
+              raw: "{{baseUrl}}/auth/me",
+              host: ["{{baseUrl}}"],
+              path: ["auth", "me"]
+            },
+            description: "Fetches current adviser profile details."
+          }
+        },
+        {
+          name: "POST /auth/refresh",
+          event: [
+            {
+              listen: "test",
+              script: {
+                exec: [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('accessToken', json.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', json.refreshToken);",
+                  "}"
+                ],
+                type: "text/javascript"
+              }
+            }
+          ],
+          request: {
+            auth: { type: "noauth" },
+            method: "POST",
+            header: [{ key: "Content-Type", value: "application/json" }],
+            body: {
+              mode: "raw",
+              raw: JSON.stringify({
+                refreshToken: "{{refreshToken}}"
+              }, null, 2)
+            },
+            url: {
+              raw: "{{baseUrl}}/auth/refresh",
+              host: ["{{baseUrl}}"],
+              path: ["auth", "refresh"]
+            },
+            description: "Refreshes an expired access token using the valid refresh token."
+          }
+        },
+        {
+          name: "POST /auth/forgot-password",
+          request: {
+            auth: { type: "noauth" },
+            method: "POST",
+            header: [{ key: "Content-Type", value: "application/json" }],
+            body: {
+              mode: "raw",
+              raw: JSON.stringify({
+                email: "adviser@propertycfo.com.au"
+              }, null, 2)
+            },
+            url: {
+              raw: "{{baseUrl}}/auth/forgot-password",
+              host: ["{{baseUrl}}"],
+              path: ["auth", "forgot-password"]
+            },
+            description: "Generates password reset token for the adviser."
+          }
+        },
+        {
+          name: "POST /auth/reset-password",
+          request: {
+            auth: { type: "noauth" },
+            method: "POST",
+            header: [{ key: "Content-Type", value: "application/json" }],
+            body: {
+              mode: "raw",
+              raw: JSON.stringify({
+                token: "replace-with-reset-token-received",
+                newPassword: "NewPassword123!"
+              }, null, 2)
+            },
+            url: {
+              raw: "{{baseUrl}}/auth/reset-password",
+              host: ["{{baseUrl}}"],
+              path: ["auth", "reset-password"]
+            },
+            description: "Resets adviser password."
+          }
+        },
+        {
+          name: "POST /auth/logout",
+          request: {
+            method: "POST",
+            header: [],
+            url: {
+              raw: "{{baseUrl}}/auth/logout",
+              host: ["{{baseUrl}}"],
+              path: ["auth", "logout"]
+            },
+            description: "Logs out the authenticated adviser."
+          }
+        }
+      ]
+    },
+    {
+      name: "2. Public & Marketing",
+      item: [
+        {
+          name: "POST /public/enquiries",
+          request: {
+            auth: { type: "noauth" },
+            method: "POST",
+            header: [{ key: "Content-Type", value: "application/json" }],
+            body: {
+              mode: "raw",
+              raw: JSON.stringify({
+                fullName: "David Miller",
+                email: "david.miller@example.com",
+                phone: "+61 412 345 678",
+                enquiryType: "ANNUAL_REVIEW_BOOKING",
+                message: "Interested in scheduling an annual review for our multi-property investment portfolio."
+              }, null, 2)
+            },
+            url: {
+              raw: "{{baseUrl}}/public/enquiries",
+              host: ["{{baseUrl}}"],
+              path: ["public", "enquiries"]
+            },
+            description: "Public endpoint for website lead generation and annual review booking CTAs."
+          }
+        },
+        {
+          name: "GET /public/enquiries",
+          request: {
+            method: "GET",
+            header: [],
+            url: {
+              raw: "{{baseUrl}}/public/enquiries",
+              host: ["{{baseUrl}}"],
+              path: ["public", "enquiries"]
+            },
+            description: "Adviser view of all public website booking enquiries."
+          }
+        }
+      ]
+    },
+    {
+      name: "3. Clients & Households",
+      item: [
+        {
+          name: "POST /clients (Create Household)",
+          event: [
+            {
+              listen: "test",
+              script: {
+                exec: [
+                  "if (pm.response.code === 201) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('householdId', json.id);",
+                  "    pm.environment.set('householdId', json.id);",
+                  "}"
+                ],
+                type: "text/javascript"
+              }
+            }
+          ],
+          request: {
+            method: "POST",
+            header: [{ key: "Content-Type", value: "application/json" }],
+            body: {
+              mode: "raw",
+              raw: JSON.stringify({
+                householdName: "Harrison Family",
+                primaryContactEmail: "james.harrison@example.com",
+                primaryContactPhone: "+61 422 999 888",
+                notes: "High net-worth household seeking debt structuring and capital growth advisory."
+              }, null, 2)
+            },
+            url: {
+              raw: "{{baseUrl}}/clients",
+              host: ["{{baseUrl}}"],
+              path: ["clients"]
+            },
+            description: "Creates a new client household isolated under the logged-in adviser."
+          }
+        },
+        {
+          name: "GET /clients (List Households)",
+          event: [
+            {
+              listen: "test",
+              script: {
+                exec: [
+                  "if (pm.response.code === 200) {",
+                  "    var list = pm.response.json();",
+                  "    if (list.length > 0) {",
+                  "        pm.collectionVariables.set('householdId', list[0].id);",
+                  "        pm.environment.set('householdId', list[0].id);",
+                  "    }",
+                  "}"
+                ],
+                type: "text/javascript"
+              }
+            }
+          ],
+          request: {
+            method: "GET",
+            header: [],
+            url: {
+              raw: "{{baseUrl}}/clients",
+              host: ["{{baseUrl}}"],
+              path: ["clients"]
+            },
+            description: "Lists all households managed by the authenticated adviser."
+          }
+        },
+        {
+          name: "GET /clients/:id (Household Details)",
+          request: {
+            method: "GET",
+            header: [],
+            url: {
+              raw: "{{baseUrl}}/clients/{{householdId}}",
+              host: ["{{baseUrl}}"],
+              path: ["clients", "{{householdId}}"]
+            },
+            description: "Fetches complete nested household record (members, entities, properties, loans, and past reviews)."
+          }
+        },
+        {
+          name: "PATCH /clients/:id (Update Household)",
+          request: {
+            method: "PATCH",
+            header: [{ key: "Content-Type", value: "application/json" }],
+            body: {
+              mode: "raw",
+              raw: JSON.stringify({
+                primaryContactPhone: "+61 422 999 777",
+                notes: "Updated long-term retirement target to age 58."
+              }, null, 2)
+            },
+            url: {
+              raw: "{{baseUrl}}/clients/{{householdId}}",
+              host: ["{{baseUrl}}"],
+              path: ["clients", "{{householdId}}"]
+            }
+          }
+        },
+        {
+          name: "POST /clients/:id/members (Add Person)",
+          request: {
+            method: "POST",
+            header: [{ key: "Content-Type", value: "application/json" }],
+            body: {
+              mode: "raw",
+              raw: JSON.stringify({
+                firstName: "James",
+                lastName: "Harrison",
+                dob: "1983-06-20T00:00:00.000Z",
+                expectedRetirementAge: 60,
+                currentSuperBalance: 380000,
+                annualSuperContribution: 27500,
+                marginalTaxRate: 0.45
+              }, null, 2)
+            },
+            url: {
+              raw: "{{baseUrl}}/clients/{{householdId}}/members",
+              host: ["{{baseUrl}}"],
+              path: ["clients", "{{householdId}}", "members"]
+            }
+          }
+        },
+        {
+          name: "POST /clients/:id/entities (Add Entity)",
+          request: {
+            method: "POST",
+            header: [{ key: "Content-Type", value: "application/json" }],
+            body: {
+              mode: "raw",
+              raw: JSON.stringify({
+                name: "Harrison Investment Trust",
+                type: "FAMILY_TRUST",
+                abnOrTfnMasked: "ABN 88 XXX XXX 102"
+              }, null, 2)
+            },
+            url: {
+              raw: "{{baseUrl}}/clients/{{householdId}}/entities",
+              host: ["{{baseUrl}}"],
+              path: ["clients", "{{householdId}}", "entities"]
+            }
+          }
+        },
+        {
+          name: "POST /clients/:id/properties (Add Property)",
+          event: [
+            {
+              listen: "test",
+              script: {
+                exec: [
+                  "if (pm.response.code === 201) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('propertyId', json.id);",
+                  "    pm.environment.set('propertyId', json.id);",
+                  "}"
+                ],
+                type: "text/javascript"
+              }
+            }
+          ],
+          request: {
+            method: "POST",
+            header: [{ key: "Content-Type", value: "application/json" }],
+            body: {
+              mode: "raw",
+              raw: JSON.stringify({
+                name: "Manly Beachfront Unit",
+                address: "Unit 3, 14 South Steyne",
+                suburb: "Manly",
+                state: "NSW",
+                postcode: "2095",
+                propertyCategory: "Unit",
+                type: "INVESTMENT",
+                purchaseDate: "2021-04-10T00:00:00.000Z",
+                purchasePrice: 950000,
+                acquisitionCosts: 42000
+              }, null, 2)
+            },
+            url: {
+              raw: "{{baseUrl}}/clients/{{householdId}}/properties",
+              host: ["{{baseUrl}}"],
+              path: ["clients", "{{householdId}}", "properties"]
+            }
+          }
+        },
+        {
+          name: "POST /clients/:id/properties/:propertyId/loans (Add Loan)",
+          event: [
+            {
+              listen: "test",
+              script: {
+                exec: [
+                  "if (pm.response.code === 201) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('loanId', json.id);",
+                  "    pm.environment.set('loanId', json.id);",
+                  "}"
+                ],
+                type: "text/javascript"
+              }
+            }
+          ],
+          request: {
+            method: "POST",
+            header: [{ key: "Content-Type", value: "application/json" }],
+            body: {
+              mode: "raw",
+              raw: JSON.stringify({
+                lender: "Macquarie Bank",
+                accountName: "Main Investment Facility",
+                loanType: "IO",
+                isOffsetAvailable: true
+              }, null, 2)
+            },
+            url: {
+              raw: "{{baseUrl}}/clients/{{householdId}}/properties/{{propertyId}}/loans",
+              host: ["{{baseUrl}}"],
+              path: ["clients", "{{householdId}}", "properties", "{{propertyId}}", "loans"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      name: "4. Reviews & Financial Snapshots",
+      item: [
+        {
+          name: "POST /clients/:clientId/reviews (Create Review)",
+          event: [
+            {
+              listen: "test",
+              script: {
+                exec: [
+                  "if (pm.response.code === 201) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('reviewId', json.id);",
+                  "    pm.environment.set('reviewId', json.id);",
+                  "}"
+                ],
+                type: "text/javascript"
+              }
+            }
+          ],
+          request: {
+            method: "POST",
+            header: [{ key: "Content-Type", value: "application/json" }],
+            body: {
+              mode: "raw",
+              raw: JSON.stringify({
+                financialYear: 2026,
+                executiveSummary: "Annual financial and strategic review for FY2026."
+              }, null, 2)
+            },
+            url: {
+              raw: "{{baseUrl}}/clients/{{householdId}}/reviews",
+              host: ["{{baseUrl}}"],
+              path: ["clients", "{{householdId}}", "reviews"]
+            },
+            description: "Creates an AnnualReview for the household. Sets finDataStatus = IN_PROGRESS, tchReviewStatus = NOT_STARTED."
+          }
+        },
+        {
+          name: "GET /reviews/:reviewId (Get Review State)",
+          request: {
+            method: "GET",
+            header: [],
+            url: {
+              raw: "{{baseUrl}}/reviews/{{reviewId}}",
+              host: ["{{baseUrl}}"],
+              path: ["reviews", "{{reviewId}}"]
+            },
+            description: "Inspects review workflow statuses (finDataStatus, tchReviewStatus), property snapshots, and loan snapshots."
+          }
+        },
+        {
+          name: "PUT /reviews/:reviewId/financials/properties (Save Property Snapshots)",
+          request: {
+            method: "PUT",
+            header: [{ key: "Content-Type", value: "application/json" }],
+            body: {
+              mode: "raw",
+              raw: JSON.stringify({
+                snapshots: [
+                  {
+                    propertyId: "{{propertyId}}",
+                    snapshotPoint: "REVIEW_DATE",
+                    valuation: 1100000,
+                    weeklyRent: 850,
+                    annualGrossRent: 44200,
+                    vacancyWeeks: 1,
+                    councilRates: 1600,
+                    waterRates: 850,
+                    insurance: 1350,
+                    propertyManagementFees: 2652,
+                    repairsMaintenance: 900,
+                    landTax: 0,
+                    strataFees: 3200,
+                    otherExpenses: 300,
+                    depreciationNonCash: 6500
+                  }
+                ]
+              }, null, 2)
+            },
+            url: {
+              raw: "{{baseUrl}}/reviews/{{reviewId}}/financials/properties",
+              host: ["{{baseUrl}}"],
+              path: ["reviews", "{{reviewId}}", "financials", "properties"]
+            },
+            description: "Upserts property snapshots for EOFY or REVIEW_DATE. Blocked if tchReviewStatus === COMPLETED."
+          }
+        },
+        {
+          name: "PUT /reviews/:reviewId/financials/loans (Save Loan Snapshots)",
+          request: {
+            method: "PUT",
+            header: [{ key: "Content-Type", value: "application/json" }],
+            body: {
+              mode: "raw",
+              raw: JSON.stringify({
+                snapshots: [
+                  {
+                    loanId: "{{loanId}}",
+                    snapshotPoint: "REVIEW_DATE",
+                    loanBalance: 650000,
+                    offsetBalance: 75000,
+                    interestRate: 0.0585,
+                    annualRepayments: 33637,
+                    interestPaid: 33637,
+                    loanLimit: 700000
+                  }
+                ]
+              }, null, 2)
+            },
+            url: {
+              raw: "{{baseUrl}}/reviews/{{reviewId}}/financials/loans",
+              host: ["{{baseUrl}}"],
+              path: ["reviews", "{{reviewId}}", "financials", "loans"]
+            },
+            description: "Upserts loan snapshots for EOFY or REVIEW_DATE. Blocked if tchReviewStatus === COMPLETED."
+          }
+        },
+        {
+          name: "PATCH /reviews/:reviewId/fin-data-status (Mark COMPLETED)",
+          request: {
+            method: "PATCH",
+            header: [{ key: "Content-Type", value: "application/json" }],
+            body: {
+              mode: "raw",
+              raw: JSON.stringify({
+                status: "COMPLETED"
+              }, null, 2)
+            },
+            url: {
+              raw: "{{baseUrl}}/reviews/{{reviewId}}/fin-data-status",
+              host: ["{{baseUrl}}"],
+              path: ["reviews", "{{reviewId}}", "fin-data-status"]
+            },
+            description: "Marks financial data collection COMPLETED, unlocking the 'Start TC&H Review' transition."
+          }
+        },
+        {
+          name: "POST /reviews/:reviewId/start-review (Start TC&H Review)",
+          request: {
+            method: "POST",
+            header: [],
+            url: {
+              raw: "{{baseUrl}}/reviews/{{reviewId}}/start-review",
+              host: ["{{baseUrl}}"],
+              path: ["reviews", "{{reviewId}}", "start-review"]
+            },
+            description: "Pre-condition: finDataStatus === COMPLETED. Transitions tchReviewStatus -> IN_PROGRESS, computes metrics, and seeds AssessmentCriterion records."
+          }
+        },
+        {
+          name: "POST /reviews/:reviewId/complete-review (Complete Review)",
+          request: {
+            method: "POST",
+            header: [],
+            url: {
+              raw: "{{baseUrl}}/reviews/{{reviewId}}/complete-review",
+              host: ["{{baseUrl}}"],
+              path: ["reviews", "{{reviewId}}", "complete-review"]
+            },
+            description: "Pre-condition: tchReviewStatus === IN_PROGRESS and mandatory ★ criteria rated. Stamps completion timestamp, locks financial snapshots and ★ fields, compiles report snapshot."
+          }
+        },
+        {
+          name: "POST /reviews/:reviewId/reopen-review (Reopen Review)",
+          request: {
+            method: "POST",
+            header: [],
+            url: {
+              raw: "{{baseUrl}}/reviews/{{reviewId}}/reopen-review",
+              host: ["{{baseUrl}}"],
+              path: ["reviews", "{{reviewId}}", "reopen-review"]
+            },
+            description: "Controlled unlock: reverts tchReviewStatus back to IN_PROGRESS if corrections are required."
+          }
+        }
+      ]
+    },
+    {
+      name: "5. Assessments (Adviser ★ Fields)",
+      item: [
+        {
+          name: "GET /reviews/:reviewId/assessments (List Criteria)",
+          event: [
+            {
+              listen: "test",
+              script: {
+                exec: [
+                  "if (pm.response.code === 200) {",
+                  "    var list = pm.response.json();",
+                  "    if (list.length > 0) {",
+                  "        pm.collectionVariables.set('criterionId', list[0].id);",
+                  "        pm.environment.set('criterionId', list[0].id);",
+                  "    }",
+                  "}"
+                ],
+                type: "text/javascript"
+              }
+            }
+          ],
+          request: {
+            method: "GET",
+            header: [],
+            url: {
+              raw: "{{baseUrl}}/reviews/{{reviewId}}/assessments",
+              host: ["{{baseUrl}}"],
+              path: ["reviews", "{{reviewId}}", "assessments"]
+            },
+            description: "Fetches all AssessmentCriterion records with system-calculated evidence and adviser-editable ★ fields."
+          }
+        },
+        {
+          name: "PATCH /reviews/:reviewId/assessments/:criterionId (Update ★ Fields)",
+          request: {
+            method: "PATCH",
+            header: [{ key: "Content-Type", value: "application/json" }],
+            body: {
+              mode: "raw",
+              raw: JSON.stringify({
+                rating: "STRONG",
+                insight: "Gross yield outperforms local suburb benchmark by 45 basis points.",
+                recommendation: "Maintain existing property management agreement; schedule lease review for October.",
+                potentialOpportunity: "Estimated annual rent uplift of $1,800 upon renewal.",
+                priority: "MEDIUM",
+                adviserNotes: "Client is pleased with low vacancy rate."
+              }, null, 2)
+            },
+            url: {
+              raw: "{{baseUrl}}/reviews/{{reviewId}}/assessments/{{criterionId}}",
+              host: ["{{baseUrl}}"],
+              path: ["reviews", "{{reviewId}}", "assessments", "{{criterionId}}"]
+            },
+            description: "Updates manual ★ fields. LOCKED RULE: Returns 403 Forbidden if tchReviewStatus !== IN_PROGRESS."
+          }
+        }
+      ]
+    },
+    {
+      name: "6. Analytics Dashboards",
+      item: [
+        {
+          name: "GET /portfolio-overview (Investment-Only KPIs)",
+          request: {
+            method: "GET",
+            header: [],
+            url: {
+              raw: "{{baseUrl}}/reviews/{{reviewId}}/analytics/portfolio-overview",
+              host: ["{{baseUrl}}"],
+              path: ["reviews", "{{reviewId}}", "analytics", "portfolio-overview"]
+            },
+            description: "Aggregated Investment-Only portfolio KPIs (strictly excludes Owner-Occupied) + historical comparison series."
+          }
+        },
+        {
+          name: "GET /property-analysis (Both Investment & Owner-Occupied)",
+          request: {
+            method: "GET",
+            header: [],
+            url: {
+              raw: "{{baseUrl}}/reviews/{{reviewId}}/analytics/property-analysis",
+              host: ["{{baseUrl}}"],
+              path: ["reviews", "{{reviewId}}", "analytics", "property-analysis"]
+            },
+            description: "Individual property cards for both Investment and Owner-Occupied. OO properties have null for yields, net cash flow, and CAGR."
+          }
+        },
+        {
+          name: "GET /cash-management (Yields & Dual-Axis Expenses)",
+          request: {
+            method: "GET",
+            header: [],
+            url: {
+              raw: "{{baseUrl}}/reviews/{{reviewId}}/analytics/cash-management",
+              host: ["{{baseUrl}}"],
+              path: ["reviews", "{{reviewId}}", "analytics", "cash-management"]
+            },
+            description: "Section 1: Rental yield & cash flow vs benchmark; Section 2: Operating expense breakdown in $ AND % of rent for dual-axis charts."
+          }
+        },
+        {
+          name: "GET /capital-management (Valuations, CAGR & Debt Structure)",
+          request: {
+            method: "GET",
+            header: [],
+            url: {
+              raw: "{{baseUrl}}/reviews/{{reviewId}}/analytics/capital-management",
+              host: ["{{baseUrl}}"],
+              path: ["reviews", "{{reviewId}}", "analytics", "capital-management"]
+            },
+            description: "Section 1: Valuations & CAGR vs benchmark; Section 2: Net debt, LVR, and IO vs P&I debt structuring."
+          }
+        }
+      ]
+    },
+    {
+      name: "7. Future Outlook & Simulation",
+      item: [
+        {
+          name: "GET /future-outlook (Saved Scenario & Trajectory)",
+          request: {
+            method: "GET",
+            header: [],
+            url: {
+              raw: "{{baseUrl}}/reviews/{{reviewId}}/future-outlook",
+              host: ["{{baseUrl}}"],
+              path: ["reviews", "{{reviewId}}", "future-outlook"]
+            },
+            description: "Loads saved scenario levers and calculates year-by-year projections from Year 0 to Year N."
+          }
+        },
+        {
+          name: "POST /future-outlook/simulate (Stateless What-If Preview)",
+          request: {
+            method: "POST",
+            header: [{ key: "Content-Type", value: "application/json" }],
+            body: {
+              mode: "raw",
+              raw: JSON.stringify({
+                forecastYears: 15,
+                propertyGrowthRate: 0.055,
+                rentalGrowthRate: 0.04,
+                inflationRate: 0.025,
+                superReturnRate: 0.075,
+                extraMonthlyHomeLoanRepayment: 1500,
+                downsizeEnabled: true,
+                downsizeYearOffset: 12,
+                downsizeNetProceedsToSuper: 500000,
+                targetRetirementIncomeAfterTax: 160000
+              }, null, 2)
+            },
+            url: {
+              raw: "{{baseUrl}}/reviews/{{reviewId}}/future-outlook/simulate",
+              host: ["{{baseUrl}}"],
+              path: ["reviews", "{{reviewId}}", "future-outlook", "simulate"]
+            },
+            description: "Instant stateless projection simulation returning hero outputs (total assets, projected retirement income, surplus/shortfall) and full yearly array."
+          }
+        },
+        {
+          name: "PUT /future-outlook (Save Scenario Levers)",
+          request: {
+            method: "PUT",
+            header: [{ key: "Content-Type", value: "application/json" }],
+            body: {
+              mode: "raw",
+              raw: JSON.stringify({
+                forecastYears: 15,
+                propertyGrowthRate: 0.05,
+                rentalGrowthRate: 0.035,
+                inflationRate: 0.025,
+                superReturnRate: 0.07,
+                extraMonthlyHomeLoanRepayment: 1000,
+                downsizeEnabled: true,
+                downsizeYearOffset: 10,
+                downsizeNetProceedsToSuper: 450000,
+                targetRetirementIncomeAfterTax: 150000
+              }, null, 2)
+            },
+            url: {
+              raw: "{{baseUrl}}/reviews/{{reviewId}}/future-outlook",
+              host: ["{{baseUrl}}"],
+              path: ["reviews", "{{reviewId}}", "future-outlook"]
+            },
+            description: "Persists customized scenario levers for this annual review."
+          }
+        }
+      ]
+    },
+    {
+      name: "8. Reports",
+      item: [
+        {
+          name: "GET /report (Consolidated Report Payload)",
+          request: {
+            method: "GET",
+            header: [],
+            url: {
+              raw: "{{baseUrl}}/reviews/{{reviewId}}/report",
+              host: ["{{baseUrl}}"],
+              path: ["reviews", "{{reviewId}}", "report"]
+            },
+            description: "MANDATORY LOCK: Throws 403 Forbidden with 'Report cannot be viewed until TC&H Review is completed.' if tchReviewStatus !== COMPLETED."
+          }
+        }
+      ]
+    },
+    {
+      name: "9. Market Benchmarks",
+      item: [
+        {
+          name: "GET /benchmarks (List All)",
+          request: {
+            method: "GET",
+            header: [],
+            url: {
+              raw: "{{baseUrl}}/benchmarks",
+              host: ["{{baseUrl}}"],
+              path: ["benchmarks"]
+            }
+          }
+        },
+        {
+          name: "POST /benchmarks (Create Benchmark)",
+          event: [
+            {
+              listen: "test",
+              script: {
+                exec: [
+                  "if (pm.response.code === 201) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('benchmarkId', json.id);",
+                  "    pm.environment.set('benchmarkId', json.id);",
+                  "}"
+                ],
+                type: "text/javascript"
+              }
+            }
+          ],
+          request: {
+            method: "POST",
+            header: [{ key: "Content-Type", value: "application/json" }],
+            body: {
+              mode: "raw",
+              raw: JSON.stringify({
+                effectiveDate: "2026-06-30T00:00:00.000Z",
+                state: "QLD",
+                suburb: "New Farm",
+                propertyCategory: "Unit",
+                benchmarkInterestRate: 0.0585,
+                benchmarkGrossYield: 0.049,
+                benchmarkWeeklyRent: 750,
+                benchmarkRentalGrowth: 0.055,
+                benchmarkCapitalGrowth: 0.078,
+                sourceNotes: "Brisbane Inner-City High Density Benchmark FY26"
+              }, null, 2)
+            },
+            url: {
+              raw: "{{baseUrl}}/benchmarks",
+              host: ["{{baseUrl}}"],
+              path: ["benchmarks"]
+            }
+          }
+        },
+        {
+          name: "GET /benchmarks/:id",
+          request: {
+            method: "GET",
+            header: [],
+            url: {
+              raw: "{{baseUrl}}/benchmarks/{{benchmarkId}}",
+              host: ["{{baseUrl}}"],
+              path: ["benchmarks", "{{benchmarkId}}"]
+            }
+          }
+        },
+        {
+          name: "PATCH /benchmarks/:id",
+          request: {
+            method: "PATCH",
+            header: [{ key: "Content-Type", value: "application/json" }],
+            body: {
+              mode: "raw",
+              raw: JSON.stringify({
+                benchmarkGrossYield: 0.051
+              }, null, 2)
+            },
+            url: {
+              raw: "{{baseUrl}}/benchmarks/{{benchmarkId}}",
+              host: ["{{baseUrl}}"],
+              path: ["benchmarks", "{{benchmarkId}}"]
+            }
+          }
+        },
+        {
+          name: "DELETE /benchmarks/:id",
+          request: {
+            method: "DELETE",
+            header: [],
+            url: {
+              raw: "{{baseUrl}}/benchmarks/{{benchmarkId}}",
+              host: ["{{baseUrl}}"],
+              path: ["benchmarks", "{{benchmarkId}}"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+};
+
+const outputPath = path.join(__dirname, 'Property_Investor_CFO_API.postman_collection.json');
+fs.writeFileSync(outputPath, JSON.stringify(collection, null, 2), 'utf-8');
+console.log('✅ Postman collection generated successfully at:', outputPath);

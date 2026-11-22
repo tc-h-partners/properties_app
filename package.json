@@ -1,0 +1,21 @@
+{
+  "name": "properties-project",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Properties Project - NestJS Backend & Next.js Frontend",
+  "scripts": {
+    "dev": "concurrently -k -n \"BACKEND,FRONTEND\" -c \"blue.bold,green.bold\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "npm --prefix Backend run start:dev",
+    "dev:frontend": "npm --prefix Frontend run dev",
+    "build": "npm --prefix Backend run build && npm --prefix Frontend run build",
+    "build:backend": "npm --prefix Backend run build",
+    "build:frontend": "npm --prefix Frontend run build",
+    "start": "concurrently -k -n \"BACKEND,FRONTEND\" -c \"blue.bold,green.bold\" \"npm run start:backend\" \"npm run start:frontend\"",
+    "start:backend": "npm --prefix Backend run start:prod",
+    "start:frontend": "npm --prefix Frontend run start",
+    "install:all": "npm install && npm --prefix Backend install && npm --prefix Frontend install"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
