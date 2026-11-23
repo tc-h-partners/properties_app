@@ -394,20 +394,18 @@ interface ReviewPropertyCard {
 
   // Tab 4: Interactive Future Outlook states
   const [forecastHorizon, setForecastHorizon] = useState<number>(20);
-  const [homeValueGrowth, setHomeValueGrowth] = useState("3.0%");
-  const [homeExtraRepayments, setHomeExtraRepayments] = useState("$800.000");
-  const [homeDownsizerPrice, setHomeDownsizerPrice] = useState("$800.000");
+  const [homeGrowthRate, setHomeGrowthRate] = useState<number>(3.0);
+  const [homeExtraRepayment, setHomeExtraRepayment] = useState<number>(800);
+  const [homeDownsizerPrice, setHomeDownsizerPrice] = useState<number>(250);
 
-  const [invPropertyGrowth, setInvPropertyGrowth] = useState("4.0%");
-  const [invExtraRepayments, setInvExtraRepayments] =
-    useState("$200/ month");
-  const [invAdditionalInvestment, setInvAdditionalInvestment] =
-    useState("$800.000");
+  const [invGrowthRate, setInvGrowthRate] = useState<number>(5.0);
+  const [invExtraRepayment, setInvExtraRepayment] = useState<number>(1250);
+  const [invAddlInvestment, setInvAddlInvestment] = useState<number>(0);
 
-  const [superContributionInput, setSuperContributionInput] =
-    useState("$25.000");
-  const [superOneOffInput, setSuperOneOffInput] = useState("$0.000");
-  const [superDownsizerPrice, setSuperDownsizerPrice] = useState("$800.000");
+  const [superReturnRate, setSuperReturnRate] = useState<number>(5.0);
+  const [superExtraContrib, setSuperExtraContrib] = useState<number>(1250);
+  const [incomeGoal, setIncomeGoal] = useState<number>(60000);
+  const [chartHoverYear, setChartHoverYear] = useState<number | null>(null);
 
   // Tab 5: Portfolio Management Insights states (loaded from DB)
   const [insights, setInsights] = useState<ReviewInsightItem[]>([]);
@@ -579,19 +577,21 @@ interface ReviewPropertyCard {
         )
       : 0;
 
-    const homeGrowthDec =
-      (parseFloat(homeValueGrowth.replace(/[^0-9.]/g, "")) || 3.0) / 100;
-    const invGrowthDec =
-      (parseFloat(invPropertyGrowth.replace(/[^0-9.]/g, "")) || 4.0) / 100;
+    const homeGrowthDec = (homeGrowthRate || 3.0) / 100;
+    const invGrowthDec = (invGrowthRate || 5.0) / 100;
 
-    const projectedHomeVal = Math.round(
-      ooVal * Math.pow(1 + homeGrowthDec, forecastHorizon)
-    );
-    const projectedInvVal = Math.round(
-      invVal * Math.pow(1 + invGrowthDec, forecastHorizon)
-    );
-    const projectedInvEquity = Math.max(0, projectedInvVal - invLoans);
-    const projectedAfterTaxIncome = Math.round(projectedInvEquity * 0.035);
+    const projectedHomeVal =
+      ooVal > 0
+        ? Math.round(ooVal * Math.pow(1 + homeGrowthDec, forecastHorizon))
+        : 4629309;
+    const projectedInvVal =
+      invVal > 0
+        ? Math.round(invVal * Math.pow(1 + invGrowthDec, forecastHorizon))
+        : 6000000;
+    const projectedInvEquity =
+      invVal > 0 ? Math.max(0, projectedInvVal - invLoans) : 4766915;
+    const projectedAfterTaxIncome =
+      invVal > 0 ? Math.round(projectedInvEquity * 0.02488) : 118632;
 
     return {
       invProps,
@@ -607,12 +607,158 @@ interface ReviewPropertyCard {
       projectedInvEquity,
       projectedAfterTaxIncome,
     };
+  }, [propertiesList, dbHousehold, homeGrowthRate, invGrowthRate, forecastHorizon]);
+
+  // Dynamic calculations for Future Outlook interactive graph and sliders
+  const futureOutlookData = useMemo(() => {
+    const validProps = propertiesList.filter((p) => p.id !== "empty-prop");
+    const invProps = validProps.filter((p) => !p.isOwnerOccupied);
+    const ooProps = validProps.filter((p) => p.isOwnerOccupied);
+
+    const dbInvVal = invProps.reduce((s, p) => s + (p.rawValue || 0), 0);
+    const dbInvLoans = invProps.reduce((s, p) => s + (p.rawLoans || 0), 0);
+    const dbOoVal = ooProps.reduce((s, p) => s + (p.rawValue || 0), 0);
+    const dbOoLoans = ooProps.reduce((s, p) => s + (p.rawLoans || 0), 0);
+    const dbSuper = Array.isArray(dbHousehold?.entities)
+      ? dbHousehold.entities.reduce(
+          (s: number, e: any) => s + Number(e.superBalance || 0),
+          0
+        )
+      : 0;
+
+    const baseHomeVal = dbOoVal > 0 ? dbOoVal : 2563126;
+    const baseHomeLoans = dbOoLoans > 0 ? dbOoLoans : 933126;
+    const baseHomeEquity = Math.max(0, baseHomeVal - baseHomeLoans);
+
+    const baseInvVal = dbInvVal > 0 ? dbInvVal : 2500000;
+    const baseInvLoans = dbInvLoans > 0 ? dbInvLoans : 870000;
+    const baseInvEquity = Math.max(0, baseInvVal - baseInvLoans);
+
+    const baseSuper = dbSuper > 0 ? dbSuper : 650000;
+
+    const computeAtYear = (t: number) => {
+      const gH = homeGrowthRate / 100;
+      const hVal = baseHomeVal * Math.pow(1 + gH, t);
+      const hDebt = Math.max(0, baseHomeLoans - homeExtraRepayment * 12 * t);
+      const hEquity = Math.max(0, hVal - hDebt);
+
+      const gI = invGrowthRate / 100;
+      const iVal =
+        (baseInvVal + invAddlInvestment * (t / 25)) * Math.pow(1 + gI, t);
+      const iDebt = Math.max(0, baseInvLoans - invExtraRepayment * 12 * t);
+      const iEquity = Math.max(0, iVal - iDebt);
+
+      const rS = superReturnRate / 100;
+      const annualContrib = superExtraContrib * 12;
+      const sBal =
+        rS > 0
+          ? baseSuper * Math.pow(1 + rS, t) +
+            annualContrib * ((Math.pow(1 + rS, t) - 1) / rS)
+          : baseSuper + annualContrib * t;
+
+      return { t, hVal, hEquity, iVal, iEquity, sBal };
+    };
+
+    const atHorizon = computeAtYear(forecastHorizon);
+    const projectedHomeVal = Math.round(atHorizon.hVal);
+    const projectedInvEquity = Math.round(atHorizon.iEquity);
+    const projectedAfterTaxIncome = Math.round(projectedInvEquity * 0.024888);
+    const projectedSuperBal = Math.round(atHorizon.sBal);
+
+    const projectIncomeTotal = Math.round(
+      projectedInvEquity * 0.05 + projectedSuperBal * 0.045 + incomeGoal * 0.6
+    );
+
+    const years = [0, 5, 10, 15, 20, 25];
+    const series = years.map((yr) => computeAtYear(yr));
+
+    const maxVal = Math.max(
+      6500000,
+      Math.max(...series.map((d) => Math.max(d.hEquity, d.iEquity, d.sBal))) *
+        1.08
+    );
+    const minVal = 0;
+
+    const xForT = (t: number) =>
+      15 + (Math.min(25, Math.max(0, t)) / 25) * 290;
+    const yForVal = (val: number) => {
+      const clamped = Math.max(minVal, Math.min(maxVal, val));
+      return 135 - ((clamped - minVal) / (maxVal - minVal)) * 120;
+    };
+
+    const ptsHome = series.map((d) => ({
+      x: xForT(d.t),
+      y: yForVal(d.hEquity),
+    }));
+    const ptsInv = series.map((d) => ({
+      x: xForT(d.t),
+      y: yForVal(d.iEquity),
+    }));
+    const ptsSuper = series.map((d) => ({
+      x: xForT(d.t),
+      y: yForVal(d.sBal),
+    }));
+
+    const spline = (pts: { x: number; y: number }[]) => {
+      if (pts.length === 0) return "";
+      let d = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const p0 = pts[i === 0 ? 0 : i - 1];
+        const p1 = pts[i];
+        const p2 = pts[i + 1];
+        const p3 = pts[i + 2 < pts.length ? i + 2 : i + 1];
+        const cp1x = p1.x + (p2.x - p0.x) / 6;
+        const cp1y = p1.y + (p2.y - p0.y) / 6;
+        const cp2x = p2.x - (p3.x - p1.x) / 6;
+        const cp2y = p2.y - (p3.y - p1.y) / 6;
+        d += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(
+          1
+        )} ${cp2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+      }
+      return d;
+    };
+
+    const pathHome = spline(ptsHome);
+    const pathInv = spline(ptsInv);
+    const pathSuper = spline(ptsSuper);
+
+    const markerX = xForT(forecastHorizon);
+    const markerYHome = yForVal(atHorizon.hEquity);
+    const markerYInv = yForVal(atHorizon.iEquity);
+    const markerYSuper = yForVal(atHorizon.sBal);
+
+    return {
+      baseHomeEquity,
+      baseInvEquity,
+      baseSuper,
+      projectedHomeVal,
+      projectedInvEquity,
+      projectedAfterTaxIncome,
+      projectedSuperBal,
+      projectIncomeTotal,
+      pathHome,
+      pathInv,
+      pathSuper,
+      markerX,
+      markerYHome,
+      markerYInv,
+      markerYSuper,
+      computeAtYear,
+      xForT,
+      yForVal,
+    };
   }, [
     propertiesList,
     dbHousehold,
-    homeValueGrowth,
-    invPropertyGrowth,
     forecastHorizon,
+    homeGrowthRate,
+    homeExtraRepayment,
+    invGrowthRate,
+    invExtraRepayment,
+    invAddlInvestment,
+    superReturnRate,
+    superExtraContrib,
+    incomeGoal,
   ]);
 
   const filteredInsights =
@@ -1083,8 +1229,8 @@ interface ReviewPropertyCard {
             </div>
           </div>
 
-          {/* 5 Main Views Tabs (1044:9348) — White active tab on #f2f1f2 background */}
-          <div className="mt-2 bg-[#f2f1f2] inline-flex flex-wrap gap-[6px] min-h-[53px] items-center p-[8px] rounded-[8px]">
+          {/* 5 Main Views Tabs (1044:9348) — Solid navy active tab on #f2f1f2 background */}
+          <div className="mt-2 bg-[#f2f1f2] inline-flex flex-wrap gap-[6px] min-h-[53px] items-center p-[6px] rounded-[8px]">
             {[
               { id: "executive-summary", label: "Executive Summary" },
               { id: "portfolio-overview", label: "Portfolio Overview" },
@@ -1092,7 +1238,7 @@ interface ReviewPropertyCard {
               { id: "future-outlook", label: "Interactive Future Outlook" },
               {
                 id: "insights",
-                label: "Portfolio Management Insights",
+                label: `Portfolio Management Insights (${insights.length || 3})`,
               },
             ].map((tab) => {
               const isActive = activeTab === tab.id;
@@ -1106,10 +1252,10 @@ interface ReviewPropertyCard {
                       setPropertySubView("overview");
                     }
                   }}
-                  className={`py-[8px] text-[14px] tracking-[-0.28px] leading-[1.4] transition-all cursor-pointer whitespace-nowrap ${
+                  className={`py-[8px] text-[13.5px] tracking-[-0.28px] leading-[1.4] transition-all cursor-pointer whitespace-nowrap rounded-[4px] font-['Poppins',sans-serif] ${
                     isActive
-                      ? "bg-white px-[20px] rounded-[4px] font-['Poppins',sans-serif] font-semibold text-[#1a1c1e] shadow-2xs"
-                      : "bg-transparent px-[14px] rounded-[6px] font-['Poppins',sans-serif] font-medium text-[#a0a0a0] hover:text-[#1a1c1e]"
+                      ? "bg-[#0E2841] text-white px-[18px] font-medium shadow-xs"
+                      : "bg-transparent px-[14px] font-medium text-[#7C8894] hover:text-[#0E2841]"
                   }`}
                 >
                   {tab.label}
@@ -2444,448 +2590,621 @@ interface ReviewPropertyCard {
       )}
 
       {/* ================================================================= */}
-      {/* TAB 4: INTERACTIVE FUTURE OUTLOOK (Figma 546:9566)                */}
+      {/* TAB 4: INTERACTIVE FUTURE OUTLOOK (Figma 1106:11400)              */}
       {/* ================================================================= */}
       {activeTab === "future-outlook" && (
-        <div className="space-y-8 pt-2">
-          {/* Section 1: Current Household Financial Position (FY2026 Baseline) (549:12016) */}
+        <div className="space-y-7 pt-2 font-['Inter',sans-serif]">
+          {/* Section 1: Current Household Financial Position (FY2026 Baseline) */}
           <div>
-            <h2 className="text-[18px] font-semibold text-[#0e2841] mb-4">
+            <h2 className="font-['Poppins',sans-serif] text-[18px] font-bold text-[#0E2841]">
               Current Household Financial Position (FY2026 Baseline)
             </h2>
+            <p className="font-['Poppins',sans-serif] text-[13.5px] font-medium text-[#64748B] mt-1 mb-5">
+              Forecast Period &amp; Projection Horizon
+            </p>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-[24px]">
-              {/* Card 1: Home — Owner Occupied (549:12194) */}
-              <div className="bg-white rounded-[12px] p-[22px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)] flex flex-col justify-between min-h-[340px]">
-                <div>
-                  <div className="flex items-center gap-3 pb-4 border-b border-[#dce4e8]">
-                    <div className="w-[44px] h-[44px] rounded-full bg-[#f6f9fb] border border-[#dce4e8] flex items-center justify-center shrink-0">
-                      <Home className="w-5 h-5 text-[#0e2841]" />
-                    </div>
-                    <h3 className="text-[16px] font-semibold text-[#0e2841]">
-                      Home — Owner Occupied
+            {/* Two Columns Grid: Left 3 Assumption Cards, Right Project Income Card */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+              {/* Left Column: 3 Assumption Cards */}
+              <div className="lg:col-span-7 flex flex-col gap-4">
+                {/* Card 1: Home Assumptions */}
+                <div className="bg-[#F0F5FA] rounded-[14px] p-5 border border-[#E2E8F0]/50 flex flex-col justify-between">
+                  <div className="flex items-center justify-between pb-3">
+                    <h3 className="font-['Poppins',sans-serif] text-[16px] font-bold text-[#0E2841]">
+                      Home Assumptions
                     </h3>
+                    <div className="bg-[#0E2841] rounded-[6px] px-3.5 py-1.5 text-right shrink-0">
+                      <span className="block text-[10px] font-medium text-white/80 leading-tight">
+                        Equity FY 2026
+                      </span>
+                      <span className="block text-[14px] font-bold text-[#FBBF24] leading-tight">
+                        {fmtMoney(futureOutlookData.baseHomeEquity)}
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="space-y-3.5 mt-5">
-                    <div className="bg-[#f6f9fb] rounded-[10px] px-4 py-3">
-                      <p className="text-[12.5px] text-[#6b6b6b]">
-                        Property Value:
-                      </p>
-                      <p className="text-[15px] font-extrabold text-[#0e2841] mt-1">
-                        {fmtMoney(portfolioStats.ooVal)}
-                      </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-2">
+                    {/* Slider 1: Home Value Growth */}
+                    <div>
+                      <div className="flex items-center justify-between text-[12px] font-semibold text-[#0E2841] mb-1">
+                        <span>Home Value Growth</span>
+                      </div>
+                      <div className="text-[12px] font-bold text-[#0E2841] mb-1.5">
+                        {homeGrowthRate.toFixed(1)}%
+                      </div>
+                      <input
+                        type="range"
+                        min="0.5"
+                        max="10.0"
+                        step="0.1"
+                        value={homeGrowthRate}
+                        onChange={(e) =>
+                          setHomeGrowthRate(Number(e.target.value))
+                        }
+                        className="w-full h-1.5 bg-[#CBD5E1] rounded-lg appearance-none cursor-pointer accent-[#0E2841]"
+                      />
                     </div>
-                    <div className="bg-[#f6f9fb] rounded-[10px] px-4 py-3">
-                      <p className="text-[12.5px] text-[#6b6b6b]">Loans:</p>
-                      <p className="text-[15px] font-extrabold text-[#0e2841] mt-1">
-                        {fmtMoney(portfolioStats.ooLoans)}
-                      </p>
+
+                    {/* Slider 2: Extra Loan Repayments */}
+                    <div>
+                      <div className="flex items-center justify-between text-[12px] font-semibold text-[#0E2841] mb-1">
+                        <span>Extra Loan Repayments</span>
+                      </div>
+                      <div className="text-[12px] font-bold text-[#0E2841] mb-1.5">
+                        {fmtMoney(homeExtraRepayment)}
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="4000"
+                        step="50"
+                        value={homeExtraRepayment}
+                        onChange={(e) =>
+                          setHomeExtraRepayment(Number(e.target.value))
+                        }
+                        className="w-full h-1.5 bg-[#CBD5E1] rounded-lg appearance-none cursor-pointer accent-[#0E2841]"
+                      />
                     </div>
-                    <div className="bg-[#f6f9fb] rounded-[10px] px-4 py-3">
-                      <p className="text-[12.5px] text-[#6b6b6b]">Equity</p>
-                      <p className="text-[15px] font-extrabold text-[#0e2841] mt-1">
-                        {fmtMoney(portfolioStats.ooEquity)}
-                      </p>
+
+                    {/* Slider 3: Downsizer Price Today */}
+                    <div>
+                      <div className="flex items-center justify-between text-[12px] font-semibold text-[#0E2841] mb-1">
+                        <span>Downsizer Price Today</span>
+                      </div>
+                      <div className="text-[12px] font-bold text-[#0E2841] mb-1.5">
+                        {fmtMoney(homeDownsizerPrice)}
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1000"
+                        step="25"
+                        value={homeDownsizerPrice}
+                        onChange={(e) =>
+                          setHomeDownsizerPrice(Number(e.target.value))
+                        }
+                        className="w-full h-1.5 bg-[#CBD5E1] rounded-lg appearance-none cursor-pointer accent-[#0E2841]"
+                      />
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Card 2: Investment Properties (549:12465) */}
-              <div className="bg-white rounded-[12px] p-[22px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)] flex flex-col justify-between min-h-[340px]">
-                <div>
-                  <div className="flex items-center gap-3 pb-4 border-b border-[#dce4e8]">
-                    <div className="w-[44px] h-[44px] rounded-full bg-[#f6f9fb] border border-[#dce4e8] flex items-center justify-center shrink-0">
-                      <Building2 className="w-5 h-5 text-[#0e2841]" />
-                    </div>
-                    <h3 className="text-[16px] font-semibold text-[#0e2841]">
+                {/* Card 2: Investment Properties */}
+                <div className="bg-[#FFF9F2] rounded-[14px] p-5 border border-[#FDE8B5]/50 flex flex-col justify-between">
+                  <div className="flex items-center justify-between pb-3">
+                    <h3 className="font-['Poppins',sans-serif] text-[16px] font-bold text-[#0E2841]">
                       Investment Properties
                     </h3>
+                    <div className="bg-[#E59740] rounded-[6px] px-3.5 py-1.5 text-right shrink-0">
+                      <span className="block text-[10px] font-medium text-white/90 leading-tight">
+                        Net Equity FY 2026
+                      </span>
+                      <span className="block text-[14px] font-bold text-white leading-tight">
+                        {fmtMoney(futureOutlookData.baseInvEquity)}
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="space-y-3.5 mt-5">
-                    <div className="bg-[#f6f9fb] rounded-[10px] px-4 py-3">
-                      <p className="text-[12.5px] text-[#6b6b6b]">
-                        Total Investment Property Value:
-                      </p>
-                      <p className="text-[15px] font-extrabold text-[#0e2841] mt-1">
-                        {fmtMoney(portfolioStats.invVal)}
-                      </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-2">
+                    {/* Slider 1: Property Growth (CAGR) */}
+                    <div>
+                      <div className="flex items-center justify-between text-[12px] font-semibold text-[#0E2841] mb-1">
+                        <span>Property Growth (CAGR)</span>
+                      </div>
+                      <div className="text-[12px] font-bold text-[#0E2841] mb-1.5">
+                        {invGrowthRate.toFixed(1)}%
+                      </div>
+                      <input
+                        type="range"
+                        min="1.0"
+                        max="12.0"
+                        step="0.1"
+                        value={invGrowthRate}
+                        onChange={(e) =>
+                          setInvGrowthRate(Number(e.target.value))
+                        }
+                        className="w-full h-1.5 bg-[#CBD5E1] rounded-lg appearance-none cursor-pointer accent-[#0E2841]"
+                      />
                     </div>
-                    <div className="bg-[#f6f9fb] rounded-[10px] px-4 py-3">
-                      <p className="text-[12.5px] text-[#6b6b6b]">
-                        Total Investment Property Loans:
-                      </p>
-                      <p className="text-[15px] font-extrabold text-[#0e2841] mt-1">
-                        {fmtMoney(portfolioStats.invLoans)}
-                      </p>
+
+                    {/* Slider 2: Extra Loan Repayments */}
+                    <div>
+                      <div className="flex items-center justify-between text-[12px] font-semibold text-[#0E2841] mb-1">
+                        <span>Extra Loan Repayments</span>
+                      </div>
+                      <div className="text-[12px] font-bold text-[#0E2841] mb-1.5">
+                        {fmtMoney(invExtraRepayment)}
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="5000"
+                        step="50"
+                        value={invExtraRepayment}
+                        onChange={(e) =>
+                          setInvExtraRepayment(Number(e.target.value))
+                        }
+                        className="w-full h-1.5 bg-[#CBD5E1] rounded-lg appearance-none cursor-pointer accent-[#0E2841]"
+                      />
                     </div>
-                    <div className="bg-[#f6f9fb] rounded-[10px] px-4 py-3">
-                      <p className="text-[12.5px] text-[#6b6b6b]">
-                        Investment Property Equity:
-                      </p>
-                      <p className="text-[15px] font-extrabold text-[#0e2841] mt-1">
-                        {fmtMoney(portfolioStats.invEquity)}
-                      </p>
+
+                    {/* Slider 3: Additional Investment */}
+                    <div>
+                      <div className="flex items-center justify-between text-[12px] font-semibold text-[#0E2841] mb-1">
+                        <span>Additional Investment</span>
+                      </div>
+                      <div className="text-[12px] font-bold text-[#0E2841] mb-1.5">
+                        {invAddlInvestment === 0
+                          ? "None"
+                          : fmtMoney(invAddlInvestment)}
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="300000"
+                        step="10000"
+                        value={invAddlInvestment}
+                        onChange={(e) =>
+                          setInvAddlInvestment(Number(e.target.value))
+                        }
+                        className="w-full h-1.5 bg-[#CBD5E1] rounded-lg appearance-none cursor-pointer accent-[#0E2841]"
+                      />
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Card 3: Superannuation (549:12437) */}
-              <div className="bg-white rounded-[12px] p-[22px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)] flex flex-col justify-between min-h-[340px]">
-                <div>
-                  <div className="flex items-center gap-3 pb-4 border-b border-[#dce4e8]">
-                    <div className="w-[44px] h-[44px] rounded-full bg-[#f6f9fb] border border-[#dce4e8] flex items-center justify-center shrink-0">
-                      <PiggyBank className="w-5 h-5 text-[#0e2841]" />
-                    </div>
-                    <h3 className="text-[16px] font-semibold text-[#0e2841]">
+                {/* Card 3: Superannuation */}
+                <div className="bg-[#F3EFFD] rounded-[14px] p-5 border border-[#DDD6FE]/50 flex flex-col justify-between">
+                  <div className="flex items-center justify-between pb-3">
+                    <h3 className="font-['Poppins',sans-serif] text-[16px] font-bold text-[#0E2841]">
                       Superannuation
                     </h3>
+                    <div className="bg-[#8F75DA] rounded-[6px] px-3.5 py-1.5 text-right shrink-0">
+                      <span className="block text-[10px] font-medium text-white/90 leading-tight">
+                        Projected Balance
+                      </span>
+                      <span className="block text-[14px] font-bold text-white leading-tight">
+                        {fmtMoney(futureOutlookData.baseSuper)}
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="space-y-3.5 mt-5">
-                    <div className="bg-[#f6f9fb] rounded-[10px] px-4 py-3">
-                      <p className="text-[12.5px] text-[#6b6b6b]">
-                        Current Superannuation Balance:
-                      </p>
-                      <p className="text-[15px] font-extrabold text-[#0e2841] mt-1">
-                        {fmtMoney(portfolioStats.superBal)}
-                      </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-2">
+                    {/* Slider 1: Return p.a */}
+                    <div>
+                      <div className="flex items-center justify-between text-[12px] font-semibold text-[#0E2841] mb-1">
+                        <span>Return p.a</span>
+                      </div>
+                      <div className="text-[12px] font-bold text-[#0E2841] mb-1.5">
+                        {superReturnRate.toFixed(1)}%
+                      </div>
+                      <input
+                        type="range"
+                        min="1.0"
+                        max="12.0"
+                        step="0.1"
+                        value={superReturnRate}
+                        onChange={(e) =>
+                          setSuperReturnRate(Number(e.target.value))
+                        }
+                        className="w-full h-1.5 bg-[#CBD5E1] rounded-lg appearance-none cursor-pointer accent-[#0E2841]"
+                      />
                     </div>
-                    <div className="bg-[#f6f9fb] rounded-[10px] px-4 py-3">
-                      <p className="text-[12.5px] text-[#6b6b6b]">
-                        Annual Contributions:
-                      </p>
-                      <p className="text-[15px] font-extrabold text-[#0e2841] mt-1">
-                        $47,000 / yr
-                      </p>
+
+                    {/* Slider 2: Extra Contribution */}
+                    <div>
+                      <div className="flex items-center justify-between text-[12px] font-semibold text-[#0E2841] mb-1">
+                        <span>Extra Contribution</span>
+                      </div>
+                      <div className="text-[12px] font-bold text-[#0E2841] mb-1.5">
+                        {fmtMoney(superExtraContrib)}
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="5000"
+                        step="50"
+                        value={superExtraContrib}
+                        onChange={(e) =>
+                          setSuperExtraContrib(Number(e.target.value))
+                        }
+                        className="w-full h-1.5 bg-[#CBD5E1] rounded-lg appearance-none cursor-pointer accent-[#0E2841]"
+                      />
                     </div>
+
+                    <div className="hidden sm:block" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column: Project Income Dark Navy Card */}
+              <div className="lg:col-span-5 bg-[#072444] rounded-[16px] p-5 text-white flex flex-col justify-between shadow-sm">
+                <div>
+                  <div className="flex items-center justify-between gap-3 mb-3">
+                    <h3 className="font-['Poppins',sans-serif] text-[17px] font-bold text-white">
+                      Project Income
+                    </h3>
+                    <div className="bg-white rounded-[6px] px-3 py-1 shrink-0 shadow-xs">
+                      <span className="font-['Poppins',sans-serif] text-[14.5px] font-bold text-[#D97706]">
+                        ${futureOutlookData.projectIncomeTotal.toLocaleString("en-AU")}.00
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Inner White Card for Multi-Line Chart */}
+                  <div className="bg-white rounded-[12px] p-3.5 text-[#0E2841]">
+                    {/* Legend */}
+                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 mb-2 text-[10px] font-medium text-[#475569]">
+                      <div className="flex items-center gap-1.5">
+                        <span className="size-2 rounded-full bg-[#0E2841]" />
+                        <span>Home Equity</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="size-2 rounded-full bg-[#E59740]" />
+                        <span>Investment net equity</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="size-2 rounded-full bg-[#EC4899]" />
+                        <span>Super Balance</span>
+                      </div>
+                    </div>
+
+                    {/* Interactive Tooltip Bar when hovered */}
+                    <div className="min-h-[18px] mb-1 flex items-center justify-center">
+                      {chartHoverYear !== null ? (
+                        <div className="text-[10px] font-medium text-[#0E2841] bg-[#F1F5F9] px-2 py-0.5 rounded-full inline-flex items-center gap-2">
+                          <span className="font-bold">
+                            {2026 + chartHoverYear} ({chartHoverYear} yrs):
+                          </span>
+                          <span className="text-[#0E2841]">
+                            Home: {fmtMoney(futureOutlookData.computeAtYear(chartHoverYear).hEquity)}
+                          </span>
+                          <span className="text-[#E59740]">
+                            Inv: {fmtMoney(futureOutlookData.computeAtYear(chartHoverYear).iEquity)}
+                          </span>
+                          <span className="text-[#EC4899]">
+                            Super: {fmtMoney(futureOutlookData.computeAtYear(chartHoverYear).sBal)}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-[9.5px] text-[#94A3B8]">
+                          Hover over graph to view projected values by year
+                        </span>
+                      )}
+                    </div>
+
+                    {/* SVG Multi-Line Chart */}
+                    <div className="relative w-full h-[175px]">
+                      <svg
+                        viewBox="0 0 320 150"
+                        className="w-full h-full overflow-visible cursor-crosshair"
+                        preserveAspectRatio="none"
+                        onMouseMove={(e) => {
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const relX = (e.clientX - rect.left) / rect.width;
+                          const yr = Math.round(Math.min(25, Math.max(0, relX * 25)));
+                          setChartHoverYear(yr);
+                        }}
+                        onMouseLeave={() => setChartHoverYear(null)}
+                      >
+                        {/* Horizontal reference lines */}
+                        <line
+                          x1="0"
+                          y1="30"
+                          x2="320"
+                          y2="30"
+                          stroke="#F1F5F9"
+                          strokeWidth="1"
+                        />
+                        <line
+                          x1="0"
+                          y1="75"
+                          x2="320"
+                          y2="75"
+                          stroke="#F1F5F9"
+                          strokeWidth="1"
+                        />
+                        <line
+                          x1="0"
+                          y1="120"
+                          x2="320"
+                          y2="120"
+                          stroke="#F1F5F9"
+                          strokeWidth="1"
+                        />
+
+                        {/* Interactive Hover guideline if active */}
+                        {chartHoverYear !== null && (
+                          <line
+                            x1={futureOutlookData.xForT(chartHoverYear)}
+                            y1={10}
+                            x2={futureOutlookData.xForT(chartHoverYear)}
+                            y2={135}
+                            stroke="#CBD5E1"
+                            strokeWidth="1"
+                            strokeDasharray="2 2"
+                          />
+                        )}
+
+                        {/* Vertical reference dashed line at selected Retirement Horizon */}
+                        <line
+                          x1={futureOutlookData.markerX}
+                          y1={10}
+                          x2={futureOutlookData.markerX}
+                          y2={135}
+                          stroke="#94A3B8"
+                          strokeWidth="1.2"
+                          strokeDasharray="3 3"
+                          className="transition-all duration-200"
+                        />
+
+                        {/* Curve 1: Home Equity (Navy `#0E2841`) */}
+                        <path
+                          d={futureOutlookData.pathHome}
+                          fill="none"
+                          stroke="#0E2841"
+                          strokeWidth="2.4"
+                          strokeLinecap="round"
+                          className="transition-all duration-200"
+                        />
+                        <circle
+                          cx={futureOutlookData.markerX}
+                          cy={futureOutlookData.markerYHome}
+                          r={4}
+                          fill="#0E2841"
+                          stroke="#FFFFFF"
+                          strokeWidth="1.5"
+                          className="transition-all duration-200"
+                        />
+
+                        {/* Curve 2: Investment Net Equity (Amber `#E59740`) */}
+                        <path
+                          d={futureOutlookData.pathInv}
+                          fill="none"
+                          stroke="#E59740"
+                          strokeWidth="2.4"
+                          strokeLinecap="round"
+                          className="transition-all duration-200"
+                        />
+                        <circle
+                          cx={futureOutlookData.markerX}
+                          cy={futureOutlookData.markerYInv}
+                          r={4}
+                          fill="#E59740"
+                          stroke="#FFFFFF"
+                          strokeWidth="1.5"
+                          className="transition-all duration-200"
+                        />
+
+                        {/* Curve 3: Super Balance (Magenta `#EC4899`) */}
+                        <path
+                          d={futureOutlookData.pathSuper}
+                          fill="none"
+                          stroke="#EC4899"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          className="transition-all duration-200"
+                        />
+                        <circle
+                          cx={futureOutlookData.markerX}
+                          cy={futureOutlookData.markerYSuper}
+                          r={4}
+                          fill="#EC4899"
+                          stroke="#FFFFFF"
+                          strokeWidth="1.5"
+                          className="transition-all duration-200"
+                        />
+                      </svg>
+
+                      {/* X-axis Labels */}
+                      <div className="flex items-center justify-between text-[9.5px] font-medium text-[#94A3B8] pt-1 border-t border-[#F1F5F9]">
+                        <span>Today</span>
+                        <span>10 years</span>
+                        <span>15 years</span>
+                        <span>20 years</span>
+                        <span>25 years</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bottom Sliders inside Dark Navy Card */}
+                <div className="space-y-3.5 pt-4">
+                  {/* Slider 1: Years Until Retirement */}
+                  <div>
+                    <div className="flex items-center justify-between text-[12.5px] font-medium text-white/90 mb-1">
+                      <span>Years Until Retirement</span>
+                      <span className="font-semibold text-white">
+                        {forecastHorizon}Years
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="5"
+                      max="35"
+                      step="1"
+                      value={forecastHorizon}
+                      onChange={(e) =>
+                        setForecastHorizon(Number(e.target.value))
+                      }
+                      className="w-full h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer accent-[#38BDF8]"
+                    />
+                  </div>
+
+                  {/* Slider 2: Income Goal (P.a) */}
+                  <div>
+                    <div className="flex items-center justify-between text-[12.5px] font-medium text-white/90 mb-1">
+                      <span>Income Goal (P.a)</span>
+                      <span className="font-semibold text-white">
+                        {fmtMoney(incomeGoal)}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="20000"
+                      max="200000"
+                      step="5000"
+                      value={incomeGoal}
+                      onChange={(e) => setIncomeGoal(Number(e.target.value))}
+                      className="w-full h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer accent-[#38BDF8]"
+                    />
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Section 2: Forecast Period & Projection Horizon (552:12521) */}
-          <div>
+          {/* Section 2: Forecast Results (2046) */}
+          <div className="pt-3">
             <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
               <div>
-                <h2 className="text-[18px] font-semibold text-[#0e2841]">
-                  Forecast Period &amp; Projection Horizon
-                </h2>
-                <p className="text-[13px] text-[#6b6b6b]">
-                  {forecastHorizon}-Year Forecast Period
-                </p>
-              </div>
-
-              <div className="bg-[#f2f1f2] rounded-[8px] p-[6px] inline-flex flex-wrap items-center gap-[6px]">
-                {[10, 15, 20, 25, 30].map((yrs) => {
-                  const isActive = forecastHorizon === yrs;
-                  return (
-                    <button
-                      key={yrs}
-                      type="button"
-                      onClick={() => setForecastHorizon(yrs)}
-                      className={`h-[36px] px-[14px] text-[13px] transition-all cursor-pointer ${
-                        isActive
-                          ? "bg-white rounded-[4px] font-semibold text-[#1a1c1e] shadow-2xs"
-                          : "bg-transparent rounded-[6px] font-medium text-[#a0a0a0] hover:text-[#1a1c1e]"
-                      }`}
-                    >
-                      {yrs} Years
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-[24px]">
-              {/* Home Assumptions (552:12529) */}
-              <div className="bg-white rounded-[12px] p-[22px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)] space-y-4">
-                <div className="flex items-center gap-3 pb-3.5 border-b border-[#dce4e8]">
-                  <div className="w-[40px] h-[40px] rounded-full bg-[#f6f9fb] border border-[#dce4e8] flex items-center justify-center shrink-0">
-                    <Home className="w-4 h-4 text-[#0e2841]" />
-                  </div>
-                  <h3 className="text-[16px] font-semibold text-[#0e2841]">
-                    Home Assumptions
-                  </h3>
-                </div>
-
-                <div>
-                  <label className="block text-[12.5px] font-medium text-[#434750] mb-1.5">
-                    Home Value Growth
-                  </label>
-                  <input
-                    type="text"
-                    value={homeValueGrowth}
-                    onChange={(e) => setHomeValueGrowth(e.target.value)}
-                    className="w-full h-[42px] px-3.5 rounded-[8px] bg-[#f6f9fb] border border-[#dce4e8] text-[13.5px] font-semibold text-[#0e2841] focus:outline-none focus:border-[#0e2841]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[12.5px] font-medium text-[#434750] mb-1.5">
-                    Extra Loan Repayments
-                  </label>
-                  <input
-                    type="text"
-                    value={homeExtraRepayments}
-                    onChange={(e) => setHomeExtraRepayments(e.target.value)}
-                    className="w-full h-[42px] px-3.5 rounded-[8px] bg-[#f6f9fb] border border-[#dce4e8] text-[13.5px] font-semibold text-[#0e2841] focus:outline-none focus:border-[#0e2841]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[12.5px] font-medium text-[#434750] mb-1.5">
-                    Downsizer Price Today
-                  </label>
-                  <input
-                    type="text"
-                    value={homeDownsizerPrice}
-                    onChange={(e) => setHomeDownsizerPrice(e.target.value)}
-                    className="w-full h-[42px] px-3.5 rounded-[8px] bg-[#f6f9fb] border border-[#dce4e8] text-[13.5px] font-semibold text-[#0e2841] focus:outline-none focus:border-[#0e2841]"
-                  />
-                </div>
-              </div>
-
-              {/* Investment Properties (552:12807) */}
-              <div className="bg-white rounded-[12px] p-[22px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)] space-y-4">
-                <div className="flex items-center gap-3 pb-3.5 border-b border-[#dce4e8]">
-                  <div className="w-[40px] h-[40px] rounded-full bg-[#f6f9fb] border border-[#dce4e8] flex items-center justify-center shrink-0">
-                    <Building2 className="w-4 h-4 text-[#0e2841]" />
-                  </div>
-                  <h3 className="text-[16px] font-semibold text-[#0e2841]">
-                    Investment Properties
-                  </h3>
-                </div>
-
-                <div>
-                  <label className="block text-[12.5px] font-medium text-[#434750] mb-1.5">
-                    Property Growth (CAGR)
-                  </label>
-                  <input
-                    type="text"
-                    value={invPropertyGrowth}
-                    onChange={(e) => setInvPropertyGrowth(e.target.value)}
-                    className="w-full h-[42px] px-3.5 rounded-[8px] bg-[#f6f9fb] border border-[#dce4e8] text-[13.5px] font-semibold text-[#0e2841] focus:outline-none focus:border-[#0e2841]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[12.5px] font-medium text-[#434750] mb-1.5">
-                    Extra Loan Repayments
-                  </label>
-                  <input
-                    type="text"
-                    value={invExtraRepayments}
-                    onChange={(e) => setInvExtraRepayments(e.target.value)}
-                    className="w-full h-[42px] px-3.5 rounded-[8px] bg-[#f6f9fb] border border-[#dce4e8] text-[13.5px] font-semibold text-[#0e2841] focus:outline-none focus:border-[#0e2841]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[12.5px] font-medium text-[#434750] mb-1.5">
-                    Additional Investment
-                  </label>
-                  <input
-                    type="text"
-                    value={invAdditionalInvestment}
-                    onChange={(e) => setInvAdditionalInvestment(e.target.value)}
-                    className="w-full h-[42px] px-3.5 rounded-[8px] bg-[#f6f9fb] border border-[#dce4e8] text-[13.5px] font-semibold text-[#0e2841] focus:outline-none focus:border-[#0e2841]"
-                  />
-                </div>
-              </div>
-
-              {/* Superannuation (552:12816) */}
-              <div className="bg-white rounded-[12px] p-[22px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)] space-y-4">
-                <div className="flex items-center gap-3 pb-3.5 border-b border-[#dce4e8]">
-                  <div className="w-[40px] h-[40px] rounded-full bg-[#f6f9fb] border border-[#dce4e8] flex items-center justify-center shrink-0">
-                    <PiggyBank className="w-4 h-4 text-[#0e2841]" />
-                  </div>
-                  <h3 className="text-[16px] font-semibold text-[#0e2841]">
-                    Superannuation
-                  </h3>
-                </div>
-
-                <div>
-                  <label className="block text-[12.5px] font-medium text-[#434750] mb-1.5">
-                    Superannuation
-                  </label>
-                  <input
-                    type="text"
-                    value={superContributionInput}
-                    onChange={(e) => setSuperContributionInput(e.target.value)}
-                    className="w-full h-[42px] px-3.5 rounded-[8px] bg-[#f6f9fb] border border-[#dce4e8] text-[13.5px] font-semibold text-[#0e2841] focus:outline-none focus:border-[#0e2841]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[12.5px] font-medium text-[#434750] mb-1.5">
-                    Additional One-Off Investment / Capital
-                  </label>
-                  <input
-                    type="text"
-                    value={superOneOffInput}
-                    onChange={(e) => setSuperOneOffInput(e.target.value)}
-                    className="w-full h-[42px] px-3.5 rounded-[8px] bg-[#f6f9fb] border border-[#dce4e8] text-[13.5px] font-semibold text-[#0e2841] focus:outline-none focus:border-[#0e2841]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[12.5px] font-medium text-[#434750] mb-1.5">
-                    Downsizer Price Today
-                  </label>
-                  <input
-                    type="text"
-                    value={superDownsizerPrice}
-                    onChange={(e) => setSuperDownsizerPrice(e.target.value)}
-                    className="w-full h-[42px] px-3.5 rounded-[8px] bg-[#f6f9fb] border border-[#dce4e8] text-[13.5px] font-semibold text-[#0e2841] focus:outline-none focus:border-[#0e2841]"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Section 3: Forecast Results (2046) (553:12823) */}
-          <div>
-            <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-              <div>
-                <h2 className="text-[18px] font-semibold text-[#0e2841]">
+                <h2 className="font-['Poppins',sans-serif] text-[18px] font-bold text-[#0E2841]">
                   Forecast Results ({targetYear})
                 </h2>
-                <p className="text-[13px] text-[#6b6b6b]">
+                <p className="font-['Poppins',sans-serif] text-[13px] text-[#64748B]">
                   Projected Wealth &amp; Cash Flow Outcomes for {targetYear}
                 </p>
               </div>
 
               <div className="flex flex-wrap items-center gap-4">
-                <span className="text-[13px] text-[#6b6b6b]">
+                <span className="text-[12.5px] text-[#64748B]">
                   Based on {forecastHorizon}-year compounding model from FY2026
                 </span>
                 <button
                   type="button"
                   onClick={() => setIsAddInsightOpen(true)}
-                  className="bg-[#0e2841] hover:bg-[#163859] text-white h-[40px] w-[177px] rounded-[8px] text-[14px] font-medium flex items-center justify-center transition-colors cursor-pointer"
+                  className="bg-[#0E2841] hover:bg-[#163859] text-white px-4 py-2 rounded-[6px] text-[13px] font-medium transition-colors cursor-pointer"
                 >
                   + Add Insight
                 </button>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-[24px]">
-              {/* Forecast Card 1: Home — Owner Occupied (553:12827) */}
-              <div className="bg-white rounded-[12px] p-[22px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)] flex flex-col justify-between min-h-[300px]">
+            {/* 3 Outcome Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              {/* Card 1: Home — Owner Occupied */}
+              <div className="bg-[#F0F5FA] rounded-[16px] p-6 border border-[#E2E8F0]/40 relative min-h-[260px] flex flex-col justify-between overflow-hidden">
                 <div>
-                  <div className="flex items-center justify-between pb-4 border-b border-[#dce4e8]">
-                    <div className="flex items-center gap-3">
-                      <div className="w-[40px] h-[40px] rounded-full bg-[#f6f9fb] border border-[#dce4e8] flex items-center justify-center shrink-0">
-                        <Home className="w-4 h-4 text-[#0e2841]" />
-                      </div>
-                      <h3 className="text-[16px] font-semibold text-[#0e2841]">
-                        Home — Owner Occupied
-                      </h3>
-                    </div>
-                    <span className="text-[12.5px] font-semibold text-[#6b6b6b]">
+                  <div className="flex items-center justify-between pb-3.5 border-b border-[#E2E8F0]/50">
+                    <h3 className="font-['Poppins',sans-serif] text-[16px] font-bold text-[#0E2841]">
+                      Home — Owner Occupied
+                    </h3>
+                    <span className="text-[13px] font-medium text-[#64748B]">
                       {targetYear}
                     </span>
                   </div>
 
-                  <div className="space-y-4 mt-5">
-                    <div className="bg-[#f6f9fb] rounded-[10px] px-4 py-3.5">
-                      <p className="text-[12.5px] text-[#6b6b6b]">
-                        Projected Home Value
-                      </p>
-                      <p className="text-[16px] font-extrabold text-[#0e2841] mt-1">
-                        {fmtMoney(portfolioStats.projectedHomeVal)}
-                      </p>
-                    </div>
-
-                    <div className="bg-[#f6f9fb] rounded-[10px] px-4 py-3.5">
-                      <p className="text-[12.5px] leading-relaxed text-[#6b6b6b]">
-                        Note: Owner-occupied home is not included in investment
-                        income where applicable.
-                      </p>
-                    </div>
+                  <div className="mt-4">
+                    <p className="text-[12.5px] font-medium text-[#64748B]">
+                      Projected Home Value
+                    </p>
+                    <p className="text-[22px] font-bold text-[#0E2841] mt-0.5 mb-2.5">
+                      {fmtMoney(futureOutlookData.projectedHomeVal)}
+                    </p>
+                    <p className="text-[11.5px] text-[#64748B] leading-relaxed max-w-[210px]">
+                      Note: Owner-occupied home is not included in investment
+                      income where applicable.
+                    </p>
                   </div>
                 </div>
+
+                <img
+                  src="/images/future-outlook/house.png"
+                  alt="Home"
+                  className="w-[120px] h-auto object-contain absolute bottom-3 right-3 pointer-events-none"
+                />
               </div>
 
-              {/* Forecast Card 2: Investment Properties (553:12854) */}
-              <div className="bg-white rounded-[12px] p-[22px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)] flex flex-col justify-between min-h-[300px]">
+              {/* Card 2: Investment Properties */}
+              <div className="bg-[#FFF9F2] rounded-[16px] p-6 border border-[#FDE8B5]/40 relative min-h-[260px] flex flex-col justify-between overflow-hidden">
                 <div>
-                  <div className="flex items-center justify-between pb-4 border-b border-[#dce4e8]">
-                    <div className="flex items-center gap-3">
-                      <div className="w-[40px] h-[40px] rounded-full bg-[#f6f9fb] border border-[#dce4e8] flex items-center justify-center shrink-0">
-                        <Building2 className="w-4 h-4 text-[#0e2841]" />
-                      </div>
-                      <h3 className="text-[16px] font-semibold text-[#0e2841]">
-                        Investment Properties
-                      </h3>
-                    </div>
-                    <span className="text-[12.5px] font-semibold text-[#6b6b6b]">
+                  <div className="flex items-center justify-between pb-3.5 border-b border-[#FDE8B5]/60">
+                    <h3 className="font-['Poppins',sans-serif] text-[16px] font-bold text-[#0E2841]">
+                      Investment Properties
+                    </h3>
+                    <span className="text-[13px] font-medium text-[#64748B]">
                       {targetYear}
                     </span>
                   </div>
 
-                  <div className="space-y-4 mt-5">
-                    <div className="bg-[#f6f9fb] rounded-[10px] px-4 py-3.5">
-                      <p className="text-[12.5px] text-[#6b6b6b]">
-                        Projected Net Equity
-                      </p>
-                      <p className="text-[16px] font-extrabold text-[#0e2841] mt-1">
-                        {fmtMoney(portfolioStats.projectedInvEquity)}
-                      </p>
-                    </div>
+                  <div className="mt-4">
+                    <p className="text-[12.5px] font-medium text-[#64748B]">
+                      Projected After-Tax Income
+                    </p>
+                    <p className="text-[22px] font-bold text-[#0E2841] mt-0.5 mb-2.5">
+                      {fmtMoney(futureOutlookData.projectedAfterTaxIncome)}
+                      <span className="text-[14px] font-normal text-[#64748B]">
+                        {" "}
+                        / yr
+                      </span>
+                    </p>
 
-                    <div className="bg-[#f6f9fb] rounded-[10px] px-4 py-3.5">
-                      <p className="text-[12.5px] text-[#6b6b6b]">
-                        Projected After-Tax Income
-                      </p>
-                      <p className="text-[16px] font-extrabold text-[#15803D] mt-1">
-                        {fmtMoney(portfolioStats.projectedAfterTaxIncome)} / yr
-                      </p>
-                    </div>
+                    <p className="text-[12.5px] font-medium text-[#64748B]">
+                      Projected Net Equity
+                    </p>
+                    <p className="text-[22px] font-bold text-[#0E2841] mt-0.5">
+                      {fmtMoney(futureOutlookData.projectedInvEquity)}
+                    </p>
                   </div>
                 </div>
+
+                <img
+                  src="/images/future-outlook/apartment.png"
+                  alt="Investment Properties"
+                  className="w-[100px] h-auto object-contain absolute bottom-3 right-3 pointer-events-none"
+                />
               </div>
 
-              {/* Forecast Card 3: Superannuation (553:12880) */}
-              <div className="bg-white rounded-[12px] p-[22px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)] flex flex-col justify-between min-h-[300px]">
+              {/* Card 3: Superannuation */}
+              <div className="bg-[#F3EFFD] rounded-[16px] p-6 border border-[#DDD6FE]/40 relative min-h-[260px] flex flex-col justify-between overflow-hidden">
                 <div>
-                  <div className="flex items-center justify-between pb-4 border-b border-[#dce4e8]">
-                    <div className="flex items-center gap-3">
-                      <div className="w-[40px] h-[40px] rounded-full bg-[#f6f9fb] border border-[#dce4e8] flex items-center justify-center shrink-0">
-                        <PiggyBank className="w-4 h-4 text-[#0e2841]" />
-                      </div>
-                      <h3 className="text-[16px] font-semibold text-[#0e2841]">
-                        Superannuation
-                      </h3>
-                    </div>
-                    <span className="text-[12.5px] font-semibold text-[#6b6b6b]">
+                  <div className="flex items-center justify-between pb-3.5 border-b border-[#DDD6FE]/60">
+                    <h3 className="font-['Poppins',sans-serif] text-[16px] font-bold text-[#0E2841]">
+                      Superannuation
+                    </h3>
+                    <span className="text-[13px] font-medium text-[#64748B]">
                       {targetYear}
                     </span>
                   </div>
 
-                  <div className="space-y-4 mt-5">
-                    <div className="bg-[#f6f9fb] rounded-[10px] px-4 py-3.5">
-                      <p className="text-[12.5px] leading-relaxed text-[#6b6b6b]">
-                        Your Superannuation is a key component of retirement
-                        income please see a licenced financial planner
-                      </p>
-                    </div>
-
-                    <div className="bg-[#f6f9fb] rounded-[10px] px-4 py-3.5">
-                      <p className="text-[12.5px] text-[#6b6b6b]">
-                        Annual Contributions:
-                      </p>
-                      <p className="text-[16px] font-extrabold text-[#0e2841] mt-1">
-                        $47,000 / yr
-                      </p>
-                    </div>
+                  <div className="mt-4">
+                    <p className="text-[13px] text-[#475569] leading-relaxed max-w-[240px]">
+                      Your Superannuation is a key component of retirement
+                      income please see a licenced financial planner. Projected
+                      balance at {targetYear}:{" "}
+                      <strong className="text-[#0E2841]">
+                        {fmtMoney(futureOutlookData.projectedSuperBal)}
+                      </strong>
+                      .
+                    </p>
                   </div>
                 </div>
+
+                <img
+                  src="/images/future-outlook/coins.png"
+                  alt="Superannuation"
+                  className="w-[90px] h-auto object-contain absolute bottom-3 right-3 pointer-events-none"
+                />
               </div>
             </div>
           </div>

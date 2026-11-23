@@ -612,7 +612,22 @@ export default function HouseholdSingleViewPage() {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col h-screen overflow-y-auto min-w-0">
-        <TopNav onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
+        <TopNav
+          onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+          onBack={
+            selectedFinDataReview
+              ? () => {
+                  setSelectedFinDataReview(null);
+                  loadHouseholdFromDb();
+                }
+              : selectedReviewStatusRow
+              ? () => {
+                  setSelectedReviewStatusRow(null);
+                  loadHouseholdFromDb();
+                }
+              : undefined
+          }
+        />
 
         <main className="flex-1 p-6 sm:p-9 max-w-[1440px] w-full mx-auto">
           {selectedFinDataReview ? (

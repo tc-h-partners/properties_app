@@ -63,6 +63,7 @@ export async function loginApi(email: string, password: string) {
     localStorage.setItem("cfo_access_token", data.accessToken);
     localStorage.setItem("cfo_refresh_token", data.refreshToken);
     localStorage.setItem("cfo_user", JSON.stringify(data.user));
+    window.dispatchEvent(new Event("cfo-user-changed"));
   }
   return data;
 }
@@ -72,6 +73,7 @@ export function logoutApi() {
     localStorage.removeItem("cfo_access_token");
     localStorage.removeItem("cfo_refresh_token");
     localStorage.removeItem("cfo_user");
+    window.dispatchEvent(new Event("cfo-user-changed"));
   }
 }
 
