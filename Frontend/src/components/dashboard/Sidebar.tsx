@@ -9,19 +9,30 @@ import { Home, Box, Settings, ChevronDown } from "lucide-react";
 interface SidebarProps {
   isOpen?: boolean;
   onClose?: () => void;
+  activeSubItemLabel?: string;
 }
 
-export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
+export default function Sidebar({
+  isOpen = true,
+  onClose,
+  activeSubItemLabel,
+}: SidebarProps) {
   const pathname = usePathname();
-  const isHouseholdActive = pathname.startsWith("/household");
+  const isHouseholdActive =
+    pathname.startsWith("/household") || pathname.startsWith("/review");
   const isDashboardActive = pathname === "/dashboard";
   const isSettingsActive = pathname.startsWith("/settings");
 
   const [householdOpen, setHouseholdOpen] = useState(true);
+  const subLabel =
+    activeSubItemLabel ||
+    (pathname.startsWith("/review")
+      ? "Harrison Family -\nReview Workspace"
+      : "Harrison Family");
 
   return (
     <aside
-      className={`fixed lg:static top-0 left-0 z-40 h-screen w-[230px] bg-[#0E2841] text-white flex flex-col justify-between py-[27px] px-[22px] transition-transform duration-200 select-none shrink-0 overflow-y-auto ${
+      className={`fixed lg:sticky top-0 left-0 z-40 h-screen w-[230px] bg-[#0E2841] text-white flex flex-col justify-between py-[27px] px-[22px] transition-transform duration-200 select-none shrink-0 overflow-y-auto ${
         isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
       }`}
     >
@@ -82,13 +93,13 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
               />
             </div>
 
-            {/* Nested Sub-item: Harrison Family */}
+            {/* Nested Sub-item: Harrison Family / TC&H Review Workspace */}
             {householdOpen && (
               <div className="mt-2.5 pl-3">
                 <Link
                   href="/household/harrison-family"
                   onClick={onClose}
-                  className="bg-[rgba(255,255,255,0.2)] hover:bg-[rgba(255,255,255,0.28)] flex items-center gap-[9px] h-[42px] px-[16px] py-[12px] rounded-[8px] w-full transition-colors"
+                  className="bg-[rgba(255,255,255,0.2)] hover:bg-[rgba(255,255,255,0.28)] flex items-center gap-[9px] min-h-[42px] px-[16px] py-[10px] rounded-[8px] w-full transition-colors"
                 >
                   <div className="size-[20px] relative shrink-0">
                     <Image
@@ -99,8 +110,8 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
                       className="size-full object-contain brightness-0 invert"
                     />
                   </div>
-                  <span className="font-['Inter',sans-serif] font-medium text-[12px] leading-[1.4] text-white whitespace-nowrap">
-                    Harrison Family
+                  <span className="font-['Inter',sans-serif] font-medium text-[12px] leading-[1.4] text-white whitespace-pre-line">
+                    {subLabel}
                   </span>
                 </Link>
               </div>
@@ -125,8 +136,8 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
         </nav>
       </div>
 
-      {/* Bottom Section: Divider & tc&h Partners Logo */}
-      <div className="pt-6 border-t border-white/10 flex flex-col items-start px-2">
+      {/* Bottom Section: tc&h Partners Logo */}
+      <div className="pt-6 flex flex-col items-start px-2">
         <Image
           src="/images/logo-tch-partners.png"
           alt="tc&h Partners"

@@ -9,7 +9,7 @@ interface TopNavProps {
 
 export default function TopNav({ onToggleSidebar }: TopNavProps) {
   return (
-    <header className="h-[70px] w-full bg-white border-b border-[rgba(107,107,107,0.3)] flex items-center justify-between px-6 select-none sticky top-0 z-20">
+    <header className="h-[70px] w-full bg-white border-b border-[rgba(107,107,107,0.3)] flex items-center justify-between px-6 select-none sticky top-0 z-20 shrink-0 shadow-[0_1px_4px_rgba(0,0,0,0.02)]">
       {/* Left: Back / Toggle Button */}
       <div className="flex items-center">
         <button

@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Plus, Search, Eye, MoreVertical, ChevronDown } from "lucide-react";
 import Sidebar from "@/components/dashboard/Sidebar";
 import TopNav from "@/components/dashboard/TopNav";
@@ -84,14 +85,18 @@ const FIGMA_HOUSEHOLDS: HouseholdRow[] = [
 ];
 
 export default function HouseholdPage() {
+  const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [households, setHouseholds] = useState<HouseholdRow[]>(FIGMA_HOUSEHOLDS);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTab, setSelectedTab] = useState<"All" | "In Progress" | "Completed">("All");
 
+  const [sortField, setSortField] = useState<keyof HouseholdRow | null>(null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+
   const filteredHouseholds = useMemo(() => {
-    return households.filter((h) => {
+    const list = households.filter((h) => {
       const matchesSearch =
         h.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         h.reviewYear.toLowerCase().includes(searchQuery.toLowerCase());
@@ -103,7 +108,26 @@ export default function HouseholdPage() {
 
       return matchesSearch && matchesTab;
     });
-  }, [households, searchQuery, selectedTab]);
+
+    if (!sortField) return list;
+
+    return [...list].sort((a, b) => {
+      const valA = String(a[sortField]).toLowerCase();
+      const valB = String(b[sortField]).toLowerCase();
+      return sortDirection === "asc"
+        ? valA.localeCompare(valB)
+        : valB.localeCompare(valA);
+    });
+  }, [households, searchQuery, selectedTab, sortField, sortDirection]);
+
+  const handleSort = (field: keyof HouseholdRow) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  };
 
   const handleAddHousehold = (newH: {
     name: string;
@@ -111,8 +135,9 @@ export default function HouseholdPage() {
     objectives: string;
     reviewYear: string;
   }) => {
+    const id = newH.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
     const item: HouseholdRow = {
-      id: newH.name.toLowerCase().replace(/\s+/g, "-"),
+      id: id || `household-${Date.now()}`,
       name: newH.name.toUpperCase(),
       reviewYear: newH.reviewYear,
       reviewStatus: "IN PROGRESS",
@@ -121,10 +146,13 @@ export default function HouseholdPage() {
       workflowStatus: "IN PROGRESS",
     };
     setHouseholds((prev) => [item, ...prev]);
+    setIsModalOpen(false);
+    // Proceed directly to the Household Setup screen with all tabs
+    router.push(`/household/${item.id}`);
   };
 
   return (
-    <div className="min-h-screen bg-white flex select-none">
+    <div className="h-screen w-full bg-white flex overflow-hidden select-none">
       {/* Sidebar matching Figma Household Setup */}
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
@@ -136,8 +164,8 @@ export default function HouseholdPage() {
         />
       )}
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      {/* Main Content Area - scrollable with sticky header */}
+      <div className="flex-1 flex flex-col h-screen overflow-y-auto min-w-0">
         <TopNav onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
 
         <main className="flex-1 p-6 sm:p-8 max-w-[1240px] w-full">
@@ -213,33 +241,33 @@ export default function HouseholdPage() {
               <thead>
                 <tr className="border-b border-[#E2E8F0]">
                   <th className="py-3 px-3 font-['Poppins',sans-serif] font-medium text-[13px] text-[#ACB5BB] uppercase tracking-[-0.28px]">
-                    <div className="flex items-center gap-1.5 cursor-pointer">
+                    <div onClick={() => handleSort("name")} className="flex items-center gap-1.5 cursor-pointer">
                       <span>HOUSEHOLD</span>
-                      <ChevronDown className="w-3.5 h-3.5" />
+                      <ChevronDown className={`w-3.5 h-3.5 transition-transform ${sortField === "name" && sortDirection === "desc" ? "rotate-180" : ""}`} />
                     </div>
                   </th>
                   <th className="py-3 px-3 font-['Poppins',sans-serif] font-medium text-[13px] text-[#ACB5BB] tracking-[-0.28px]">
-                    <div className="flex items-center gap-1.5 cursor-pointer">
+                    <div onClick={() => handleSort("reviewYear")} className="flex items-center gap-1.5 cursor-pointer">
                       <span>Latest Review Year</span>
-                      <ChevronDown className="w-3.5 h-3.5" />
+                      <ChevronDown className={`w-3.5 h-3.5 transition-transform ${sortField === "reviewYear" && sortDirection === "desc" ? "rotate-180" : ""}`} />
                     </div>
                   </th>
                   <th className="py-3 px-3 font-['Poppins',sans-serif] font-medium text-[13px] text-[#ACB5BB] tracking-[-0.28px]">
-                    <div className="flex items-center gap-1.5 cursor-pointer">
+                    <div onClick={() => handleSort("reviewStatus")} className="flex items-center gap-1.5 cursor-pointer">
                       <span>Review status</span>
-                      <ChevronDown className="w-3.5 h-3.5" />
+                      <ChevronDown className={`w-3.5 h-3.5 transition-transform ${sortField === "reviewStatus" && sortDirection === "desc" ? "rotate-180" : ""}`} />
                     </div>
                   </th>
                   <th className="py-3 px-3 font-['Poppins',sans-serif] font-medium text-[13px] text-[#ACB5BB] tracking-[-0.28px]">
-                    <div className="flex items-center gap-1.5 cursor-pointer">
+                    <div onClick={() => handleSort("executiveReport")} className="flex items-center gap-1.5 cursor-pointer">
                       <span>Executive Report</span>
-                      <ChevronDown className="w-3.5 h-3.5" />
+                      <ChevronDown className={`w-3.5 h-3.5 transition-transform ${sortField === "executiveReport" && sortDirection === "desc" ? "rotate-180" : ""}`} />
                     </div>
                   </th>
                   <th className="py-3 px-3 font-['Poppins',sans-serif] font-medium text-[13px] text-[#ACB5BB] tracking-[-0.28px]">
-                    <div className="flex items-center gap-1.5 cursor-pointer">
+                    <div onClick={() => handleSort("workflowStatus")} className="flex items-center gap-1.5 cursor-pointer">
                       <span>Workflow Status</span>
-                      <ChevronDown className="w-3.5 h-3.5" />
+                      <ChevronDown className={`w-3.5 h-3.5 transition-transform ${sortField === "workflowStatus" && sortDirection === "desc" ? "rotate-180" : ""}`} />
                     </div>
                   </th>
                   <th className="py-3 px-3 font-['Poppins',sans-serif] font-medium text-[13px] text-[#ACB5BB] tracking-[-0.28px] text-right">

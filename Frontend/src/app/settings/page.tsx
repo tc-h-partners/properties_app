@@ -68,7 +68,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F9FB] flex select-none">
+    <div className="h-screen w-full bg-[#F8F9FB] flex overflow-hidden select-none">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       {sidebarOpen && (
@@ -78,7 +78,7 @@ export default function SettingsPage() {
         />
       )}
 
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col h-screen overflow-y-auto min-w-0">
         <TopNav onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
 
         <main className="flex-1 p-5 sm:p-7 max-w-[1360px] w-full mx-auto">

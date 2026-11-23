@@ -12,7 +12,7 @@ export default function DashboardPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-[#F8F9FB] flex select-none">
+    <div className="h-screen w-full bg-[#F8F9FB] flex overflow-hidden select-none">
       {/* Sidebar */}
       <Sidebar
         isOpen={sidebarOpen}
@@ -27,8 +27,8 @@ export default function DashboardPage() {
         />
       )}
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      {/* Main Content Area - scrollable with sticky header */}
+      <div className="flex-1 flex flex-col h-screen overflow-y-auto min-w-0">
         {/* Top Navigation Bar */}
         <TopNav onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
 
