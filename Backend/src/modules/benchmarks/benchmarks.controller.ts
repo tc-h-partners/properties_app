@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Body,
   Patch,
   Param,
@@ -20,6 +21,18 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 @Controller('benchmarks')
 export class BenchmarksController {
   constructor(private readonly benchmarksService: BenchmarksService) {}
+
+  @Get('system-settings')
+  @ApiOperation({ summary: 'Get System Settings governance configuration from database' })
+  getSystemSettings() {
+    return this.benchmarksService.getSystemSettings();
+  }
+
+  @Put('system-settings')
+  @ApiOperation({ summary: 'Save System Settings governance configuration to database' })
+  saveSystemSettings(@Body() body: Record<string, any>) {
+    return this.benchmarksService.saveSystemSettings(body);
+  }
 
   @Post()
   @ApiOperation({ summary: 'Create a new market benchmark record' })

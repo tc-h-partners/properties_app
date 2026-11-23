@@ -469,3 +469,24 @@ export function createBenchmarkApi(payload: Record<string, any>) {
     body: JSON.stringify(payload),
   });
 }
+
+export function fetchSystemSettingsApi() {
+  return apiFetch<{
+    benchmarks: any[];
+    picfoMetrics: any[];
+  }>("/benchmarks/system-settings");
+}
+
+export function saveSystemSettingsApi(payload: {
+  benchmarks: any[];
+  picfoMetrics: any[];
+}) {
+  return apiFetch<{
+    benchmarks: any[];
+    picfoMetrics: any[];
+  }>("/benchmarks/system-settings", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+

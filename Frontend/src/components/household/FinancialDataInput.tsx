@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ChevronDown,
   Calendar,
@@ -22,6 +23,7 @@ import {
   saveLoanSnapshotsApi,
   updateFinDataStatusApi,
   fetchBenchmarksApi,
+  fetchSystemSettingsApi,
 } from "@/lib/api";
 
 export type FinDataTab =
@@ -171,6 +173,18 @@ export default function FinancialDataInput({
   const [otherLiabilities, setOtherLiabilities] = useState("");
   const [cash, setCash] = useState("$47,000");
   const [borrowingCapacity, setBorrowingCapacity] = useState("$800,000");
+  const router = useRouter();
+  const [systemBenchmarks, setSystemBenchmarks] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetchSystemSettingsApi()
+      .then((res) => {
+        if (res && Array.isArray(res.benchmarks)) {
+          setSystemBenchmarks(res.benchmarks);
+        }
+      })
+      .catch(() => {});
+  }, [activeTab]);
 
   // Sync state from dbHousehold whenever dbHousehold loads or updates
   useEffect(() => {
@@ -2084,7 +2098,7 @@ export default function FinancialDataInput({
             </div>
           </div>
 
-          {/* Card 2: Market Data (Figma 991:9443) */}
+          {/* Card 2: Market Data (Figma 991:9443) — Driven by System Settings (Include in Review Workspace – Market Data) */}
           <div className="bg-white rounded-[16px] p-6 sm:p-8 shadow-[0px_2px_12px_rgba(0,0,0,0.03)] border border-[#EDEDF0] space-y-5">
             <div>
               <h3 className="text-[18px] font-bold text-[#071E36]">
@@ -2092,7 +2106,7 @@ export default function FinancialDataInput({
               </h3>
               <p className="text-[12px] text-[#071E36] font-normal mt-0.5">
                 Economic and market benchmark rates applied to advisory models
-                for FY2026
+                for FY{year}
               </p>
             </div>
 
@@ -2109,103 +2123,90 @@ export default function FinancialDataInput({
                     <th className="py-2.5 px-3 font-semibold text-[13px] text-[#7E8B97]">
                       Assessment Dates
                     </th>
-                    <th className="py-2.5 px-3 font-semibold text-[13px] text-[#7E8B97]">
-                      <div>22 Oak Avenue</div>
-                      <div className="text-[12px] text-[#9AA5B1] font-normal">
-                        16/06/2015
-                      </div>
-                    </th>
-                    <th className="py-2.5 px-3 font-semibold text-[13px] text-[#7E8B97]">
-                      <div>15 Sunview parade</div>
-                      <div className="text-[12px] text-[#9AA5B1] font-normal">
-                        16/06/2015
-                      </div>
-                    </th>
-                    <th className="py-2.5 px-3 font-semibold text-[13px] text-[#7E8B97]">
-                      <div>8 pacific Drive</div>
-                      <div className="text-[12px] text-[#9AA5B1] font-normal">
-                        16/06/2015
-                      </div>
-                    </th>
+                    {(properties.length > 0
+                      ? properties
+                      : [
+                          {
+                            id: "p1",
+                            address: "22 Oak Avenue",
+                            purchaseDate: "16/06/2015",
+                          },
+                          {
+                            id: "p2",
+                            address: "15 Sunview parade",
+                            purchaseDate: "16/06/2015",
+                          },
+                          {
+                            id: "p3",
+                            address: "8 pacific Drive",
+                            purchaseDate: "16/06/2015",
+                          },
+                        ]
+                    ).map((prop: any) => (
+                      <th
+                        key={prop.id}
+                        className="py-2.5 px-3 font-semibold text-[13px] text-[#7E8B97]"
+                      >
+                        <div>{prop.address}</div>
+                        <div className="text-[12px] text-[#9AA5B1] font-normal">
+                          {prop.purchaseDate || "16/06/2015"}
+                        </div>
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  <tr className="h-[52px]">
-                    <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E] whitespace-nowrap">
-                      ASX 200 Accumulation Index
-                    </td>
-                    <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E] whitespace-nowrap">
-                      Total Property Return
-                    </td>
-                    <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E]">
-                      30/06/2026
-                    </td>
-                    <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E]">
-                      20,160
-                    </td>
-                    <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E]">
-                      20,160
-                    </td>
-                    <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E]">
-                      20,160
-                    </td>
-                  </tr>
-
-                  <tr className="h-[52px]">
-                    <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E] whitespace-nowrap">
-                      Unit / Apartment Yield
-                    </td>
-                    <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E] whitespace-nowrap">
-                      Gross Yield Units
-                    </td>
-                    <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E]">
-                      30/06/2026
-                    </td>
-                    <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E]">
-                      4.20%
-                    </td>
-                    <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E]">
-                      4.20%
-                    </td>
-                    <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E]">
-                      4.20%
-                    </td>
-                  </tr>
-
-                  <tr className="h-[52px]">
-                    <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E] whitespace-nowrap">
-                      House Yield
-                    </td>
-                    <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E] whitespace-nowrap">
-                      Gross Yield House
-                    </td>
-                    <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E]">
-                      30/06/2026
-                    </td>
-                    <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E]">
-                      3.80%
-                    </td>
-                    <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E]">
-                      3.80%
-                    </td>
-                    <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E]">
-                      3.80%
-                    </td>
-                  </tr>
+                  {systemBenchmarks
+                    .filter((bm: any) => bm.includeInMarketData)
+                    .map((bm: any) => {
+                      const hvs = Array.isArray(bm.historicalValues)
+                        ? bm.historicalValues
+                        : [];
+                      const latestHv =
+                        hvs.length > 0 ? hvs[hvs.length - 1] : null;
+                      const latestDate = latestHv?.date || `30/06/${year}`;
+                      const latestValue = latestHv?.value || "20,160";
+                      const defLabel =
+                        Array.isArray(bm.picfoMetrics) &&
+                        bm.picfoMetrics.length > 0
+                          ? bm.picfoMetrics.join(", ")
+                          : bm.equity;
+                      const displayProps =
+                        properties.length > 0
+                          ? properties
+                          : [{ id: "p1" }, { id: "p2" }, { id: "p3" }];
+                      return (
+                        <tr key={bm.id} className="h-[52px]">
+                          <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E] whitespace-nowrap">
+                            {bm.measure}
+                          </td>
+                          <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E] whitespace-nowrap">
+                            {defLabel}
+                          </td>
+                          <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E]">
+                            {latestDate}
+                          </td>
+                          {displayProps.map((prop: any) => (
+                            <td
+                              key={prop.id}
+                              className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E]"
+                            >
+                              {latestValue}
+                            </td>
+                          ))}
+                        </tr>
+                      );
+                    })}
                 </tbody>
               </table>
             </div>
           </div>
 
-          {/* Bottom Button matching Figma Frame 741:10722 -> Opens Figma node 630:5992 UI */}
+          {/* Bottom Button -> Navigates to System Settings (/settings) */}
           <div className="flex justify-end pt-1">
             <button
               type="button"
-              onClick={() => {
-                setSelectedPropertyId("prop-1");
-                setActiveTab("property-data");
-                setPropertyViewMode("detail");
-              }}
+              onClick={() => router.push("/settings")}
               className="h-[40px] w-[232px] bg-[#071E36] hover:bg-[#122D4D] text-white text-[13.5px] font-medium rounded-[8px] flex items-center justify-center transition-colors shadow-xs cursor-pointer"
             >
               Configure in Settings
