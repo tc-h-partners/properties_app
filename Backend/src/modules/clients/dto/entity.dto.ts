@@ -1,26 +1,59 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { EntityType } from '@prisma/client';
-import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class CreateEntityDto {
-  @ApiProperty({ example: 'Smith Family Trust' })
+  @ApiProperty({ example: 'Harrison Family Trust' })
   @IsString()
   @IsNotEmpty()
   name: string;
 
-  @ApiProperty({
-    enum: EntityType,
-    example: EntityType.FAMILY_TRUST,
-    description: 'INDIVIDUAL | JOINT | FAMILY_TRUST | UNIT_TRUST | COMPANY | SMSF',
+  @ApiPropertyOptional({
+    example: 'FAMILY_TRUST',
+    description: 'INDIVIDUAL | JOINT | FAMILY_TRUST | UNIT_TRUST | COMPANY | SMSF or display label',
   })
-  @IsEnum(EntityType)
-  @IsNotEmpty()
-  type: EntityType;
+  @IsString()
+  @IsOptional()
+  type?: string;
 
-  @ApiPropertyOptional({ example: 'XX-XXX-XXX-123' })
+  @ApiPropertyOptional({ example: 'Discretionary Trust' })
+  @IsString()
+  @IsOptional()
+  displayType?: string;
+
+  @ApiPropertyOptional({ example: '64 901 823 441' })
   @IsString()
   @IsOptional()
   abnOrTfnMasked?: string;
+
+  @ApiPropertyOptional({ example: '32' })
+  @IsString()
+  @IsOptional()
+  ageOrDob?: string;
+
+  @ApiPropertyOptional({ example: '+61 412 890 231' })
+  @IsString()
+  @IsOptional()
+  phone?: string;
+
+  @ApiPropertyOptional({ example: 'ethan.h@student.edu.au' })
+  @IsString()
+  @IsOptional()
+  email?: string;
+
+  @ApiPropertyOptional({ example: 210000 })
+  @IsNumber()
+  @IsOptional()
+  annualSalary?: number;
+
+  @ApiPropertyOptional({ example: 0.45 })
+  @IsNumber()
+  @IsOptional()
+  marginalTaxRate?: number;
+
+  @ApiPropertyOptional({ example: 385000 })
+  @IsNumber()
+  @IsOptional()
+  superBalance?: number;
 }
 
 export class UpdateEntityDto extends PartialType(CreateEntityDto) {}

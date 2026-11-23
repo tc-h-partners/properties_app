@@ -1,6 +1,5 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { PropertyType } from '@prisma/client';
-import { IsDateString, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsInt, IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class CreatePropertyDto {
   @ApiPropertyOptional({ example: 'entity-uuid-here' })
@@ -8,59 +7,127 @@ export class CreatePropertyDto {
   @IsOptional()
   entityId?: string;
 
-  @ApiProperty({ example: '24 Ocean Street' })
+  @ApiPropertyOptional({ example: '48 Underwood Street, Paddington' })
   @IsString()
-  @IsNotEmpty()
-  name: string;
+  @IsOptional()
+  name?: string;
 
-  @ApiProperty({ example: '24 Ocean Street' })
+  @ApiProperty({ example: '48 Underwood Street, Paddington' })
   @IsString()
   @IsNotEmpty()
   address: string;
 
-  @ApiProperty({ example: 'Bondi' })
+  @ApiPropertyOptional({ example: 'Paddington' })
   @IsString()
-  @IsNotEmpty()
-  suburb: string;
+  @IsOptional()
+  suburb?: string;
 
-  @ApiProperty({ example: 'NSW' })
+  @ApiPropertyOptional({ example: 'NSW' })
   @IsString()
-  @IsNotEmpty()
-  state: string;
+  @IsOptional()
+  state?: string;
 
-  @ApiProperty({ example: '2026' })
+  @ApiPropertyOptional({ example: '2021' })
   @IsString()
-  @IsNotEmpty()
-  postcode: string;
+  @IsOptional()
+  postcode?: string;
 
-  @ApiProperty({ example: 'Unit', description: 'House, Unit, Townhouse' })
+  @ApiPropertyOptional({ example: 'House', description: 'House, Unit, Townhouse' })
   @IsString()
-  @IsNotEmpty()
-  propertyCategory: string;
+  @IsOptional()
+  propertyCategory?: string;
 
-  @ApiProperty({
-    enum: PropertyType,
-    example: PropertyType.INVESTMENT,
-    description: 'INVESTMENT | OWNER_OCCUPIED',
+  @ApiPropertyOptional({
+    example: 'INVESTMENT',
+    description: 'INVESTMENT | OWNER_OCCUPIED or Investment | Owner-Occupied',
   })
-  @IsEnum(PropertyType)
-  @IsNotEmpty()
-  type: PropertyType;
+  @IsString()
+  @IsOptional()
+  type?: string;
 
-  @ApiProperty({ example: '2021-03-15T00:00:00.000Z' })
-  @IsDateString()
-  @IsNotEmpty()
-  purchaseDate: string;
+  @ApiPropertyOptional({ example: 'Investment' })
+  @IsString()
+  @IsOptional()
+  purposeDisplay?: string;
 
-  @ApiProperty({ example: 850000 })
+  @ApiPropertyOptional({ example: '2021-03-15' })
+  @IsString()
+  @IsOptional()
+  purchaseDate?: string;
+
+  @ApiPropertyOptional({ example: '24/10/2026' })
+  @IsString()
+  @IsOptional()
+  purchaseDateStr?: string;
+
+  @ApiPropertyOptional({ example: 800000 })
   @IsNumber()
-  @IsNotEmpty()
-  purchasePrice: number;
+  @IsOptional()
+  purchasePrice?: number;
 
-  @ApiPropertyOptional({ example: 38000, description: 'Stamp duty, legal fees, inspection costs' })
+  @ApiPropertyOptional({ example: 45936 })
   @IsNumber()
   @IsOptional()
   acquisitionCosts?: number;
+
+  @ApiPropertyOptional({ example: 1450000 })
+  @IsNumber()
+  @IsOptional()
+  currentValuation?: number;
+
+  @ApiPropertyOptional({ example: 850 })
+  @IsNumber()
+  @IsOptional()
+  weeklyRent?: number;
+
+  @ApiPropertyOptional({ example: '600' })
+  @IsString()
+  @IsOptional()
+  landSize?: string;
+
+  @ApiPropertyOptional({ example: 4 })
+  @IsInt()
+  @IsOptional()
+  beds?: number;
+
+  @ApiPropertyOptional({ example: 3 })
+  @IsInt()
+  @IsOptional()
+  baths?: number;
+
+  @ApiPropertyOptional({ example: 2 })
+  @IsInt()
+  @IsOptional()
+  cars?: number;
+
+  @ApiPropertyOptional({ example: 'Marcus Harrison' })
+  @IsString()
+  @IsOptional()
+  owner1?: string;
+
+  @ApiPropertyOptional({ example: '100%' })
+  @IsString()
+  @IsOptional()
+  owner1Pct?: string;
+
+  @ApiPropertyOptional({ example: '----' })
+  @IsString()
+  @IsOptional()
+  owner2?: string;
+
+  @ApiPropertyOptional({ example: '---' })
+  @IsString()
+  @IsOptional()
+  owner2Pct?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  ownersJson?: any;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  soldDate?: string;
 }
 
 export class UpdatePropertyDto extends PartialType(CreatePropertyDto) {}

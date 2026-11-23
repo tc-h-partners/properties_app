@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   ChevronDown,
   Pencil,
@@ -12,6 +12,11 @@ import {
   Building2,
   PiggyBank,
 } from "lucide-react";
+import {
+  createInsightApi,
+  updateReviewApi,
+  saveFutureOutlookApi,
+} from "@/lib/api";
 
 export interface ReviewInsightItem {
   id: string;
@@ -30,6 +35,10 @@ export interface ReviewInsightItem {
 }
 
 interface ReviewWorkspaceReportProps {
+  householdId?: string;
+  reviewId?: string;
+  dbHousehold?: any;
+  onDataChanged?: () => Promise<void> | void;
   householdName?: string;
   reviewYear?: string;
   reviewStatus?: "Completed" | "In Progress";
@@ -42,119 +51,11 @@ interface ReviewWorkspaceReportProps {
     | "insights";
 }
 
-const PROPERTIES_LIST = [
-  {
-    id: "prop-2",
-    badge: "Property 2 Of 3",
-    address: "7 Kawana Way, Buddina QLD 4575",
-    subtitle: "Investment Property  | House",
-    image: "/images/review/4898a.png",
-    beds: 3,
-    baths: 2,
-    area: 1200,
-    garages: 3,
-    purchasePrice: "$2,450,000",
-    purchaseDate: "15 Mar 2018",
-    owners: ["Johan Smith 50%", "Davide 50%"],
-    propertyValue: "$3,300,000",
-    totalLoans: "$1,740,000",
-    totalEquity: "$1,560,000",
-    totalReturn: "10.73%",
-    lvr: "57.74%",
-  },
-  {
-    id: "prop-1",
-    badge: "Property 1 Of 3",
-    address: "22 Oak Avenue, Mooloolaba QLD 4557",
-    subtitle: "Investment Property  | House",
-    image: "/images/review/4898a.png",
-    beds: 4,
-    baths: 2,
-    area: 650,
-    garages: 2,
-    purchasePrice: "$850,000",
-    purchaseDate: "12 Oct 2019",
-    owners: ["Marcus Harrison 50%", "Claire Harrison 50%"],
-    propertyValue: "$1,150,000",
-    totalLoans: "$580,000",
-    totalEquity: "$570,000",
-    totalReturn: "8.40%",
-    lvr: "50.43%",
-  },
-  {
-    id: "prop-3",
-    badge: "Property 3 Of 3",
-    address: "8 Pacific Drive, Buddina QLD 4575",
-    subtitle: "Investment Property  | House",
-    image: "/images/review/4898a.png",
-    beds: 3,
-    baths: 2,
-    area: 480,
-    garages: 2,
-    purchasePrice: "$920,000",
-    purchaseDate: "20 Jun 2021",
-    owners: ["Marcus Harrison 100%"],
-    propertyValue: "$1,170,000",
-    totalLoans: "$620,000",
-    totalEquity: "$550,000",
-    totalReturn: "5.40%",
-    lvr: "52.99%",
-  },
-];
-
-const INITIAL_INSIGHTS: ReviewInsightItem[] = [
-  {
-    id: "ins-1",
-    fy: "2026",
-    screen: "Property Analysis",
-    property: "7 Kawana Way, Buddina",
-    maintenanceInsight: "Rent 11% below benchmark",
-    metric: "Rental Income",
-    heading: "Rental Income Review",
-    insight:
-      "Current rental income may differ from the local market rent benchmark.",
-    recommendation:
-      "Review the current rent against the relevant market benchmark.",
-    priority: "High",
-    owner: "Adviser",
-    action: "Reset rent Q3",
-    notes: "26 months since last review",
-  },
-  {
-    id: "ins-2",
-    fy: "2026",
-    screen: "Property Analysis",
-    property: "22 Oak Avenue, Mooloolaba",
-    maintenanceInsight: "Valuation check due",
-    metric: "Valuation",
-    heading: "Property Valuation Review",
-    insight:
-      "The property's current valuation should be reviewed against its previous valuation.",
-    recommendation:
-      "Verify the latest valuation and record the review date and source.",
-    priority: "High",
-    owner: "Adviser",
-    action: "Order valuation",
-    notes: "Desktop valuation available",
-  },
-  {
-    id: "ins-3",
-    fy: "2026",
-    screen: "Cash Management",
-    property: "8 Pacific Drive, Buddina",
-    maintenanceInsight: "Expenses 28% above benchmark",
-    metric: "Operating Expenses",
-    heading: "Reduce Operating Expenses",
-    insight:
-      "Property operating expenses should be reviewed against available records and relevant benchmarks.",
-    recommendation:
-      "Review insurance premiums, property management fees and maintenance costs for potential savings.",
-    priority: "Medium",
-    owner: "Client",
-    action: "Renegotiate PM fee",
-    notes: "Potential $2,400 p.a. saving",
-  },
-];
+function fmtMoney(val: any): string {
+  const num = Number(String(val ?? 0).replace(/[^0-9.-]/g, ""));
+  if (isNaN(num)) return "$0";
+  return `$${Math.round(num).toLocaleString("en-AU")}`;
+}
 
 const NET_YIELD_POINTS = [
   {
@@ -283,6 +184,10 @@ const BENCHMARK_BARS = [
 ];
 
 export default function ReviewWorkspaceReport({
+  householdId = "",
+  reviewId = "",
+  dbHousehold,
+  onDataChanged,
   householdName = "Harrison Family",
   reviewYear = "2026",
   onBack,
@@ -296,9 +201,162 @@ export default function ReviewWorkspaceReport({
     | "insights"
   >(initialTab);
 
-  // Executive Summary editable states
+  const activeReview = useMemo(() => {
+    if (!dbHousehold || !Array.isArray(dbHousehold.reviews)) return null;
+    return (
+      dbHousehold.reviews.find((r: any) => r.id === reviewId) ||
+      dbHousehold.reviews.find(
+        (r: any) => String(r.financialYear) === String(reviewYear)
+      ) ||
+      dbHousehold.reviews[0] ||
+      null
+    );
+  }, [dbHousehold, reviewId, reviewYear]);
+
+  const effectiveReviewId = reviewId || activeReview?.id || "";
+
+interface ReviewPropertyCard {
+  id: string;
+  badge: string;
+  address: string;
+  subtitle: string;
+  image: string;
+  beds: number;
+  baths: number;
+  area: number;
+  garages: number;
+  purchasePrice: string;
+  purchaseDate: string;
+  owners: string[];
+  propertyValue: string;
+  totalLoans: string;
+  totalEquity: string;
+  totalReturn: string;
+  lvr: string;
+  rawValue: number;
+  rawLoans: number;
+  rawEquity: number;
+  isOwnerOccupied: boolean;
+}
+
+  // Dynamically map properties from dbHousehold
+  const propertiesList = useMemo<ReviewPropertyCard[]>(() => {
+    const rawProps = Array.isArray(dbHousehold?.properties)
+      ? dbHousehold.properties
+      : [];
+    if (rawProps.length === 0) {
+      return [
+        {
+          id: "empty-prop",
+          badge: "Property 0 Of 0",
+          address: "No Properties Added Yet",
+          subtitle: "Add a property in Properties & Loans Setup",
+          image: "/images/review/4898a.png",
+          beds: 0,
+          baths: 0,
+          area: 0,
+          garages: 0,
+          purchasePrice: "$0",
+          purchaseDate: "-",
+          owners: ["Primary Owner 100%"],
+          propertyValue: "$0",
+          totalLoans: "$0",
+          totalEquity: "$0",
+          totalReturn: "0.00%",
+          lvr: "0.00%",
+          rawValue: 0,
+          rawLoans: 0,
+          rawEquity: 0,
+          isOwnerOccupied: false,
+        },
+      ];
+    }
+
+    const totalCount = rawProps.length;
+    const revSnaps = Array.isArray(activeReview?.propertySnapshots)
+      ? activeReview.propertySnapshots
+      : [];
+    const loanSnaps = Array.isArray(activeReview?.loanSnapshots)
+      ? activeReview.loanSnapshots
+      : [];
+
+    return rawProps.map((p: any, idx: number) => {
+      const pSnap =
+        revSnaps.find(
+          (s: any) => s.propertyId === p.id && s.snapshotPoint === "REVIEW_DATE"
+        ) ||
+        revSnaps.find((s: any) => s.propertyId === p.id) ||
+        (p.snapshots || [])[0];
+
+      const val = Number(
+        pSnap?.valuation ?? p.currentValuation ?? p.purchasePrice ?? 0
+      );
+      let loansTotal = 0;
+      for (const l of p.loans || []) {
+        const lSnap =
+          loanSnaps.find(
+            (s: any) => s.loanId === l.id && s.snapshotPoint === "REVIEW_DATE"
+          ) ||
+          loanSnaps.find((s: any) => s.loanId === l.id) ||
+          (l.snapshots || [])[0];
+        loansTotal += Number(lSnap?.loanBalance ?? 0);
+      }
+
+      const equity = Math.max(0, val - loansTotal);
+      const lvrNum = val > 0 ? (loansTotal / val) * 100 : 0;
+      const purchasePriceNum = Number(p.purchasePrice ?? 0);
+      const growthPct =
+        purchasePriceNum > 0
+          ? (((val - purchasePriceNum) / purchasePriceNum) * 100) / 5
+          : 5.4;
+      const wkRent = Number(pSnap?.weeklyRent ?? p.weeklyRent ?? 0);
+      const yieldPct = val > 0 ? ((wkRent * 52) / val) * 100 : 0;
+      const totalReturnNum = Math.max(0, growthPct + yieldPct);
+
+      const owners: string[] = [];
+      if (p.owner1 && p.owner1 !== "----") {
+        owners.push(`${p.owner1} ${p.owner1Pct || "100%"}`);
+      }
+      if (p.owner2 && p.owner2 !== "----" && p.owner2 !== "None") {
+        owners.push(`${p.owner2} ${p.owner2Pct || ""}`);
+      }
+      if (owners.length === 0) {
+        owners.push("Primary Owner 100%");
+      }
+
+      const isOO = p.type === "OWNER_OCCUPIED";
+
+      return {
+        id: p.id,
+        badge: `Property ${idx + 1} Of ${totalCount}`,
+        address: p.address,
+        subtitle: `${
+          isOO ? "Owner-Occupied Property" : "Investment Property"
+        }  | ${p.propertyCategory || "House"}`,
+        image: "/images/review/4898a.png",
+        beds: Number(p.beds ?? 4),
+        baths: Number(p.baths ?? 2),
+        area: Number(String(p.landSize || "600").replace(/[^0-9]/g, "")) || 600,
+        garages: Number(p.cars ?? 2),
+        purchasePrice: fmtMoney(p.purchasePrice),
+        purchaseDate: p.purchaseDateStr || "24/10/2026",
+        owners,
+        propertyValue: fmtMoney(val),
+        totalLoans: fmtMoney(loansTotal),
+        totalEquity: fmtMoney(equity),
+        totalReturn: `${totalReturnNum.toFixed(2)}%`,
+        lvr: `${lvrNum.toFixed(2)}%`,
+        rawValue: val,
+        rawLoans: loansTotal,
+        rawEquity: equity,
+        isOwnerOccupied: isOO,
+      };
+    });
+  }, [dbHousehold, activeReview]);
+
+  // Executive Summary editable states (synced with DB)
   const [verdictText, setVerdictText] = useState(
-    "The Harrison property portfolio continues to demonstrate outstanding capital resilience with aggregate equity expanding to $2.55M. However, debt servicing headwinds and rising holding outgoings require immediate mortgage refinancing and rental yield optimization to restore cash flow neutrality."
+    "The property portfolio continues to demonstrate strong capital resilience. Review mortgage structuring and rental yield optimization to strengthen net cash flow."
   );
   const [isEditingVerdict, setIsEditingVerdict] = useState(false);
 
@@ -334,7 +392,7 @@ export default function ReviewWorkspaceReport({
     "Loan 1" | "Loan 2" | "Loan 3"
   >("Loan 1");
 
-  // Tab 4: Interactive Future Outlook states (matching Figma 546:9566)
+  // Tab 4: Interactive Future Outlook states
   const [forecastHorizon, setForecastHorizon] = useState<number>(20);
   const [homeValueGrowth, setHomeValueGrowth] = useState("3.0%");
   const [homeExtraRepayments, setHomeExtraRepayments] = useState("$800.000");
@@ -351,18 +409,15 @@ export default function ReviewWorkspaceReport({
   const [superOneOffInput, setSuperOneOffInput] = useState("$0.000");
   const [superDownsizerPrice, setSuperDownsizerPrice] = useState("$800.000");
 
-  // Tab 5: Portfolio Management Insights states
-  const [insights, setInsights] =
-    useState<ReviewInsightItem[]>(INITIAL_INSIGHTS);
+  // Tab 5: Portfolio Management Insights states (loaded from DB)
+  const [insights, setInsights] = useState<ReviewInsightItem[]>([]);
   const [priorityFilter, setPriorityFilter] = useState<
     "All" | "High" | "Medium" | "Low"
   >("All");
 
   // Add Insight Modal states
   const [isAddInsightOpen, setIsAddInsightOpen] = useState(false);
-  const [newInsightProperty, setNewInsightProperty] = useState(
-    PROPERTIES_LIST[0].address
-  );
+  const [newInsightProperty, setNewInsightProperty] = useState("");
   const [newInsightMetric, setNewInsightMetric] = useState("Rental Income");
   const [newInsightHeading, setNewInsightHeading] = useState("");
   const [newInsightObservation, setNewInsightObservation] = useState("");
@@ -373,6 +428,69 @@ export default function ReviewWorkspaceReport({
   const [newInsightOwner, setNewInsightOwner] = useState("Adviser");
   const [newInsightAction, setNewInsightAction] = useState("");
   const [newInsightNotes, setNewInsightNotes] = useState("");
+
+  useEffect(() => {
+    if (propertiesList.length > 0 && !newInsightProperty) {
+      setNewInsightProperty(propertiesList[0].address);
+    }
+  }, [propertiesList, newInsightProperty]);
+
+  // Sync Executive Summary & Insights from DB whenever activeReview or dbHousehold changes
+  useEffect(() => {
+    if (activeReview) {
+      if (activeReview.verdictText) setVerdictText(activeReview.verdictText);
+      if (activeReview.objectiveText)
+        setObjectiveText(activeReview.objectiveText);
+      else if (dbHousehold?.notes) setObjectiveText(dbHousehold.notes);
+      if (activeReview.portfolioCommentary)
+        setPortfolioCommentary(activeReview.portfolioCommentary);
+      if (activeReview.propertyCommentary)
+        setPropertyCommentary(activeReview.propertyCommentary);
+      if (activeReview.bottomLineText)
+        setBottomLineText(activeReview.bottomLineText);
+      if (activeReview.futureOutlook?.forecastYears) {
+        setForecastHorizon(Number(activeReview.futureOutlook.forecastYears));
+      }
+    }
+
+    // Collect insights across reviews from DB
+    const loadedInsights: ReviewInsightItem[] = [];
+    if (Array.isArray(dbHousehold?.reviews)) {
+      for (const r of dbHousehold.reviews) {
+        for (const c of r.criteria || []) {
+          const pRaw = String(c.priority || "MEDIUM").toUpperCase();
+          const prio: "High" | "Medium" | "Low" =
+            pRaw === "HIGH" ? "High" : pRaw === "LOW" ? "Low" : "Medium";
+          loadedInsights.push({
+            id: c.id,
+            fy: String(r.financialYear),
+            screen: c.screen || "Property Analysis",
+            property: c.propertyName || "Portfolio-Wide",
+            maintenanceInsight: c.maintenanceInsight || "-",
+            metric: c.metric || "Rental Income",
+            heading: c.criterionTitle || "Review Insight",
+            insight: c.insight || "-",
+            recommendation: c.recommendation || "-",
+            priority: prio,
+            owner: c.owner || "Adviser",
+            action: c.action || "Review",
+            notes: c.adviserNotes || "-",
+          });
+        }
+      }
+    }
+    setInsights(loadedInsights);
+  }, [activeReview, dbHousehold]);
+
+  const persistReviewField = async (patch: Record<string, any>) => {
+    if (!effectiveReviewId) return;
+    try {
+      await updateReviewApi(effectiveReviewId, patch);
+      await onDataChanged?.();
+    } catch (err) {
+      console.error("Failed to save review field:", err);
+    }
+  };
 
   // Hover states for interactive charts
   const [hoveredYieldPointIndex, setHoveredYieldPointIndex] = useState<
@@ -388,43 +506,47 @@ export default function ReviewWorkspaceReport({
     "current" | "actions" | null
   >(null);
 
-  const currentProperty = PROPERTIES_LIST[selectedPropertyIndex];
+  const currentProperty =
+    propertiesList[selectedPropertyIndex] || propertiesList[0];
 
-  const handleAddInsightSubmit = (e: React.FormEvent) => {
+  const handleAddInsightSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newInsightHeading.trim()) return;
-    const created: ReviewInsightItem = {
-      id: `ins-${Date.now()}`,
-      fy: reviewYear,
-      screen:
-        activeTab === "property-analysis"
-          ? propertySubView === "cash-management"
-            ? "Cash Management"
-            : propertySubView === "capital-management"
-            ? "Capital Management"
-            : "Property Analysis"
-          : activeTab === "portfolio-overview"
-          ? "Portfolio Overview"
-          : activeTab === "future-outlook"
-          ? "Future Outlook"
-          : "Executive Summary",
-      property: newInsightProperty,
-      maintenanceInsight:
-        newInsightObservation.slice(0, 36) || "Adviser review",
-      metric: newInsightMetric,
-      heading: newInsightHeading.trim(),
-      insight:
-        newInsightObservation.trim() ||
-        "Adviser observation recorded during annual review.",
-      recommendation:
-        newInsightRecommendation.trim() ||
-        "Review and action during current financial year.",
-      priority: newInsightPriority,
-      owner: newInsightOwner,
-      action: newInsightAction.trim() || "Review",
-      notes: newInsightNotes.trim() || "Added in FY2026 review",
-    };
-    setInsights((prev) => [created, ...prev]);
+    const screenName =
+      activeTab === "property-analysis"
+        ? propertySubView === "cash-management"
+          ? "Cash Management"
+          : propertySubView === "capital-management"
+          ? "Capital Management"
+          : "Property Analysis"
+        : activeTab === "portfolio-overview"
+        ? "Portfolio Overview"
+        : activeTab === "future-outlook"
+        ? "Future Outlook"
+        : "Executive Summary";
+
+    if (effectiveReviewId) {
+      await createInsightApi(effectiveReviewId, {
+        criterionTitle: newInsightHeading.trim(),
+        screen: screenName,
+        propertyName: newInsightProperty || currentProperty.address,
+        maintenanceInsight:
+          newInsightObservation.slice(0, 36) || "Adviser review",
+        metric: newInsightMetric,
+        owner: newInsightOwner,
+        action: newInsightAction.trim() || "Review",
+        insight:
+          newInsightObservation.trim() ||
+          "Adviser observation recorded during annual review.",
+        recommendation:
+          newInsightRecommendation.trim() ||
+          "Review and action during current financial year.",
+        priority: newInsightPriority.toUpperCase(),
+        adviserNotes: newInsightNotes.trim() || `Added in FY${reviewYear} review`,
+      });
+      await onDataChanged?.();
+    }
+
     setNewInsightHeading("");
     setNewInsightObservation("");
     setNewInsightRecommendation("");
@@ -434,6 +556,64 @@ export default function ReviewWorkspaceReport({
   };
 
   const targetYear = 2026 + forecastHorizon;
+
+  // Portfolio Overview & Future Outlook aggregations from DB properties & entities
+  const portfolioStats = useMemo(() => {
+    const validProps = propertiesList.filter((p) => p.id !== "empty-prop");
+    const invProps = validProps.filter((p) => !p.isOwnerOccupied);
+    const ooProps = validProps.filter((p) => p.isOwnerOccupied);
+
+    const invVal = invProps.reduce((s, p) => s + (p.rawValue || 0), 0);
+    const invLoans = invProps.reduce((s, p) => s + (p.rawLoans || 0), 0);
+    const invEquity = Math.max(0, invVal - invLoans);
+    const invLvr = invVal > 0 ? (invLoans / invVal) * 100 : 0;
+
+    const ooVal = ooProps.reduce((s, p) => s + (p.rawValue || 0), 0);
+    const ooLoans = ooProps.reduce((s, p) => s + (p.rawLoans || 0), 0);
+    const ooEquity = Math.max(0, ooVal - ooLoans);
+
+    const superBal = Array.isArray(dbHousehold?.entities)
+      ? dbHousehold.entities.reduce(
+          (s: number, e: any) => s + Number(e.superBalance || 0),
+          0
+        )
+      : 0;
+
+    const homeGrowthDec =
+      (parseFloat(homeValueGrowth.replace(/[^0-9.]/g, "")) || 3.0) / 100;
+    const invGrowthDec =
+      (parseFloat(invPropertyGrowth.replace(/[^0-9.]/g, "")) || 4.0) / 100;
+
+    const projectedHomeVal = Math.round(
+      ooVal * Math.pow(1 + homeGrowthDec, forecastHorizon)
+    );
+    const projectedInvVal = Math.round(
+      invVal * Math.pow(1 + invGrowthDec, forecastHorizon)
+    );
+    const projectedInvEquity = Math.max(0, projectedInvVal - invLoans);
+    const projectedAfterTaxIncome = Math.round(projectedInvEquity * 0.035);
+
+    return {
+      invProps,
+      invVal,
+      invLoans,
+      invEquity,
+      invLvr,
+      ooVal,
+      ooLoans,
+      ooEquity,
+      superBal,
+      projectedHomeVal,
+      projectedInvEquity,
+      projectedAfterTaxIncome,
+    };
+  }, [
+    propertiesList,
+    dbHousehold,
+    homeValueGrowth,
+    invPropertyGrowth,
+    forecastHorizon,
+  ]);
 
   const filteredInsights =
     priorityFilter === "All"
@@ -972,7 +1152,10 @@ export default function ReviewWorkspaceReport({
                     rows={4}
                     value={verdictText}
                     onChange={(e) => setVerdictText(e.target.value)}
-                    onBlur={() => setIsEditingVerdict(false)}
+                    onBlur={() => {
+                      setIsEditingVerdict(false);
+                      persistReviewField({ verdictText });
+                    }}
                     className="w-full bg-white border border-[#dce4e8] rounded-[8px] p-3 text-[13.5px] leading-[22px] text-[#1a1c1e] focus:outline-none focus:border-[#0e2841]"
                   />
                 ) : (
@@ -1002,7 +1185,10 @@ export default function ReviewWorkspaceReport({
                     rows={4}
                     value={objectiveText}
                     onChange={(e) => setObjectiveText(e.target.value)}
-                    onBlur={() => setIsEditingObjective(false)}
+                    onBlur={() => {
+                      setIsEditingObjective(false);
+                      persistReviewField({ objectiveText });
+                    }}
                     className="w-full bg-white border border-[#dce4e8] rounded-[8px] p-3 text-[13.5px] leading-[22px] text-[#1a1c1e] focus:outline-none focus:border-[#0e2841]"
                   />
                 ) : (
@@ -1231,53 +1417,26 @@ export default function ReviewWorkspaceReport({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#F6F7F9] text-[13.5px] text-[#1A1C1E]">
-                  {[
-                    {
-                      property: "22 Oak Avenue, Mooloolaba QLD",
-                      value: "$1,150,000",
-                      netYield: "4.2%",
-                      totalReturn: "8.4%",
-                      cashFlow: "-$12,400",
-                      role: "Core Growth & Yield",
-                    },
-                    {
-                      property: "15 Sunview Parade, Alexandra",
-                      value: "$980,000",
-                      netYield: "3.8%",
-                      totalReturn: "7.4%",
-                      cashFlow: "-$18,250",
-                      role: "Capital Growth Anchor",
-                    },
-                    {
-                      property: "8 Pacific Drive, Buddina QLD",
-                      value: "$1,170,000",
-                      netYield: "3.1%",
-                      totalReturn: "5.4%",
-                      cashFlow: "-$21,124",
-                      role: "Hold / Optimise Cash Flow",
-                    },
-                    {
-                      property: "7 Kawana Way, Buddina QLD",
-                      value: "$850,000",
-                      netYield: "2.6%",
-                      totalReturn: "4.9%",
-                      cashFlow: "-$17,300",
-                      role: "Review Strategic Role",
-                    },
-                  ].map((row) => (
+                  {propertiesList.map((prop) => (
                     <tr
-                      key={row.property}
+                      key={prop.id}
                       className="hover:bg-[#FBFBFC] transition-colors"
                     >
-                      <td className="py-4 px-3 font-medium">{row.property}</td>
-                      <td className="py-4 px-3">{row.value}</td>
-                      <td className="py-4 px-3">{row.netYield}</td>
-                      <td className="py-4 px-3 font-semibold text-[#15803D]">
-                        {row.totalReturn}
+                      <td className="py-4 px-3 font-medium">{prop.address}</td>
+                      <td className="py-4 px-3">{prop.propertyValue}</td>
+                      <td className="py-4 px-3">
+                        {prop.isOwnerOccupied ? "N/A" : "3.8%"}
                       </td>
-                      <td className="py-4 px-3">{row.cashFlow}</td>
+                      <td className="py-4 px-3 font-semibold text-[#15803D]">
+                        {prop.totalReturn}
+                      </td>
+                      <td className="py-4 px-3">
+                        {prop.isOwnerOccupied ? "N/A" : "-$12,400"}
+                      </td>
                       <td className="py-4 px-3 font-medium text-[#0e2841]">
-                        {row.role}
+                        {prop.isOwnerOccupied
+                          ? "Primary Residence"
+                          : "Core Growth & Yield"}
                       </td>
                     </tr>
                   ))}
@@ -1592,26 +1751,26 @@ export default function ReviewWorkspaceReport({
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-[14px]">
               {renderMetricCard(
                 "Property Value",
-                "$3,300,000",
-                "12.4% vs FY2025",
+                fmtMoney(portfolioStats.invVal),
+                "Investment Portfolio",
                 "/images/review/90cea.svg"
               )}
               {renderMetricCard(
                 "Total Loans",
-                "$1,740,000",
-                "12.4% vs FY2025",
+                fmtMoney(portfolioStats.invLoans),
+                "Investment Debt",
                 "/images/review/89393.svg"
               )}
               {renderMetricCard(
                 "Total Equity",
-                "$1,560,000",
-                "12.4% vs FY2025",
+                fmtMoney(portfolioStats.invEquity),
+                "Net Investment Equity",
                 "/images/review/38829.svg"
               )}
               {renderMetricCard(
                 "LVR",
-                "52.73%",
-                "12.4% vs FY2025",
+                `${portfolioStats.invLvr.toFixed(2)}%`,
+                "Loan-to-Value Ratio",
                 "/images/review/30184.svg"
               )}
             </div>
@@ -1657,37 +1816,21 @@ export default function ReviewWorkspaceReport({
                   </div>
                 </div>
 
-                {[
-                  {
-                    rank: "1",
-                    property: "22 Oak Avenue, Mooloolaba",
-                    ret: "8.4%",
-                  },
-                  {
-                    rank: "2",
-                    property: "15 Sunview parade, alexandra",
-                    ret: "7.4%",
-                  },
-                  {
-                    rank: "3",
-                    property: "8 pacific Drive Budddna",
-                    ret: "5.4%",
-                  },
-                ].map((item) => (
+                {portfolioStats.invProps.map((item, idx) => (
                   <div
-                    key={item.rank}
+                    key={item.id}
                     className="grid grid-cols-12 items-center py-3 px-2 border-b border-[#F6F7F9] last:border-b-0 text-[13.5px]"
                   >
                     <div className="col-span-2">
                       <span className="w-[24px] h-[24px] rounded-[4px] bg-[#f6f9fb] inline-flex items-center justify-center text-[12px] font-medium text-[#1a1c1e]">
-                        {item.rank}
+                        {idx + 1}
                       </span>
                     </div>
                     <div className="col-span-7 text-[#1a1c1e] font-medium">
-                      {item.property}
+                      {item.address}
                     </div>
                     <div className="col-span-3 text-right font-semibold text-[#22C55E]">
-                      {item.ret}
+                      {item.totalReturn}
                     </div>
                   </div>
                 ))}
@@ -1770,7 +1913,7 @@ export default function ReviewWorkspaceReport({
 
                         {isPropertyDropdownOpen && (
                           <div className="absolute top-full left-0 mt-1.5 w-[320px] bg-white rounded-[10px] shadow-lg border border-[#E5E7EB] py-1.5 z-30">
-                            {PROPERTIES_LIST.map((prop, idx) => (
+                            {propertiesList.map((prop, idx) => (
                               <button
                                 key={prop.id}
                                 type="button"
@@ -2330,19 +2473,19 @@ export default function ReviewWorkspaceReport({
                         Property Value:
                       </p>
                       <p className="text-[15px] font-extrabold text-[#0e2841] mt-1">
-                        $2,350,000
+                        {fmtMoney(portfolioStats.ooVal)}
                       </p>
                     </div>
                     <div className="bg-[#f6f9fb] rounded-[10px] px-4 py-3">
                       <p className="text-[12.5px] text-[#6b6b6b]">Loans:</p>
                       <p className="text-[15px] font-extrabold text-[#0e2841] mt-1">
-                        $720,000
+                        {fmtMoney(portfolioStats.ooLoans)}
                       </p>
                     </div>
                     <div className="bg-[#f6f9fb] rounded-[10px] px-4 py-3">
                       <p className="text-[12.5px] text-[#6b6b6b]">Equity</p>
                       <p className="text-[15px] font-extrabold text-[#0e2841] mt-1">
-                        $1,630,000
+                        {fmtMoney(portfolioStats.ooEquity)}
                       </p>
                     </div>
                   </div>
@@ -2367,7 +2510,7 @@ export default function ReviewWorkspaceReport({
                         Total Investment Property Value:
                       </p>
                       <p className="text-[15px] font-extrabold text-[#0e2841] mt-1">
-                        $3,090,000
+                        {fmtMoney(portfolioStats.invVal)}
                       </p>
                     </div>
                     <div className="bg-[#f6f9fb] rounded-[10px] px-4 py-3">
@@ -2375,7 +2518,7 @@ export default function ReviewWorkspaceReport({
                         Total Investment Property Loans:
                       </p>
                       <p className="text-[15px] font-extrabold text-[#0e2841] mt-1">
-                        $1,765,000
+                        {fmtMoney(portfolioStats.invLoans)}
                       </p>
                     </div>
                     <div className="bg-[#f6f9fb] rounded-[10px] px-4 py-3">
@@ -2383,7 +2526,7 @@ export default function ReviewWorkspaceReport({
                         Investment Property Equity:
                       </p>
                       <p className="text-[15px] font-extrabold text-[#0e2841] mt-1">
-                        $1,325,000
+                        {fmtMoney(portfolioStats.invEquity)}
                       </p>
                     </div>
                   </div>
@@ -2408,7 +2551,7 @@ export default function ReviewWorkspaceReport({
                         Current Superannuation Balance:
                       </p>
                       <p className="text-[15px] font-extrabold text-[#0e2841] mt-1">
-                        $650,000
+                        {fmtMoney(portfolioStats.superBal)}
                       </p>
                     </div>
                     <div className="bg-[#f6f9fb] rounded-[10px] px-4 py-3">
@@ -2655,7 +2798,7 @@ export default function ReviewWorkspaceReport({
                         Projected Home Value
                       </p>
                       <p className="text-[16px] font-extrabold text-[#0e2841] mt-1">
-                        $4,629,309
+                        {fmtMoney(portfolioStats.projectedHomeVal)}
                       </p>
                     </div>
 
@@ -2692,7 +2835,7 @@ export default function ReviewWorkspaceReport({
                         Projected Net Equity
                       </p>
                       <p className="text-[16px] font-extrabold text-[#0e2841] mt-1">
-                        $4,766,915
+                        {fmtMoney(portfolioStats.projectedInvEquity)}
                       </p>
                     </div>
 
@@ -2701,7 +2844,7 @@ export default function ReviewWorkspaceReport({
                         Projected After-Tax Income
                       </p>
                       <p className="text-[16px] font-extrabold text-[#15803D] mt-1">
-                        $118,632 / yr
+                        {fmtMoney(portfolioStats.projectedAfterTaxIncome)} / yr
                       </p>
                     </div>
                   </div>
@@ -3064,7 +3207,7 @@ export default function ReviewWorkspaceReport({
                     onChange={(e) => setNewInsightProperty(e.target.value)}
                     className="w-full h-[44px] px-3.5 rounded-[8px] bg-[#f6f9fb] border border-[#dce4e8] text-[#1a1c1e] focus:outline-none focus:border-[#0e2841]"
                   >
-                    {PROPERTIES_LIST.map((p) => (
+                    {propertiesList.map((p) => (
                       <option key={p.id} value={p.address}>
                         {p.address}
                       </option>

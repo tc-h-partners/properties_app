@@ -43,6 +43,16 @@ export class ReviewsController {
     return this.reviewsService.getReviewWithAuth(adviserId, reviewId);
   }
 
+  @Patch('reviews/:reviewId')
+  @ApiOperation({ summary: 'Update review executive summary, commentary, verdict, objective, or statuses' })
+  updateReview(
+    @CurrentUser('id') adviserId: string,
+    @Param('reviewId') reviewId: string,
+    @Body() dto: Record<string, any>,
+  ) {
+    return this.reviewsService.updateReviewDetails(adviserId, reviewId, dto);
+  }
+
   @Put('reviews/:reviewId/financials/properties')
   @ApiOperation({ summary: 'Save/upsert property financial snapshots (EOFY or REVIEW_DATE)' })
   savePropertySnapshots(

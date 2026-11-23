@@ -1,7 +1,9 @@
 import {
   Controller,
   Get,
+  Post,
   Patch,
+  Delete,
   Param,
   Body,
   UseGuards,
@@ -28,6 +30,16 @@ export class AssessmentsController {
     return this.assessmentsService.getCriteria(adviserId, reviewId);
   }
 
+  @Post()
+  @ApiOperation({ summary: 'Create a new insight & recommendation for this review' })
+  createCriterion(
+    @CurrentUser('id') adviserId: string,
+    @Param('reviewId') reviewId: string,
+    @Body() dto: UpdateCriterionDto,
+  ) {
+    return this.assessmentsService.createCriterion(adviserId, reviewId, dto);
+  }
+
   @Patch(':criterionId')
   @ApiOperation({
     summary: 'Update ★ adviser fields (rating, insight, recommendation, priority, etc.). Locked if not IN_PROGRESS.',
@@ -39,5 +51,15 @@ export class AssessmentsController {
     @Body() dto: UpdateCriterionDto,
   ) {
     return this.assessmentsService.updateCriterion(adviserId, reviewId, criterionId, dto);
+  }
+
+  @Delete(':criterionId')
+  @ApiOperation({ summary: 'Delete an insight / assessment criterion' })
+  deleteCriterion(
+    @CurrentUser('id') adviserId: string,
+    @Param('reviewId') reviewId: string,
+    @Param('criterionId') criterionId: string,
+  ) {
+    return this.assessmentsService.deleteCriterion(adviserId, reviewId, criterionId);
   }
 }

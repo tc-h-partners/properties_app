@@ -9,7 +9,7 @@ export class BenchmarksService {
 
   async findAll() {
     return this.prisma.marketBenchmark.findMany({
-      orderBy: [{ state: 'asc' }, { effectiveDate: 'desc' }],
+      orderBy: [{ effectiveDate: 'desc' }, { state: 'asc' }],
     });
   }
 
@@ -31,6 +31,7 @@ export class BenchmarksService {
         benchmarkWeeklyRent: dto.benchmarkWeeklyRent,
         benchmarkRentalGrowth: dto.benchmarkRentalGrowth,
         benchmarkCapitalGrowth: dto.benchmarkCapitalGrowth,
+        asxIndexValue: dto.asxIndexValue,
         sourceNotes: dto.sourceNotes,
       },
     });
@@ -50,6 +51,7 @@ export class BenchmarksService {
         benchmarkWeeklyRent: dto.benchmarkWeeklyRent,
         benchmarkRentalGrowth: dto.benchmarkRentalGrowth,
         benchmarkCapitalGrowth: dto.benchmarkCapitalGrowth,
+        asxIndexValue: dto.asxIndexValue,
         sourceNotes: dto.sourceNotes,
       },
     });

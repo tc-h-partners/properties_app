@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import {
   ChevronDown,
@@ -9,8 +9,20 @@ import {
   ChevronLeft,
   Plus,
 } from "lucide-react";
-import AddPropertyModal from "./AddPropertyModal";
-import AddLoanModal from "./AddLoanModal";
+import AddPropertyModal, { NewPropertyFormPayload } from "./AddPropertyModal";
+import AddLoanModal, { NewLoanFormPayload } from "./AddLoanModal";
+import {
+  createPropertyApi,
+  createLoanApi,
+  updatePropertyApi,
+  updateLoanApi,
+  updateEntityApi,
+  updateHouseholdApi,
+  savePropertySnapshotsApi,
+  saveLoanSnapshotsApi,
+  updateFinDataStatusApi,
+  fetchBenchmarksApi,
+} from "@/lib/api";
 
 export type FinDataTab =
   | "household-income"
@@ -19,172 +31,26 @@ export type FinDataTab =
   | "market-data";
 
 interface FinancialDataInputProps {
+  householdId?: string;
+  reviewId?: string;
+  dbHousehold?: any;
+  onDataChanged?: () => Promise<void> | void;
   year?: string;
   status?: string;
   householdName?: string;
   onBackToWorkspace: () => void;
 }
 
-// Property list data (Figma Frame 740:7771 & 630:5992)
-const INITIAL_PROPERTIES = [
-  {
-    id: "prop-1",
-    address: "28/42 Marine Parade, Southport QLD 4215",
-    listName: "14 Bellevue Terrace, Paddington",
-    purpose: "Investment",
-    type: "Unit / Apartment",
-    listType: "Unit",
-    eofyValuation: "$840,000",
-    reviewValuation: "$2,350,000",
-    rentWeekly: "$1450/wk",
-    marketRentWeekly: "$840",
-    status: "Completed" as const,
-  },
-  {
-    id: "prop-2",
-    address: "7 Waratah Street, Mona Vale NSW 2103",
-    listName: "7 Waratah Street, Mona Vale",
-    purpose: "Owner-Occupied",
-    type: "House",
-    listType: "House",
-    eofyValuation: "$800,000",
-    reviewValuation: "$2,350,000",
-    rentWeekly: "----",
-    marketRentWeekly: "----",
-    status: "In Progress" as const,
-  },
-  {
-    id: "prop-3",
-    address: "7 Waratah Street, Mona Vale NSW 2103",
-    listName: "7 Waratah Street, Mona Vale",
-    purpose: "Investment",
-    type: "Unit / Apartment",
-    listType: "Unit",
-    eofyValuation: "$800,000",
-    reviewValuation: "$2,350,000",
-    rentWeekly: "$1450/wk",
-    marketRentWeekly: "$840",
-    status: "Completed" as const,
-  },
-  {
-    id: "prop-4",
-    address: "14 Bellevue Terrace, Paddington QLD 4064",
-    listName: "14 Bellevue Terrace, Paddington",
-    purpose: "Investment",
-    type: "Unit / Apartment",
-    listType: "Unit",
-    eofyValuation: "$1,200,000",
-    reviewValuation: "$2,250,000",
-    rentWeekly: "$1450/wk",
-    marketRentWeekly: "$840",
-    status: "Completed" as const,
-  },
-  {
-    id: "prop-5",
-    address: "14 Bellevue Terrace, Paddington QLD 4064",
-    listName: "14 Bellevue Terrace, Paddington",
-    purpose: "Owner-Occupied",
-    type: "House",
-    listType: "House",
-    eofyValuation: "$1,200,000",
-    reviewValuation: "$2,250,000",
-    rentWeekly: "----",
-    marketRentWeekly: "----",
-    status: "Completed" as const,
-  },
-];
+function parseNum(val: any, fallback = 0): number {
+  const cleaned = String(val ?? "").replace(/[^0-9.-]/g, "");
+  const n = Number(cleaned);
+  return isNaN(n) ? fallback : n;
+}
 
-// Loan list data (Figma Frame 741:9632 & 625:6863)
-const INITIAL_LOANS = [
-  {
-    id: "loan-1",
-    facilityId: "ANZ-9832-01",
-    title: "ANZ-9832-01 — ANZ Banking Group (Home Loan)",
-    lender: "ANZ Banking Group",
-    purpose: "Home Loan",
-    repayment: "Principal & Interest",
-    rateType: "Variable",
-    ioExpiry: "N/A",
-    fixedExpiry: "N/A",
-    maturity: "15/06/2047",
-    security1: "14 Bellevue Terrace, Paddington QL...",
-    eofyBalance: "$742000",
-    reviewBalance: "$720000",
-    marketRate: "N/A",
-    interestEofy: "6.14%",
-    interestReview: "5.94%",
-    interestMarket: "6.05%",
-    offsetEofy: "$24,000",
-    offsetReview: "$32,000",
-    status: "Completed" as const,
-  },
-  {
-    id: "loan-2",
-    facilityId: "ANZ1477642",
-    title: "ANZ1477642 — ANZ Banking Group (Investment)",
-    lender: "ANZ Banking Group",
-    purpose: "Investment",
-    repayment: "Interest only",
-    rateType: "Variable",
-    ioExpiry: "24/10/2026",
-    fixedExpiry: "----",
-    maturity: "24/10/2026",
-    security1: "123 smit st buddha",
-    eofyBalance: "$680,000",
-    reviewBalance: "$650,000",
-    marketRate: "N/A",
-    interestEofy: "6.24%",
-    interestReview: "6.14%",
-    interestMarket: "6.05%",
-    offsetEofy: "$20,000",
-    offsetReview: "$24,000",
-    status: "In progress" as const,
-  },
-  {
-    id: "loan-3",
-    facilityId: "CBA124523",
-    title: "CBA124523 — Commonwealth Bank (Investment)",
-    lender: "CBA",
-    purpose: "Investment",
-    repayment: "Principal Interest",
-    rateType: "Variable",
-    ioExpiry: "----",
-    fixedExpiry: "24/10/2026",
-    maturity: "24/10/2026",
-    security1: "45 Johan st",
-    eofyBalance: "$500,000",
-    reviewBalance: "$480,000",
-    marketRate: "N/A",
-    interestEofy: "5.95%",
-    interestReview: "5.85%",
-    interestMarket: "6.05%",
-    offsetEofy: "$10,000",
-    offsetReview: "$15,000",
-    status: "Completed" as const,
-  },
-  {
-    id: "loan-4",
-    facilityId: "NAB-4421-02",
-    title: "NAB-4421-02 — National Australia Bank (Investment)",
-    lender: "NAB",
-    purpose: "Investment",
-    repayment: "Principal & Interest",
-    rateType: "Variable",
-    ioExpiry: "N/A",
-    fixedExpiry: "N/A",
-    maturity: "15/06/2047",
-    security1: "28/42 Marine Parade, Southport QLD 4215",
-    eofyBalance: "$610,000",
-    reviewBalance: "$590,000",
-    marketRate: "N/A",
-    interestEofy: "6.10%",
-    interestReview: "5.98%",
-    interestMarket: "6.05%",
-    offsetEofy: "$18,000",
-    offsetReview: "$22,000",
-    status: "Completed" as const,
-  },
-];
+function fmtMoney(val: any): string {
+  const n = parseNum(val, 0);
+  return `$${n.toLocaleString("en-AU", { maximumFractionDigits: 0 })}`;
+}
 
 // Small dark solid dropdown arrow matching Figma's `arrow-down` in table headers
 function TableSortArrow() {
@@ -203,6 +69,10 @@ function TableSortArrow() {
 }
 
 export default function FinancialDataInput({
+  householdId = "",
+  reviewId = "",
+  dbHousehold,
+  onDataChanged,
   year = "2025",
   status = "Completed",
   householdName = "Harrison family",
@@ -218,58 +88,82 @@ export default function FinancialDataInput({
   const [isPropertyModalOpen, setIsPropertyModalOpen] = useState(false);
   const [isLoanModalOpen, setIsLoanModalOpen] = useState(false);
 
-  // Property selection & dropdown state
-  const [properties, setProperties] = useState(INITIAL_PROPERTIES);
-  const [selectedPropertyId, setSelectedPropertyId] = useState("prop-1");
+  // Property selection & dropdown state (populated from DB)
+  const [properties, setProperties] = useState<any[]>([]);
+  const [selectedPropertyId, setSelectedPropertyId] = useState("");
   const [isPropertyDropdownOpen, setIsPropertyDropdownOpen] = useState(false);
 
-  // Loan selection & dropdown state
-  const [loans, setLoans] = useState(INITIAL_LOANS);
-  const [selectedLoanId, setSelectedLoanId] = useState("loan-1");
+  // Loan selection & dropdown state (populated from DB)
+  const [loans, setLoans] = useState<any[]>([]);
+  const [selectedLoanId, setSelectedLoanId] = useState("");
   const [isLoanDropdownOpen, setIsLoanDropdownOpen] = useState(false);
+  const [savingMsg, setSavingMsg] = useState("");
+
+  const activeReview = useMemo(() => {
+    if (!dbHousehold || !Array.isArray(dbHousehold.reviews)) return null;
+    return (
+      dbHousehold.reviews.find((r: any) => r.id === reviewId) ||
+      dbHousehold.reviews[0] ||
+      null
+    );
+  }, [dbHousehold, reviewId]);
+
+  const effectiveReviewId = reviewId || activeReview?.id || "";
 
   const selectedProperty =
-    properties.find((p) => p.id === selectedPropertyId) || properties[0];
+    properties.find((p) => p.id === selectedPropertyId) ||
+    properties[0] || {
+      id: "",
+      address: "No Property Added Yet",
+      listName: "No Property Added Yet",
+      purpose: "Investment",
+      type: "House",
+      listType: "House",
+      eofyValuation: "$0",
+      reviewValuation: "$0",
+      rentWeekly: "$0/wk",
+      marketRentWeekly: "$0",
+      status: "In Progress",
+    };
+
   const selectedLoan =
-    loans.find((l) => l.id === selectedLoanId) || loans[0];
+    loans.find((l) => l.id === selectedLoanId) ||
+    loans[0] || {
+      id: "",
+      facilityId: "N/A",
+      title: "No Loan Added Yet",
+      lender: "-",
+      purpose: "Investment",
+      repayment: "Interest only",
+      rateType: "Variable",
+      ioExpiry: "----",
+      fixedExpiry: "----",
+      maturity: "----",
+      security1: "-",
+      eofyBalance: "$0",
+      reviewBalance: "$0",
+      marketRate: "N/A",
+      interestEofy: "5.95%",
+      interestReview: "5.95%",
+      interestMarket: "6.05%",
+      offsetEofy: "$0",
+      offsetReview: "$0",
+      status: "In progress",
+    };
 
   // =========================================================================
-  // TAB 1: Household Income State (Figma Frame 513:9950)
+  // TAB 1: Household Income State (loaded from DB)
   // =========================================================================
-  const [salaryRows, setSalaryRows] = useState([
+  const [salaryRows, setSalaryRows] = useState<
     {
-      id: "1",
-      client: "Harrison Family",
-      entity: "Individual",
-      salary: "$210000",
-      taxRate: "45%",
-      superAmount: "$3,850,000",
-    },
-    {
-      id: "2",
-      client: "Sarah Harrison",
-      entity: "Individual",
-      salary: "$165000",
-      taxRate: "32%",
-      superAmount: "$1,450,000",
-    },
-    {
-      id: "3",
-      client: "Sarah Harrison",
-      entity: "rust",
-      salary: "$0",
-      taxRate: "40%",
-      superAmount: "$0",
-    },
-    {
-      id: "4",
-      client: "Sarah Harrison",
-      entity: "Individual",
-      salary: "",
-      taxRate: "",
-      superAmount: "",
-    },
-  ]);
+      id: string;
+      client: string;
+      entity: string;
+      salary: string;
+      taxRate: string;
+      superAmount: string;
+    }[]
+  >([]);
 
   const [creditCardLimit, setCreditCardLimit] = useState("");
   const [householdExpenditure, setHouseholdExpenditure] = useState("");
@@ -277,6 +171,165 @@ export default function FinancialDataInput({
   const [otherLiabilities, setOtherLiabilities] = useState("");
   const [cash, setCash] = useState("$47,000");
   const [borrowingCapacity, setBorrowingCapacity] = useState("$800,000");
+
+  // Sync state from dbHousehold whenever dbHousehold loads or updates
+  useEffect(() => {
+    if (!dbHousehold) return;
+
+    // 1. Entities -> salaryRows
+    const dbEntities = Array.isArray(dbHousehold.entities)
+      ? dbHousehold.entities
+      : [];
+    setSalaryRows(
+      dbEntities.map((e: any) => {
+        const rateNum = Number(e.marginalTaxRate ?? 0.37);
+        const pct =
+          rateNum <= 1 ? `${Math.round(rateNum * 100)}%` : `${Math.round(rateNum)}%`;
+        return {
+          id: e.id,
+          client: e.name,
+          entity: e.displayType || e.type || "Individual",
+          salary: fmtMoney(e.annualSalary ?? 0),
+          taxRate: pct,
+          superAmount: fmtMoney(e.superBalance ?? 0),
+        };
+      })
+    );
+
+    setHouseholdExpenditure(
+      dbHousehold.householdExpenditure
+        ? fmtMoney(dbHousehold.householdExpenditure)
+        : ""
+    );
+    setCreditCardLimit(
+      dbHousehold.creditCardLimit ? fmtMoney(dbHousehold.creditCardLimit) : ""
+    );
+    setOtherLiabilities(
+      dbHousehold.otherLiabilities ? fmtMoney(dbHousehold.otherLiabilities) : ""
+    );
+    setMonthlyPayments(
+      dbHousehold.monthlyPayments ? fmtMoney(dbHousehold.monthlyPayments) : ""
+    );
+    setBorrowingCapacity(fmtMoney(dbHousehold.borrowingCapacity ?? 800000));
+    setCash(fmtMoney(dbHousehold.cashSavings ?? 47000));
+
+    // 2. Properties
+    const propSnaps = Array.isArray(activeReview?.propertySnapshots)
+      ? activeReview.propertySnapshots
+      : [];
+    const mappedProps = (dbHousehold.properties || []).map((p: any) => {
+      const eofySnap =
+        propSnaps.find(
+          (s: any) => s.propertyId === p.id && s.snapshotPoint === "EOFY"
+        ) ||
+        (p.snapshots || []).find((s: any) => s.snapshotPoint === "EOFY");
+      const revSnap =
+        propSnaps.find(
+          (s: any) => s.propertyId === p.id && s.snapshotPoint === "REVIEW_DATE"
+        ) ||
+        (p.snapshots || []).find((s: any) => s.snapshotPoint === "REVIEW_DATE");
+
+      const purpose =
+        p.purposeDisplay ||
+        (p.type === "OWNER_OCCUPIED" ? "Owner-Occupied" : "Investment");
+      const isOO = p.type === "OWNER_OCCUPIED";
+      const wkRent = revSnap
+        ? Number(revSnap.weeklyRent)
+        : Number(p.weeklyRent || 0);
+
+      return {
+        id: p.id,
+        address: p.address,
+        listName: p.name || p.address,
+        purpose,
+        type: p.propertyCategory || "House",
+        listType: p.propertyCategory || "House",
+        eofyValuation: fmtMoney(
+          eofySnap ? eofySnap.valuation : p.purchasePrice
+        ),
+        reviewValuation: fmtMoney(
+          revSnap ? revSnap.valuation : p.currentValuation || p.purchasePrice
+        ),
+        rentWeekly: isOO ? "----" : `$${wkRent}/wk`,
+        marketRentWeekly: isOO
+          ? "----"
+          : fmtMoney(revSnap?.marketWeeklyRent || wkRent),
+        status: (revSnap?.status || "Completed") as "Completed" | "In Progress",
+        rawProperty: p,
+        eofySnap,
+        revSnap,
+      };
+    });
+    setProperties(mappedProps);
+    if (
+      mappedProps.length > 0 &&
+      (!selectedPropertyId ||
+        !mappedProps.some((mp: any) => mp.id === selectedPropertyId))
+    ) {
+      setSelectedPropertyId(mappedProps[0].id);
+    }
+
+    // 3. Loans
+    const loanSnaps = Array.isArray(activeReview?.loanSnapshots)
+      ? activeReview.loanSnapshots
+      : [];
+    const mappedLoans: any[] = [];
+    for (const p of dbHousehold.properties || []) {
+      for (const l of p.loans || []) {
+        const eofySnap =
+          loanSnaps.find(
+            (s: any) => s.loanId === l.id && s.snapshotPoint === "EOFY"
+          ) ||
+          (l.snapshots || []).find((s: any) => s.snapshotPoint === "EOFY");
+        const revSnap =
+          loanSnaps.find(
+            (s: any) => s.loanId === l.id && s.snapshotPoint === "REVIEW_DATE"
+          ) ||
+          (l.snapshots || []).find((s: any) => s.snapshotPoint === "REVIEW_DATE");
+
+        const ref = l.loanReference || l.accountName || l.id.slice(0, 8);
+        const eofyRate = eofySnap ? Number(eofySnap.interestRate) : 0.0614;
+        const revRate = revSnap ? Number(revSnap.interestRate) : 0.0594;
+        const mktRate = revSnap?.marketRate ? Number(revSnap.marketRate) : 0.0605;
+
+        mappedLoans.push({
+          id: l.id,
+          facilityId: ref,
+          title: l.accountName || `${ref} — ${l.lender} (${l.purpose || "Investment"})`,
+          lender: l.lender,
+          purpose: l.purpose || "Investment",
+          repayment: l.repaymentType || l.loanType || "Interest only",
+          rateType: l.rateType || "Variable",
+          ioExpiry: l.ioExpiry || "----",
+          fixedExpiry: l.fixedExpiry || "----",
+          maturity: l.maturityDate || "24/10/2026",
+          security1: l.security1 || p.address,
+          eofyBalance: fmtMoney(eofySnap ? eofySnap.loanBalance : 650000),
+          reviewBalance: fmtMoney(revSnap ? revSnap.loanBalance : 650000),
+          marketRate: "N/A",
+          interestEofy: `${((eofyRate <= 1 ? eofyRate * 100 : eofyRate)).toFixed(2)}%`,
+          interestReview: `${((revRate <= 1 ? revRate * 100 : revRate)).toFixed(2)}%`,
+          interestMarket: `${((mktRate <= 1 ? mktRate * 100 : mktRate)).toFixed(2)}%`,
+          offsetEofy: fmtMoney(eofySnap ? eofySnap.offsetBalance : 20000),
+          offsetReview: fmtMoney(revSnap ? revSnap.offsetBalance : 24000),
+          status: (revSnap?.status || "Completed") as "Completed" | "In progress",
+          isClosed: Boolean(l.isClosed),
+          closedDate: l.closedDate || "",
+          rawLoan: l,
+          eofySnap,
+          revSnap,
+        });
+      }
+    }
+    setLoans(mappedLoans);
+    if (
+      mappedLoans.length > 0 &&
+      (!selectedLoanId ||
+        !mappedLoans.some((ml: any) => ml.id === selectedLoanId))
+    ) {
+      setSelectedLoanId(mappedLoans[0].id);
+    }
+  }, [dbHousehold, activeReview]);
 
   // =========================================================================
   // TAB 2: Property Data State (Figma Frame 630:5992)
@@ -335,6 +388,195 @@ export default function FinancialDataInput({
   const [interestRateMarket, setInterestRateMarket] = useState("6.05%");
   const [offsetEofy, setOffsetEofy] = useState("$24,000");
   const [offsetReview, setOffsetReview] = useState("$32,000");
+
+  // Populate Property Detail form inputs whenever selectedProperty changes
+  useEffect(() => {
+    if (!selectedProperty || !selectedProperty.id) return;
+    const eofy = selectedProperty.eofySnap;
+    const rev = selectedProperty.revSnap;
+    const raw = selectedProperty.rawProperty;
+
+    setSoldDate(raw?.soldDate || "");
+    setEofyValuation(fmtMoney(eofy ? eofy.valuation : raw?.purchasePrice ?? 840000));
+    setEofyRent(fmtMoney(eofy ? eofy.weeklyRent : raw?.weeklyRent ?? 780));
+    setEofyMarketRent(fmtMoney(eofy?.marketWeeklyRent || eofy?.weeklyRent || 840));
+
+    setReviewValuation(
+      fmtMoney(rev ? rev.valuation : raw?.currentValuation ?? raw?.purchasePrice ?? 840000)
+    );
+    setReviewRent(fmtMoney(rev ? rev.weeklyRent : raw?.weeklyRent ?? 780));
+    setReviewMarketRent(fmtMoney(rev?.marketWeeklyRent || rev?.weeklyRent || 840));
+    setGrossRent(fmtMoney(rev ? rev.annualGrossRent : (raw?.weeklyRent ?? 780) * 52));
+    setWeeksRented(String(52 - Number(rev?.vacancyWeeks ?? 0)));
+
+    setMgmtCommissions(fmtMoney(rev?.propertyManagementFees ?? 780));
+    setCouncilRates(fmtMoney(rev?.councilRates ?? 780));
+    setInsurance(fmtMoney(rev?.insurance ?? 840));
+    setStrataLevies(fmtMoney(rev?.strataFees ?? 780));
+    setWaterCharges(fmtMoney(rev?.waterRates ?? 840));
+    setRepairsMaintenance(fmtMoney(rev?.repairsMaintenance ?? 840));
+    setLandTax(fmtMoney(rev?.landTax ?? 780));
+    setOtherExpenses(fmtMoney(rev?.otherExpenses ?? 840));
+    setDepreciation(fmtMoney(rev?.depreciationNonCash ?? 6500));
+  }, [selectedProperty?.id]);
+
+  // Populate Loan Detail form inputs whenever selectedLoan changes
+  useEffect(() => {
+    if (!selectedLoan || !selectedLoan.id) return;
+    setIsLoanClosed(Boolean(selectedLoan.isClosed));
+    setLoanClosedDate(selectedLoan.closedDate || "");
+    setLoanBalanceEofy(selectedLoan.eofyBalance || "$650,000");
+    setLoanBalanceReview(selectedLoan.reviewBalance || "$650,000");
+    setInterestRateEofy(selectedLoan.interestEofy || "6.14%");
+    setInterestRateReview(selectedLoan.interestReview || "5.94%");
+    setInterestRateMarket(selectedLoan.interestMarket || "6.05%");
+    setOffsetEofy(selectedLoan.offsetEofy || "$20,000");
+    setOffsetReview(selectedLoan.offsetReview || "$24,000");
+  }, [selectedLoan?.id]);
+
+  const combinedSalaryTotal = useMemo(() => {
+    return salaryRows.reduce((sum, r) => sum + parseNum(r.salary, 0), 0);
+  }, [salaryRows]);
+
+  const totalSuperSum = useMemo(() => {
+    return salaryRows.reduce((sum, r) => sum + parseNum(r.superAmount, 0), 0);
+  }, [salaryRows]);
+
+  const handleSaveHouseholdIncome = async () => {
+    if (!householdId) return;
+    setSavingMsg("Saving household income to database...");
+    try {
+      await Promise.all([
+        updateHouseholdApi(householdId, {
+          householdExpenditure: parseNum(householdExpenditure, 0),
+          creditCardLimit: parseNum(creditCardLimit, 0),
+          otherLiabilities: parseNum(otherLiabilities, 0),
+          monthlyPayments: parseNum(monthlyPayments, 0),
+          borrowingCapacity: parseNum(borrowingCapacity, 800000),
+          cashSavings: parseNum(cash, 47000),
+        }),
+        ...salaryRows.map((row) => {
+          const rawRate = parseNum(row.taxRate, 37);
+          const rateDecimal = rawRate > 1 ? rawRate / 100 : rawRate;
+          return updateEntityApi(householdId, row.id, {
+            annualSalary: parseNum(row.salary, 0),
+            marginalTaxRate: rateDecimal,
+            superBalance: parseNum(row.superAmount, 0),
+          });
+        }),
+      ]);
+      await onDataChanged?.();
+      setSavingMsg("Saved to database!");
+      setTimeout(() => setSavingMsg(""), 2000);
+    } catch (err) {
+      console.error("Failed to save household income:", err);
+      setSavingMsg("Error saving data");
+    }
+  };
+
+  const handleSavePropertySnapshots = async (markCompleted = false) => {
+    if (!selectedProperty?.id || !effectiveReviewId) {
+      if (markCompleted) onBackToWorkspace();
+      return;
+    }
+    setSavingMsg("Saving property data to database...");
+    try {
+      if (householdId && soldDate !== (selectedProperty.rawProperty?.soldDate || "")) {
+        await updatePropertyApi(householdId, selectedProperty.id, { soldDate });
+      }
+      await savePropertySnapshotsApi(effectiveReviewId, [
+        {
+          propertyId: selectedProperty.id,
+          snapshotPoint: "EOFY",
+          valuation: parseNum(eofyValuation, 840000),
+          weeklyRent: parseNum(eofyRent, 780),
+          marketWeeklyRent: parseNum(eofyMarketRent, 840),
+          annualGrossRent: parseNum(eofyRent, 780) * 52,
+          status: "Completed",
+        },
+        {
+          propertyId: selectedProperty.id,
+          snapshotPoint: "REVIEW_DATE",
+          valuation: parseNum(reviewValuation, 840000),
+          weeklyRent: parseNum(reviewRent, 780),
+          marketWeeklyRent: parseNum(reviewMarketRent, 840),
+          annualGrossRent: parseNum(grossRent, parseNum(reviewRent, 780) * 52),
+          councilRates: parseNum(councilRates, 780),
+          waterRates: parseNum(waterCharges, 840),
+          insurance: parseNum(insurance, 840),
+          propertyManagementFees: parseNum(mgmtCommissions, 780),
+          repairsMaintenance: parseNum(repairsMaintenance, 840),
+          landTax: parseNum(landTax, 780),
+          strataFees: parseNum(strataLevies, 780),
+          otherExpenses: parseNum(otherExpenses, 840),
+          depreciationNonCash: parseNum(depreciation, 6500),
+          status: "Completed",
+        },
+      ]);
+
+      if (markCompleted) {
+        await updateFinDataStatusApi(effectiveReviewId, "COMPLETED");
+      }
+      await onDataChanged?.();
+      setSavingMsg("Saved to database!");
+      setTimeout(() => setSavingMsg(""), 2000);
+      if (markCompleted) {
+        onBackToWorkspace();
+      }
+    } catch (err) {
+      console.error("Failed to save property snapshots:", err);
+      setSavingMsg("Failed to save property data");
+    }
+  };
+
+  const handleSaveLoanSnapshots = async (markCompleted = false) => {
+    if (!selectedLoan?.id || !effectiveReviewId) {
+      if (markCompleted) onBackToWorkspace();
+      return;
+    }
+    setSavingMsg("Saving loan data to database...");
+    try {
+      if (householdId) {
+        await updateLoanApi(householdId, selectedLoan.id, {
+          isClosed: isLoanClosed,
+          closedDate: loanClosedDate,
+        });
+      }
+      await saveLoanSnapshotsApi(effectiveReviewId, [
+        {
+          loanId: selectedLoan.id,
+          snapshotPoint: "EOFY",
+          loanBalance: parseNum(loanBalanceEofy, 650000),
+          offsetBalance: parseNum(offsetEofy, 20000),
+          interestRate: parseNum(interestRateEofy, 6.14),
+          marketRate: parseNum(interestRateMarket, 6.05),
+          status: "Completed",
+        },
+        {
+          loanId: selectedLoan.id,
+          snapshotPoint: "REVIEW_DATE",
+          loanBalance: parseNum(loanBalanceReview, 650000),
+          offsetBalance: parseNum(offsetReview, 24000),
+          interestRate: parseNum(interestRateReview, 5.94),
+          marketRate: parseNum(interestRateMarket, 6.05),
+          status: "Completed",
+        },
+      ]);
+
+      if (markCompleted) {
+        await updateFinDataStatusApi(effectiveReviewId, "COMPLETED");
+      }
+      await onDataChanged?.();
+      setSavingMsg("Saved to database!");
+      setTimeout(() => setSavingMsg(""), 2000);
+      if (markCompleted) {
+        onBackToWorkspace();
+      }
+    } catch (err) {
+      console.error("Failed to save loan snapshots:", err);
+      setSavingMsg("Failed to save loan data");
+    }
+  };
 
   // Helper Input matching Figma Property Data input boxes (h-[48px] bg-[#F7F8FA] border-[#D8E0E8])
   const renderPropertyField = (
@@ -565,63 +807,53 @@ export default function FinancialDataInput({
                     <td className="py-2.5 px-2 text-[13.5px] text-[#1A1C1E] font-normal">
                       {row.client}
                     </td>
-                    <td
-                      className={`py-2.5 px-2 text-[13.5px] text-[#1A1C1E] ${
-                        row.id === "4" ? "italic" : "font-normal"
-                      }`}
-                    >
+                    <td className="py-2.5 px-2 text-[13.5px] text-[#1A1C1E] font-normal">
                       {row.entity}
                     </td>
                     <td className="py-2.5 px-2">
-                      {row.salary ? (
-                        <input
-                          type="text"
-                          value={row.salary}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setSalaryRows((prev) =>
-                              prev.map((r) =>
-                                r.id === row.id ? { ...r, salary: val } : r
-                              )
-                            );
-                          }}
-                          className="h-[40px] px-3 bg-[#F7F8FA] border border-[#E2E8F0] rounded-[8px] text-[13px] text-[#9AA5B1] w-[134px] focus:text-[#1A1C1E] focus:bg-white focus:outline-none focus:border-[#0E2841] transition-colors"
-                        />
-                      ) : null}
+                      <input
+                        type="text"
+                        value={row.salary}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setSalaryRows((prev) =>
+                            prev.map((r) =>
+                              r.id === row.id ? { ...r, salary: val } : r
+                            )
+                          );
+                        }}
+                        className="h-[40px] px-3 bg-[#F7F8FA] border border-[#E2E8F0] rounded-[8px] text-[13px] text-[#1A1C1E] w-[134px] focus:bg-white focus:outline-none focus:border-[#0E2841] transition-colors"
+                      />
                     </td>
                     <td className="py-2.5 px-2">
-                      {row.taxRate ? (
-                        <input
-                          type="text"
-                          value={row.taxRate}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setSalaryRows((prev) =>
-                              prev.map((r) =>
-                                r.id === row.id ? { ...r, taxRate: val } : r
-                              )
-                            );
-                          }}
-                          className="h-[40px] px-3 bg-[#F7F8FA] border border-[#E2E8F0] rounded-[8px] text-[13px] text-[#9AA5B1] w-[110px] focus:text-[#1A1C1E] focus:bg-white focus:outline-none focus:border-[#0E2841] transition-colors"
-                        />
-                      ) : null}
+                      <input
+                        type="text"
+                        value={row.taxRate}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setSalaryRows((prev) =>
+                            prev.map((r) =>
+                              r.id === row.id ? { ...r, taxRate: val } : r
+                            )
+                          );
+                        }}
+                        className="h-[40px] px-3 bg-[#F7F8FA] border border-[#E2E8F0] rounded-[8px] text-[13px] text-[#1A1C1E] w-[110px] focus:bg-white focus:outline-none focus:border-[#0E2841] transition-colors"
+                      />
                     </td>
                     <td className="py-2.5 px-2">
-                      {row.superAmount ? (
-                        <input
-                          type="text"
-                          value={row.superAmount}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setSalaryRows((prev) =>
-                              prev.map((r) =>
-                                r.id === row.id ? { ...r, superAmount: val } : r
-                              )
-                            );
-                          }}
-                          className="h-[40px] px-3 bg-[#F7F8FA] border border-[#E2E8F0] rounded-[8px] text-[13px] text-[#9AA5B1] w-[136px] focus:text-[#1A1C1E] focus:bg-white focus:outline-none focus:border-[#0E2841] transition-colors"
-                        />
-                      ) : null}
+                      <input
+                        type="text"
+                        value={row.superAmount}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setSalaryRows((prev) =>
+                            prev.map((r) =>
+                              r.id === row.id ? { ...r, superAmount: val } : r
+                            )
+                          );
+                        }}
+                        className="h-[40px] px-3 bg-[#F7F8FA] border border-[#E2E8F0] rounded-[8px] text-[13px] text-[#1A1C1E] w-[136px] focus:bg-white focus:outline-none focus:border-[#0E2841] transition-colors"
+                      />
                     </td>
                   </tr>
                 ))}
@@ -629,24 +861,40 @@ export default function FinancialDataInput({
             </table>
           </div>
 
-          {/* Line 93 & Total Row (Figma Frame 617:5755: Total at x=0, Combined Salary at x=544, Total Super at x=1000) */}
+          {/* Line 93 & Total Row */}
           <div className="mt-4 pt-5 border-t border-[#EDEDF0] grid grid-cols-1 sm:grid-cols-12 items-center gap-4">
             <div className="sm:col-span-5 font-bold text-[#071E36] text-[16px]">
               Total
             </div>
             <div className="sm:col-span-4 font-bold text-[#071E36] text-[14px]">
-              Combined Salary: $375,000
+              Combined Salary: {fmtMoney(combinedSalaryTotal)}
             </div>
             <div className="sm:col-span-3 font-bold text-[#071E36] text-[14px] sm:text-right pr-2">
-              Total Super: $47,000
+              Total Super: {fmtMoney(totalSuperSum)}
             </div>
           </div>
 
-          {/* Inner Card 2: Combined Salary & Liquidity (Figma Frame 630:2008) */}
+          {/* Inner Card 2: Combined Salary & Liquidity */}
           <div className="mt-7 bg-[#F9FAFB]/70 rounded-[16px] p-6 sm:p-8 border border-[#E5E7EB] space-y-6">
-            <h3 className="text-[18px] font-bold text-[#071E36]">
-              Combined Salary: $375,000
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-[18px] font-bold text-[#071E36]">
+                Combined Salary: {fmtMoney(combinedSalaryTotal)}
+              </h3>
+              <div className="flex items-center gap-3">
+                {savingMsg && (
+                  <span className="text-[13px] text-[#18794E] font-medium">
+                    {savingMsg}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={handleSaveHouseholdIncome}
+                  className="h-[40px] px-5 rounded-[8px] bg-[#071E36] hover:bg-[#122D4D] text-white text-[13.5px] font-medium transition-colors cursor-pointer"
+                >
+                  Save Income &amp; Liquidity
+                </button>
+              </div>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
               {/* Row 1 Left: Household Expenditure (Figma 651:2516) */}
@@ -1157,15 +1405,21 @@ export default function FinancialDataInput({
                   Back
                 </button>
                 <div className="flex items-center gap-4">
+                  {savingMsg && (
+                    <span className="text-[13px] text-[#18794E] font-medium">
+                      {savingMsg}
+                    </span>
+                  )}
                   <button
                     type="button"
+                    onClick={() => handleSavePropertySnapshots(false)}
                     className="h-[40px] w-[80px] rounded-[8px] border border-[#071E36] bg-white text-[#071E36] hover:bg-gray-50 text-[13.5px] font-medium transition-colors cursor-pointer"
                   >
                     Save
                   </button>
                   <button
                     type="button"
-                    onClick={onBackToWorkspace}
+                    onClick={() => handleSavePropertySnapshots(true)}
                     className="h-[40px] w-[123px] rounded-[8px] bg-[#071E36] hover:bg-[#122D4D] text-white text-[13.5px] font-medium transition-colors cursor-pointer shadow-xs"
                   >
                     Completed
@@ -1628,15 +1882,21 @@ export default function FinancialDataInput({
                   Back
                 </button>
                 <div className="flex items-center gap-4">
+                  {savingMsg && (
+                    <span className="text-[13px] text-[#18794E] font-medium">
+                      {savingMsg}
+                    </span>
+                  )}
                   <button
                     type="button"
+                    onClick={() => handleSaveLoanSnapshots(false)}
                     className="h-[40px] w-[80px] rounded-[8px] border border-[#071E36] bg-white text-[#071E36] hover:bg-gray-50 text-[13.5px] font-medium transition-colors cursor-pointer"
                   >
                     Save
                   </button>
                   <button
                     type="button"
-                    onClick={onBackToWorkspace}
+                    onClick={() => handleSaveLoanSnapshots(true)}
                     className="h-[40px] w-[123px] rounded-[8px] bg-[#071E36] hover:bg-[#122D4D] text-white text-[13.5px] font-medium transition-colors cursor-pointer shadow-xs"
                   >
                     Completed
@@ -1806,50 +2066,19 @@ export default function FinancialDataInput({
                   </tr>
                 </thead>
                 <tbody>
-                  <tr className="h-[52px]">
-                    <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E]">
-                      22 Oak Avenue, Mooloolaba
-                    </td>
-                    <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E]">
-                      4598
-                    </td>
-                    <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E]">
-                      30/06/2026
-                    </td>
-                  </tr>
-                  <tr className="h-[52px]">
-                    <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E]">
-                      15 Sunview parade, alexandra
-                    </td>
-                    <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E]">
-                      5445
-                    </td>
-                    <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E]">
-                      30/06/2026
-                    </td>
-                  </tr>
-                  <tr className="h-[52px]">
-                    <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E]">
-                      8 pacific Drive Budddna
-                    </td>
-                    <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E]">
-                      4252
-                    </td>
-                    <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E]">
-                      30/06/2026
-                    </td>
-                  </tr>
-                  <tr className="h-[52px]">
-                    <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E]">
-                      8 pacific Drive Budddna
-                    </td>
-                    <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E]">
-                      5252
-                    </td>
-                    <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E]">
-                      30/06/2026
-                    </td>
-                  </tr>
+                  {properties.map((p) => (
+                    <tr key={p.id} className="h-[52px]">
+                      <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E]">
+                        {p.address}
+                      </td>
+                      <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E]">
+                        {p.rawProperty?.postcode || "2000"}
+                      </td>
+                      <td className="py-2.5 px-3 text-[13.5px] text-[#1A1C1E]">
+                        30/06/{year}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -1989,23 +2218,36 @@ export default function FinancialDataInput({
       <AddPropertyModal
         isOpen={isPropertyModalOpen}
         onClose={() => setIsPropertyModalOpen(false)}
-        onAddProperty={(newP) => {
-          setProperties((prev) => [
-            ...prev,
-            {
-              id: `prop-${Date.now()}`,
-              address: newP.address,
-              listName: newP.address,
-              purpose: newP.purpose,
-              type: newP.type,
-              listType: newP.type,
-              eofyValuation: newP.currentValue,
-              reviewValuation: newP.currentValue,
-              rentWeekly: newP.rentWeekly,
-              marketRentWeekly: newP.rentWeekly,
-              status: "Completed",
-            },
-          ]);
+        onAddProperty={async (newP: NewPropertyFormPayload) => {
+          if (householdId) {
+            const fullAddress =
+              newP.address.includes(newP.state) ||
+              newP.address.includes(newP.postcode)
+                ? newP.address
+                : `${newP.address}, ${newP.state} ${newP.postcode}`;
+            await createPropertyApi(householdId, {
+              name: fullAddress,
+              address: fullAddress,
+              state: newP.state,
+              postcode: newP.postcode,
+              propertyCategory: newP.type,
+              purposeDisplay: newP.purpose,
+              type: newP.purpose,
+              purchaseDateStr: newP.purchaseDate,
+              purchasePrice: parseNum(newP.purchasePrice, 800000),
+              currentValuation: parseNum(newP.currentValue, 1150000),
+              weeklyRent: parseNum(newP.rentWeekly, 850),
+              landSize: newP.landSize,
+              beds: newP.beds,
+              baths: newP.baths,
+              cars: newP.cars,
+              owner1: newP.owner1,
+              owner1Pct: newP.owner1Pct,
+              owner2: newP.owner2,
+              owner2Pct: newP.owner2Pct,
+            });
+            await onDataChanged?.();
+          }
         }}
       />
 
@@ -2013,34 +2255,28 @@ export default function FinancialDataInput({
       <AddLoanModal
         isOpen={isLoanModalOpen}
         onClose={() => setIsLoanModalOpen(false)}
-        onAddLoan={(newL) => {
-          setLoans((prev) => [
-            ...prev,
-            {
-              id: `loan-${Date.now()}`,
-              facilityId: `${newL.lender.slice(0, 3).toUpperCase()}-${Math.floor(
-                1000 + Math.random() * 9000
-              )}-01`,
-              title: `${newL.lender} (${newL.loanType})`,
+        availableProperties={properties.map((p) => p.address)}
+        onAddLoan={async (newL: NewLoanFormPayload) => {
+          if (householdId) {
+            await createLoanApi(householdId, {
               lender: newL.lender,
-              purpose: "Investment",
-              repayment: newL.repaymentType,
+              loanReference: newL.loanReference,
+              isTchLoan: newL.isTchLoan,
+              purpose: newL.purpose,
+              repaymentType: newL.repaymentType,
               rateType: newL.loanType,
-              ioExpiry: "24/10/2026",
-              fixedExpiry: "----",
-              maturity: "24/10/2026",
-              security1: newL.property,
-              eofyBalance: `$${newL.balance}`,
-              reviewBalance: `$${newL.balance}`,
-              marketRate: "N/A",
-              interestEofy: `${newL.rate}%`,
-              interestReview: `${newL.rate}%`,
-              interestMarket: "6.05%",
-              offsetEofy: `$${newL.offsetBalance}`,
-              offsetReview: `$${newL.offsetBalance}`,
-              status: "Completed",
-            },
-          ]);
+              ioExpiry: newL.ioExpiry,
+              fixedExpiry: newL.fixedExpiry,
+              maturityDate: newL.maturityDate,
+              security1: newL.security1,
+              security2: newL.security2,
+              security3: newL.security3,
+              loanBalance: parseNum(newL.balance, 650000),
+              offsetBalance: parseNum(newL.offsetBalance, 24000),
+              interestRate: parseNum(newL.rate, 5.94),
+            });
+            await onDataChanged?.();
+          }
         }}
       />
     </div>

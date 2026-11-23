@@ -1,13 +1,32 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { getStoredUser, logoutApi } from "@/lib/api";
 
 interface TopNavProps {
   onToggleSidebar?: () => void;
 }
 
 export default function TopNav({ onToggleSidebar }: TopNavProps) {
+  const router = useRouter();
+  const [userName, setUserName] = useState("Sarah Jenkins");
+
+  useEffect(() => {
+    const u = getStoredUser();
+    if (u?.fullName) {
+      setUserName(u.fullName);
+    } else if (u?.email) {
+      setUserName(u.email);
+    }
+  }, []);
+
+  const handleLogout = () => {
+    logoutApi();
+    router.push("/");
+  };
+
   return (
     <header className="h-[70px] w-full bg-white border-b border-[rgba(107,107,107,0.3)] flex items-center justify-between px-6 select-none sticky top-0 z-20 shrink-0 shadow-[0_1px_4px_rgba(0,0,0,0.02)]">
       {/* Left: Back / Toggle Button */}
@@ -51,11 +70,15 @@ export default function TopNav({ onToggleSidebar }: TopNavProps) {
         <div className="h-[30px] w-[1px] bg-[rgba(107,107,107,0.3)]" />
 
         {/* User Profile */}
-        <div className="flex items-center gap-3 cursor-pointer">
+        <div
+          onClick={handleLogout}
+          title="Click to Sign Out"
+          className="flex items-center gap-3 cursor-pointer"
+        >
           <div className="relative w-[40px] h-[40px] rounded-full overflow-hidden">
             <Image
               src="/images/dashboard/avatar-hermie.png"
-              alt="Hermie"
+              alt={userName}
               fill
               className="object-cover"
               sizes="40px"
@@ -63,7 +86,7 @@ export default function TopNav({ onToggleSidebar }: TopNavProps) {
             />
           </div>
           <span className="text-[14px] font-normal text-[#0E2841] font-['Inter',sans-serif]">
-            Hermie
+            {userName}
           </span>
         </div>
       </div>

@@ -3,7 +3,36 @@
 import React from "react";
 import Image from "next/image";
 
-export default function LoanMetrics() {
+interface LoanMetricsProps {
+  metrics?: {
+    totalLoan: number;
+    tchLoans: number;
+    tchPortfolioPct: number;
+    nonTchLoans: number;
+    nonTchPortfolioPct: number;
+    fixedExpiryAmount: number;
+    fixedExpiryLender: string;
+    ioExpiryAmount: number;
+    ioExpiryCount: number;
+  };
+}
+
+function formatCurrency(val?: number) {
+  const num = Number(val || 0);
+  return `$${num.toLocaleString("en-AU", { maximumFractionDigits: 0 })}`;
+}
+
+export default function LoanMetrics({ metrics }: LoanMetricsProps) {
+  const totalLoan = metrics?.totalLoan ?? 0;
+  const tchLoans = metrics?.tchLoans ?? 0;
+  const tchPct = metrics?.tchPortfolioPct ?? 0;
+  const nonTchLoans = metrics?.nonTchLoans ?? 0;
+  const nonTchPct = metrics?.nonTchPortfolioPct ?? 0;
+  const fixedExpiryAmount = metrics?.fixedExpiryAmount ?? 0;
+  const fixedExpiryLender = metrics?.fixedExpiryLender || "None in window";
+  const ioExpiryAmount = metrics?.ioExpiryAmount ?? 0;
+  const ioExpiryCount = metrics?.ioExpiryCount ?? 0;
+
   return (
     <div className="bg-white rounded-[12px] p-6 shadow-[0px_11px_9px_rgba(0,0,0,0.04)] select-none">
       {/* Title */}
@@ -32,7 +61,7 @@ export default function LoanMetrics() {
               Total Loan
             </p>
             <p className="font-['Poppins',sans-serif] font-extrabold text-[#8B8585] text-[14px] mt-1.5 leading-none">
-              $2,485,000
+              {formatCurrency(totalLoan)}
             </p>
             <div className="h-[1px] w-[94px] bg-[#CBD5E1] my-2" />
             <p className="font-['Poppins',sans-serif] font-normal text-[#8B8585] text-[13px] sm:text-[14px] leading-none">
@@ -54,14 +83,14 @@ export default function LoanMetrics() {
           </div>
           <div className="min-w-0">
             <p className="font-['Poppins',sans-serif] font-medium text-[#8B8585] text-[15px] sm:text-[16px] leading-tight">
-              TC&H Loans
+              TC&amp;H Loans
             </p>
             <p className="font-['Poppins',sans-serif] font-extrabold text-[#8B8585] text-[14px] mt-1.5 leading-none">
-              $485,000
+              {formatCurrency(tchLoans)}
             </p>
             <div className="h-[1px] w-[94px] bg-[#CBD5E1] my-2" />
             <p className="font-['Poppins',sans-serif] font-normal text-[#8B8585] text-[13px] sm:text-[14px] leading-none">
-              19.5% Portfolio
+              {tchPct}% Portfolio
             </p>
           </div>
         </div>
@@ -81,18 +110,17 @@ export default function LoanMetrics() {
           </div>
           <div className="min-w-0">
             <p className="font-['Poppins',sans-serif] font-medium text-[#8B8585] text-[15px] sm:text-[16px] leading-tight">
-              Household Loans(Not TC&H)
+              Household Loans(Not TC&amp;H)
             </p>
             <p className="font-['Poppins',sans-serif] font-extrabold text-[#8B8585] text-[14px] mt-1.5 leading-none">
-              $1,560,000
+              {formatCurrency(nonTchLoans)}
             </p>
             <div className="h-[1px] w-[94px] bg-[#CBD5E1] my-2" />
             <p className="font-['Poppins',sans-serif] font-normal text-[#8B8585] text-[13px] sm:text-[14px] leading-none">
-              12.4% vs FY2025
+              {nonTchPct}% Portfolio
             </p>
           </div>
         </div>
-        {/* Empty column matching Figma */}
         <div className="hidden sm:block" />
       </div>
 
@@ -117,11 +145,11 @@ export default function LoanMetrics() {
               Fixed Rate Expiry (6 months)
             </p>
             <p className="font-['Poppins',sans-serif] font-extrabold text-[#8B8585] text-[14px] mt-1.5 leading-none">
-              $1,280,000
+              {formatCurrency(fixedExpiryAmount)}
             </p>
             <div className="h-[1px] w-[177px] max-w-full bg-[#CBD5E1] my-2" />
             <p className="font-['Poppins',sans-serif] font-normal text-[#8B8585] text-[13px] sm:text-[14px] leading-none">
-              National Australia Bank
+              {fixedExpiryLender}
             </p>
           </div>
         </div>
@@ -142,11 +170,11 @@ export default function LoanMetrics() {
               IO Expiry (6 months)
             </p>
             <p className="font-['Poppins',sans-serif] font-extrabold text-[#8B8585] text-[14px] mt-1.5 leading-none">
-              $0
+              {formatCurrency(ioExpiryAmount)}
             </p>
             <div className="h-[1px] w-[94px] bg-[#CBD5E1] my-2" />
             <p className="font-['Poppins',sans-serif] font-normal text-[#8B8585] text-[13px] sm:text-[14px] leading-none">
-              0 in immediate 6-mo window ·
+              {ioExpiryCount} in immediate 6-mo window ·
             </p>
           </div>
         </div>

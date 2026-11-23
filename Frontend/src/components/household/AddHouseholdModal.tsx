@@ -11,7 +11,7 @@ interface AddHouseholdModalProps {
     adviser: string;
     objectives: string;
     reviewYear: string;
-  }) => void;
+  }) => Promise<void> | void;
 }
 
 export default function AddHouseholdModal({
@@ -23,25 +23,33 @@ export default function AddHouseholdModal({
   const [adviser, setAdviser] = useState("Sarah Jenkins (Senior Property CFO)");
   const [objectives, setObjectives] = useState("");
   const [reviewYear, setReviewYear] = useState("FY2026");
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!householdName.trim()) return;
+    if (!householdName.trim() || submitting) return;
 
-    if (onAddHousehold) {
-      onAddHousehold({
-        name: householdName.trim(),
-        adviser,
-        objectives,
-        reviewYear,
-      });
+    setSubmitting(true);
+    setErrorMsg("");
+    try {
+      if (onAddHousehold) {
+        await onAddHousehold({
+          name: householdName.trim(),
+          adviser,
+          objectives,
+          reviewYear,
+        });
+      }
+      setHouseholdName("");
+      setObjectives("");
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to save household to database");
+    } finally {
+      setSubmitting(false);
     }
-
-    setHouseholdName("");
-    setObjectives("");
-    onClose();
   };
 
   return (
@@ -66,6 +74,12 @@ export default function AddHouseholdModal({
             Create a new client/family profile and begin setup.
           </p>
         </div>
+
+        {errorMsg && (
+          <div className="mb-4 p-3 rounded-[8px] bg-red-50 border border-red-200 text-red-600 text-[13px]">
+            {errorMsg}
+          </div>
+        )}
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-5">
@@ -146,9 +160,10 @@ export default function AddHouseholdModal({
           <div className="pt-2">
             <button
               type="submit"
-              className="w-full h-[50px] bg-[#0E2841] hover:bg-[#153B5E] text-white text-[14px] font-semibold rounded-[8px] transition-colors shadow-sm cursor-pointer"
+              disabled={submitting}
+              className="w-full h-[50px] bg-[#0E2841] hover:bg-[#153B5E] disabled:opacity-60 text-white text-[14px] font-semibold rounded-[8px] transition-colors shadow-sm cursor-pointer"
             >
-              Create & Proceed to Setup
+              {submitting ? "Creating Household..." : "Create & Proceed to Setup"}
             </button>
           </div>
         </form>

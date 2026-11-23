@@ -3,6 +3,41 @@ import { CriterionPriority, CriterionRating } from '@prisma/client';
 import { IsEnum, IsOptional, IsString } from 'class-validator';
 
 export class UpdateCriterionDto {
+  @ApiPropertyOptional({ example: 'Rental Income Review' })
+  @IsString()
+  @IsOptional()
+  criterionTitle?: string;
+
+  @ApiPropertyOptional({ example: 'Property Analysis' })
+  @IsString()
+  @IsOptional()
+  screen?: string;
+
+  @ApiPropertyOptional({ example: '7 Kawana Way, Buddina' })
+  @IsString()
+  @IsOptional()
+  propertyName?: string;
+
+  @ApiPropertyOptional({ example: 'Rent 11% below benchmark' })
+  @IsString()
+  @IsOptional()
+  maintenanceInsight?: string;
+
+  @ApiPropertyOptional({ example: 'Rental Income' })
+  @IsString()
+  @IsOptional()
+  metric?: string;
+
+  @ApiPropertyOptional({ example: 'Adviser' })
+  @IsString()
+  @IsOptional()
+  owner?: string;
+
+  @ApiPropertyOptional({ example: 'Reset rent Q3' })
+  @IsString()
+  @IsOptional()
+  action?: string;
+
   @ApiPropertyOptional({
     enum: CriterionRating,
     example: CriterionRating.STRONG,
@@ -32,9 +67,8 @@ export class UpdateCriterionDto {
     example: CriterionPriority.HIGH,
     description: 'HIGH | MEDIUM | LOW | MONITOR',
   })
-  @IsEnum(CriterionPriority)
   @IsOptional()
-  priority?: CriterionPriority;
+  priority?: CriterionPriority | string;
 
   @ApiPropertyOptional({ example: 'Client expressed preference for conservative debt levels.' })
   @IsString()

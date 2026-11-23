@@ -26,6 +26,12 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 export class ClientsController {
   constructor(private readonly clientsService: ClientsService) {}
 
+  @Get('dashboard-summary')
+  @ApiOperation({ summary: 'Get aggregated dashboard metrics (households, loans, review statuses) from DB' })
+  getDashboardSummary(@CurrentUser('id') adviserId: string) {
+    return this.clientsService.getDashboardSummary(adviserId);
+  }
+
   // Households
   @Post()
   @ApiOperation({ summary: 'Create a new client household' })
@@ -104,7 +110,7 @@ export class ClientsController {
 
   // Entities
   @Post(':id/entities')
-  @ApiOperation({ summary: 'Add an ownership entity (Trust, SMSF, Company) to household' })
+  @ApiOperation({ summary: 'Add an ownership entity / client to household' })
   addEntity(
     @CurrentUser('id') adviserId: string,
     @Param('id') householdId: string,
@@ -166,7 +172,39 @@ export class ClientsController {
     return this.clientsService.deleteProperty(adviserId, householdId, propertyId);
   }
 
-  // Loans
+  // Household-level Loan creation (resolves property by propertyId or security1 address)
+  @Post(':id/loans')
+  @ApiOperation({ summary: 'Add a loan facility to a household' })
+  addHouseholdLoan(
+    @CurrentUser('id') adviserId: string,
+    @Param('id') householdId: string,
+    @Body() dto: CreateLoanDto,
+  ) {
+    return this.clientsService.addHouseholdLoan(adviserId, householdId, dto);
+  }
+
+  @Patch(':id/loans/:loanId')
+  @ApiOperation({ summary: 'Update loan facility details at household level' })
+  updateHouseholdLoan(
+    @CurrentUser('id') adviserId: string,
+    @Param('id') householdId: string,
+    @Param('loanId') loanId: string,
+    @Body() dto: UpdateLoanDto,
+  ) {
+    return this.clientsService.updateLoan(adviserId, householdId, loanId, dto);
+  }
+
+  @Delete(':id/loans/:loanId')
+  @ApiOperation({ summary: 'Deactivate a loan facility at household level' })
+  deleteHouseholdLoan(
+    @CurrentUser('id') adviserId: string,
+    @Param('id') householdId: string,
+    @Param('loanId') loanId: string,
+  ) {
+    return this.clientsService.deleteLoan(adviserId, householdId, loanId);
+  }
+
+  // Property-nested Loans
   @Post(':id/properties/:propertyId/loans')
   @ApiOperation({ summary: 'Add a loan facility to a property' })
   addLoan(

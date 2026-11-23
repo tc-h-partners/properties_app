@@ -13,7 +13,7 @@ interface AddEntityModalProps {
     email: string;
     phone: string;
     regDate: string;
-  }) => void;
+  }) => Promise<void> | void;
 }
 
 export default function AddEntityModal({
@@ -22,35 +22,41 @@ export default function AddEntityModal({
   onAddEntity,
 }: AddEntityModalProps) {
   const [name, setName] = useState("");
-  const [type, setType] = useState("Discretionary Trust");
+  const [type, setType] = useState("Individual");
   const [abn, setAbn] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [regDate, setRegDate] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim() || submitting) return;
 
-    if (onAddEntity) {
-      onAddEntity({
-        name: name.trim(),
-        type,
-        abn: abn.trim() || "-",
-        email: email.trim() || "-",
-        phone: phone.trim() || "-",
-        regDate: regDate.trim() || new Date().toISOString().split("T")[0],
-      });
+    setSubmitting(true);
+    try {
+      if (onAddEntity) {
+        await onAddEntity({
+          name: name.trim(),
+          type,
+          abn: abn.trim() || "-",
+          email: email.trim() || "-",
+          phone: phone.trim() || "-",
+          regDate: regDate.trim() || "---",
+        });
+      }
+
+      setName("");
+      setAbn("");
+      setEmail("");
+      setPhone("");
+      setRegDate("");
+      onClose();
+    } finally {
+      setSubmitting(false);
     }
-
-    setName("");
-    setAbn("");
-    setEmail("");
-    setPhone("");
-    setRegDate("");
-    onClose();
   };
 
   return (
@@ -106,7 +112,7 @@ export default function AddEntityModal({
                   <option value="Individual">Individual</option>
                   <option value="Discretionary Trust">Discretionary Trust</option>
                   <option value="Unit Trust">Unit Trust</option>
-                  <option value="Company / Corporate">Company / Corporate</option>
+                  <option value="Company">Company / Corporate</option>
                   <option value="SMSF">Self-Managed Super (SMSF)</option>
                 </select>
                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
@@ -157,13 +163,13 @@ export default function AddEntityModal({
 
           <div>
             <label className="block text-[13.5px] font-medium text-[#1A1C1E] mb-1.5 font-['Poppins',sans-serif]">
-              DOB or Registration Date
+              Age / DOB / Registration Date
             </label>
             <input
               type="text"
               value={regDate}
               onChange={(e) => setRegDate(e.target.value)}
-              placeholder="DD/MM/YYYY (e.g. 12/04/2018)"
+              placeholder="e.g. 34 or 12/04/2018"
               className="w-full h-[46px] px-3.5 bg-[#F9F9F9] border border-[#DEDEDE] rounded-[10px] text-[14px] text-[#1A1C1E] placeholder-[#BCBCBC] focus:outline-none"
             />
           </div>
@@ -171,9 +177,10 @@ export default function AddEntityModal({
           <div className="pt-2">
             <button
               type="submit"
-              className="w-full h-[48px] bg-[#0E2841] hover:bg-[#153B5E] text-white text-[14px] font-semibold rounded-[8px] transition-colors shadow-sm cursor-pointer"
+              disabled={submitting}
+              className="w-full h-[48px] bg-[#0E2841] hover:bg-[#153B5E] disabled:opacity-60 text-white text-[14px] font-semibold rounded-[8px] transition-colors shadow-sm cursor-pointer"
             >
-              Add Entity to Household
+              {submitting ? "Saving..." : "Add Entity to Household"}
             </button>
           </div>
         </form>

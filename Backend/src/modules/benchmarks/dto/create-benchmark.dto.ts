@@ -47,6 +47,11 @@ export class CreateBenchmarkDto {
   @IsOptional()
   benchmarkCapitalGrowth?: number;
 
+  @ApiPropertyOptional({ example: 20160, description: 'ASX 200 Accumulation Index value' })
+  @IsNumber()
+  @IsOptional()
+  asxIndexValue?: number;
+
   @ApiPropertyOptional({ example: 'CoreLogic / SQM Research Q2 2025' })
   @IsString()
   @IsOptional()

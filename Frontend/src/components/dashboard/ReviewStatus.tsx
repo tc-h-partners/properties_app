@@ -4,11 +4,20 @@ import React from "react";
 import Image from "next/image";
 import Link from "next/link";
 
-export default function ReviewStatus() {
+interface ReviewStatusProps {
+  counts?: {
+    totalHouseholds: number;
+    completed: number;
+    inProgress: number;
+    notStarted: number;
+  };
+}
+
+export default function ReviewStatus({ counts }: ReviewStatusProps) {
   const statusItems = [
     {
       title: "Total Households",
-      value: "8",
+      value: String(counts?.totalHouseholds ?? 0),
       subtitle: "Total managed client accounts",
       icon: "/images/dashboard/house-chimney.svg",
       lineWidth: "w-[234px]",
@@ -16,23 +25,23 @@ export default function ReviewStatus() {
     },
     {
       title: "Completed",
-      value: "6",
+      value: String(counts?.completed ?? 0),
       subtitle: "Reviews signed off & delivered",
       icon: "/images/dashboard/thumbs-up.svg",
       lineWidth: "w-[234px]",
-      href: "/household",
+      href: "/household?tab=Completed",
     },
     {
       title: "In Progress",
-      value: "6",
+      value: String(counts?.inProgress ?? 0),
       subtitle: "Under active adviser review",
       icon: "/images/dashboard/sync.svg",
       lineWidth: "w-[177px]",
-      href: "/review",
+      href: "/household?tab=In+Progress",
     },
     {
       title: "Not Started",
-      value: "6",
+      value: String(counts?.notStarted ?? 0),
       subtitle: "Awaiting data intake & onboarding",
       icon: "/images/dashboard/discover.svg",
       lineWidth: "w-[177px]",
@@ -77,7 +86,9 @@ export default function ReviewStatus() {
                     {item.value}
                   </p>
                 </div>
-                <div className={`h-[1px] ${item.lineWidth} max-w-full bg-[#CBD5E1] my-1.5`} />
+                <div
+                  className={`h-[1px] ${item.lineWidth} max-w-full bg-[#CBD5E1] my-1.5`}
+                />
                 <p className="font-['Poppins',sans-serif] font-normal text-[#8B8585] text-[13px] sm:text-[14px] leading-none truncate">
                   {item.subtitle}
                 </p>

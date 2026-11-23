@@ -9,20 +9,32 @@ interface RelatedPerson {
   percentage: string;
 }
 
+export interface NewPropertyFormPayload {
+  address: string;
+  state: string;
+  postcode: string;
+  type: string;
+  purpose: string;
+  purchaseDate: string;
+  purchasePrice: string;
+  currentValue: string;
+  rentWeekly: string;
+  landSize: string;
+  beds: number;
+  baths: number;
+  cars: number;
+  owner1: string;
+  owner1Pct: string;
+  owner2: string;
+  owner2Pct: string;
+  entity: string;
+  additionalPersons?: RelatedPerson[];
+}
+
 interface AddPropertyModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddProperty?: (property: {
-    address: string;
-    state: string;
-    postcode: string;
-    type: string;
-    purpose: string;
-    purchasePrice: string;
-    currentValue: string;
-    rentWeekly: string;
-    entity: string;
-  }) => void;
+  onAddProperty?: (property: NewPropertyFormPayload) => Promise<void> | void;
 }
 
 export default function AddPropertyModal({
@@ -30,7 +42,6 @@ export default function AddPropertyModal({
   onClose,
   onAddProperty,
 }: AddPropertyModalProps) {
-  // Form fields matching Figma Frame 559:14200 exactly
   const [address, setAddress] = useState("");
   const [state, setState] = useState("");
   const [postcode, setPostcode] = useState("");
@@ -45,11 +56,12 @@ export default function AddPropertyModal({
   const [cars, setCars] = useState("");
 
   // Ownership structure
-  const [owner1, setOwner1] = useState("Marcus Harrison");
+  const [owner1, setOwner1] = useState("");
   const [owner1Pct, setOwner1Pct] = useState("100%");
-  const [owner2, setOwner2] = useState("None / 100% Single Owner");
+  const [owner2, setOwner2] = useState("");
   const [owner2Pct, setOwner2Pct] = useState("0%");
   const [additionalPersons, setAdditionalPersons] = useState<RelatedPerson[]>([]);
+  const [submitting, setSubmitting] = useState(false);
 
   const handleAddRelatedPerson = () => {
     setAdditionalPersons((prev) => [
@@ -78,31 +90,70 @@ export default function AddPropertyModal({
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!address.trim()) return;
+    if (!address.trim() || submitting) return;
 
-    if (onAddProperty) {
-      onAddProperty({
-        address: address.trim(),
-        state: state || "NSW",
-        postcode: postcode || "2021",
-        type: propertyType || "House",
-        purpose: purpose || "Investment",
-        purchasePrice: purchasePrice || "$800,000",
-        currentValue: valuation || "$1,450,000",
-        rentWeekly: "850",
-        entity: owner1,
-      });
+    setSubmitting(true);
+    try {
+      if (onAddProperty) {
+        const cleanOwner2 =
+          !owner2.trim() || owner2.includes("None") ? "----" : owner2.trim();
+        const cleanOwner2Pct =
+          cleanOwner2 === "----" ? "---" : owner2Pct.trim() || "0%";
+
+        await onAddProperty({
+          address: address.trim(),
+          state: state.trim() || "NSW",
+          postcode: postcode.trim() || "2021",
+          type: propertyType.trim() || "House",
+          purpose: purpose.trim() || "Investment",
+          purchaseDate:
+            purchaseDate.trim() ||
+            new Date().toLocaleDateString("en-GB"),
+          purchasePrice: purchasePrice.trim() || "800000",
+          currentValue: valuation.trim() || purchasePrice.trim() || "1150000",
+          rentWeekly: "850",
+          landSize: landSize.trim() || "600",
+          beds: parseInt(beds, 10) || 4,
+          baths: parseInt(baths, 10) || 2,
+          cars: parseInt(cars, 10) || 2,
+          owner1: owner1.trim() || "Primary Owner",
+          owner1Pct: owner1Pct.trim() || "100%",
+          owner2: cleanOwner2,
+          owner2Pct: cleanOwner2Pct,
+          entity: owner1.trim() || "Primary Owner",
+          additionalPersons,
+        });
+      }
+
+      setAddress("");
+      setState("");
+      setPostcode("");
+      setPropertyType("");
+      setPurpose("");
+      setPurchaseDate("");
+      setPurchasePrice("");
+      setValuation("");
+      setLandSize("");
+      setBeds("");
+      setBaths("");
+      setCars("");
+      setOwner1("");
+      setOwner1Pct("100%");
+      setOwner2("");
+      setOwner2Pct("0%");
+      setAdditionalPersons([]);
+      onClose();
+    } finally {
+      setSubmitting(false);
     }
-
-    onClose();
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs select-none">
       <div className="relative w-full max-w-[588px] max-h-[90vh] overflow-y-auto bg-white rounded-[20px] shadow-2xl p-6 sm:p-9 animate-in fade-in zoom-in-95 duration-150">
-        {/* Figma Round Navy Close Button (charm:circle-cross 1040:5693) */}
+        {/* Figma Round Navy Close Button */}
         <button
           type="button"
           onClick={onClose}
@@ -118,7 +169,7 @@ export default function AddPropertyModal({
             Add Property
           </h2>
           <p className="text-[13px] text-[#8C9BA8] font-normal mt-1 font-['Poppins',sans-serif]">
-            Create a new client/family profile and begin setup.
+            Add a new residential or investment property to this household.
           </p>
         </div>
 
@@ -134,7 +185,7 @@ export default function AddPropertyModal({
               required
               value={address}
               onChange={(e) => setAddress(e.target.value)}
-              placeholder="Abel Summers"
+              placeholder="e.g. 48 Underwood Street, Paddington"
               className="w-full h-[46px] px-3.5 bg-white border border-[#E2E8F0] rounded-[8px] text-[13.5px] text-[#1A1C1E] placeholder-[#BCBCBC] focus:outline-none focus:border-[#0E2841]"
             />
           </div>
@@ -150,7 +201,7 @@ export default function AddPropertyModal({
                   type="text"
                   value={state}
                   onChange={(e) => setState(e.target.value)}
-                  placeholder="select State"
+                  placeholder="NSW"
                   className="w-full h-[46px] px-3.5 pr-8 bg-white border border-[#E2E8F0] rounded-[8px] text-[13.5px] text-[#1A1C1E] placeholder-[#BCBCBC] focus:outline-none focus:border-[#0E2841]"
                 />
                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8C9BA8] pointer-events-none" />
@@ -165,7 +216,7 @@ export default function AddPropertyModal({
                 type="text"
                 value={postcode}
                 onChange={(e) => setPostcode(e.target.value)}
-                placeholder="Select postcode"
+                placeholder="2021"
                 className="w-full h-[46px] px-3.5 bg-white border border-[#E2E8F0] rounded-[8px] text-[13.5px] text-[#1A1C1E] placeholder-[#BCBCBC] focus:outline-none focus:border-[#0E2841]"
               />
             </div>
@@ -194,7 +245,7 @@ export default function AddPropertyModal({
                 type="text"
                 value={purpose}
                 onChange={(e) => setPurpose(e.target.value)}
-                placeholder="owner"
+                placeholder="Investment or Owner-Occupied"
                 className="w-full h-[46px] px-3.5 bg-white border border-[#E2E8F0] rounded-[8px] text-[13.5px] text-[#1A1C1E] placeholder-[#BCBCBC] focus:outline-none focus:border-[#0E2841]"
               />
             </div>
@@ -210,7 +261,7 @@ export default function AddPropertyModal({
                 type="text"
                 value={purchaseDate}
                 onChange={(e) => setPurchaseDate(e.target.value)}
-                placeholder="27-10-26"
+                placeholder="24/10/2026"
                 className="w-full h-[46px] px-3.5 bg-white border border-[#E2E8F0] rounded-[8px] text-[13.5px] text-[#1A1C1E] placeholder-[#BCBCBC] focus:outline-none focus:border-[#0E2841]"
               />
             </div>
@@ -223,7 +274,7 @@ export default function AddPropertyModal({
                 type="text"
                 value={purchasePrice}
                 onChange={(e) => setPurchasePrice(e.target.value)}
-                placeholder="64 901 823 441"
+                placeholder="800000"
                 className="w-full h-[46px] px-3.5 bg-white border border-[#E2E8F0] rounded-[8px] text-[13.5px] text-[#1A1C1E] placeholder-[#BCBCBC] focus:outline-none focus:border-[#0E2841]"
               />
             </div>
@@ -252,7 +303,7 @@ export default function AddPropertyModal({
                 type="text"
                 value={landSize}
                 onChange={(e) => setLandSize(e.target.value)}
-                placeholder="600sqm"
+                placeholder="600"
                 className="w-full h-[46px] px-3.5 bg-white border border-[#E2E8F0] rounded-[8px] text-[13.5px] text-[#1A1C1E] placeholder-[#BCBCBC] focus:outline-none focus:border-[#0E2841]"
               />
             </div>
@@ -281,7 +332,7 @@ export default function AddPropertyModal({
                 type="text"
                 value={baths}
                 onChange={(e) => setBaths(e.target.value)}
-                placeholder="5"
+                placeholder="2"
                 className="w-full h-[46px] px-3.5 bg-white border border-[#E2E8F0] rounded-[8px] text-[13.5px] text-[#1A1C1E] placeholder-[#BCBCBC] focus:outline-none focus:border-[#0E2841]"
               />
             </div>
@@ -301,7 +352,7 @@ export default function AddPropertyModal({
             />
           </div>
 
-          {/* Title Ownership Structure Sub-section matching Figma Frame 559:14818 */}
+          {/* Title Ownership Structure Sub-section */}
           <div className="pt-2">
             <p className="text-[12px] font-normal text-[#8C9BA8] mb-2 font-['Poppins',sans-serif]">
               Title Ownership Structure
@@ -379,7 +430,10 @@ export default function AddPropertyModal({
 
               {/* Dynamic Additional Related Persons */}
               {additionalPersons.map((person, index) => (
-                <div key={person.id} className="grid grid-cols-2 gap-4 items-end relative pt-2 border-t border-[#F0F1F3]">
+                <div
+                  key={person.id}
+                  className="grid grid-cols-2 gap-4 items-end relative pt-2 border-t border-[#F0F1F3]"
+                >
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="block text-[12.5px] font-medium text-[#1A1C1E] font-['Poppins',sans-serif]">
@@ -400,7 +454,11 @@ export default function AddPropertyModal({
                         type="text"
                         value={person.name}
                         onChange={(e) =>
-                          handleUpdateRelatedPerson(person.id, "name", e.target.value)
+                          handleUpdateRelatedPerson(
+                            person.id,
+                            "name",
+                            e.target.value
+                          )
                         }
                         placeholder="e.g. Sarah Harrison / Family Trust"
                         className="w-full h-[42px] px-3 pr-8 bg-white border border-[#E2E8F0] rounded-[8px] text-[13px] text-[#1A1C1E] focus:outline-none focus:border-[#0E2841]"
@@ -418,7 +476,11 @@ export default function AddPropertyModal({
                         type="text"
                         value={person.percentage}
                         onChange={(e) =>
-                          handleUpdateRelatedPerson(person.id, "percentage", e.target.value)
+                          handleUpdateRelatedPerson(
+                            person.id,
+                            "percentage",
+                            e.target.value
+                          )
                         }
                         placeholder="0%"
                         className="w-full h-[42px] px-3 pr-8 bg-white border border-[#E2E8F0] rounded-[8px] text-[13px] text-[#1A1C1E] focus:outline-none focus:border-[#0E2841]"
@@ -442,13 +504,14 @@ export default function AddPropertyModal({
             </div>
           </div>
 
-          {/* Centered Add Property Button matching Figma Buttons Frame 559:14869 (width: 335) */}
+          {/* Centered Add Property Button */}
           <div className="pt-3 flex justify-center">
             <button
               type="submit"
-              className="w-full max-w-[335px] h-[50px] bg-[#0E2841] hover:bg-[#183654] text-white text-[14px] font-semibold rounded-[8px] transition-colors shadow-sm cursor-pointer"
+              disabled={submitting}
+              className="w-full max-w-[335px] h-[50px] bg-[#0E2841] hover:bg-[#183654] disabled:opacity-60 text-white text-[14px] font-semibold rounded-[8px] transition-colors shadow-sm cursor-pointer"
             >
-              Add Property
+              {submitting ? "Saving Property..." : "Add Property"}
             </button>
           </div>
         </form>

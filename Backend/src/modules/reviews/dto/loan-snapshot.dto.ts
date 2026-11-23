@@ -29,6 +29,11 @@ export class LoanSnapshotItemDto {
   @IsNotEmpty()
   interestRate: number;
 
+  @ApiPropertyOptional({ example: 0.0605 })
+  @IsNumber()
+  @IsOptional()
+  marketRate?: number;
+
   @ApiPropertyOptional({ example: 36000 })
   @IsNumber()
   @IsOptional()
@@ -43,6 +48,11 @@ export class LoanSnapshotItemDto {
   @IsNumber()
   @IsOptional()
   loanLimit?: number;
+
+  @ApiPropertyOptional({ example: 'Completed' })
+  @IsString()
+  @IsOptional()
+  status?: string;
 }
 
 export class BulkSaveLoanSnapshotsDto {

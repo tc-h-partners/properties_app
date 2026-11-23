@@ -1,21 +1,18 @@
 "use client";
 
-import React, { useState } from "react";
-import Link from "next/link";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   TrendingUp,
   Plus,
   Pencil,
   Save,
   Check,
-  Building2,
   Percent,
   Sliders,
-  Database,
-  ArrowUpDown,
 } from "lucide-react";
 import Sidebar from "@/components/dashboard/Sidebar";
 import TopNav from "@/components/dashboard/TopNav";
+import { fetchBenchmarksApi, createBenchmarkApi } from "@/lib/api";
 
 interface IndexRecord {
   id: string;
@@ -24,18 +21,11 @@ interface IndexRecord {
   value: number;
 }
 
-const INITIAL_ASX_RECORDS: IndexRecord[] = [
-  { id: "1", date: "30/06/2024", fy: "FY2024", value: 20160 },
-  { id: "2", date: "30/06/2023", fy: "FY2023", value: 18720 },
-  { id: "3", date: "30/06/2022", fy: "FY2022", value: 16910 },
-  { id: "4", date: "30/06/2021", fy: "FY2021", value: 17240 },
-];
-
 export default function SettingsPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [asxRecords, setAsxRecords] = useState<IndexRecord[]>(INITIAL_ASX_RECORDS);
-  const [newFy, setNewFy] = useState("FY2025");
-  const [newDate, setNewDate] = useState("30/06/2025");
+  const [asxRecords, setAsxRecords] = useState<IndexRecord[]>([]);
+  const [newFy, setNewFy] = useState("FY2027");
+  const [newDate, setNewDate] = useState("30/06/2027");
   const [newValue, setNewValue] = useState("");
   const [showAddFy, setShowAddFy] = useState(false);
 
@@ -44,19 +34,62 @@ export default function SettingsPage() {
   const [cgtDiscount, setCgtDiscount] = useState("50.0");
   const [savedSettings, setSavedSettings] = useState(false);
 
-  const handleAddRecord = (e: React.FormEvent) => {
+  const loadBenchmarksFromDb = useCallback(async () => {
+    try {
+      const list = await fetchBenchmarksApi();
+      if (Array.isArray(list)) {
+        const mapped: IndexRecord[] = list
+          .filter((b: any) => b.asxIndexValue != null)
+          .map((b: any) => {
+            const d = new Date(b.effectiveDate);
+            const dateStr = !isNaN(d.getTime())
+              ? d.toLocaleDateString("en-GB")
+              : "30/06/2026";
+            const fyLabel =
+              b.sourceNotes && b.sourceNotes.startsWith("FY")
+                ? b.sourceNotes
+                : `FY${d.getFullYear()}`;
+            return {
+              id: b.id,
+              date: dateStr,
+              fy: fyLabel,
+              value: Number(b.asxIndexValue),
+            };
+          });
+        setAsxRecords(mapped);
+      }
+    } catch (err) {
+      console.error("Failed to load benchmarks from DB:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadBenchmarksFromDb();
+  }, [loadBenchmarksFromDb]);
+
+  const handleAddRecord = async (e: React.FormEvent) => {
     e.preventDefault();
     const val = parseFloat(newValue.replace(/[^0-9.]/g, ""));
     if (!val) return;
 
-    const record: IndexRecord = {
-      id: Date.now().toString(),
-      date: newDate,
-      fy: newFy,
-      value: val,
-    };
+    const parts = newDate.split(/[\/\-]/);
+    const isoDate =
+      parts.length === 3
+        ? `${parts[2].length === 2 ? `20${parts[2]}` : parts[2]}-${parts[1].padStart(
+            2,
+            "0"
+          )}-${parts[0].padStart(2, "0")}T00:00:00.000Z`
+        : new Date().toISOString();
 
-    setAsxRecords((prev) => [record, ...prev]);
+    await createBenchmarkApi({
+      effectiveDate: isoDate,
+      asxIndexValue: val,
+      sourceNotes: newFy,
+      benchmarkInterestRate: 0.0595,
+      benchmarkGrossYield: 0.041,
+    });
+
+    await loadBenchmarksFromDb();
     setNewValue("");
     setShowAddFy(false);
   };
@@ -85,10 +118,11 @@ export default function SettingsPage() {
           {/* Page Heading */}
           <div className="mb-6">
             <h1 className="text-[24px] sm:text-[26px] font-semibold text-[#0F172A] tracking-tight">
-              System Settings & Benchmarks
+              System Settings &amp; Benchmarks
             </h1>
             <p className="text-[13px] text-[#64748B] mt-0.5">
-              Configure macroeconomic indices, ASX accumulation series, and practice-wide tax modeling parameters.
+              Configure macroeconomic indices, ASX accumulation series, and
+              practice-wide tax modeling parameters.
             </p>
           </div>
 
@@ -106,7 +140,8 @@ export default function SettingsPage() {
                         ASX 200 Accumulation Index
                       </h2>
                       <p className="text-[12.5px] text-[#64748B]">
-                        Annual Historical Total Return Series for Comparative Alpha.
+                        Annual Historical Total Return Series for Comparative
+                        Alpha.
                       </p>
                     </div>
                   </div>
@@ -131,7 +166,9 @@ export default function SettingsPage() {
                     </p>
                     <div className="grid grid-cols-3 gap-3">
                       <div>
-                        <label className="block text-[11.5px] text-[#64748B] mb-1 font-medium">Financial Year</label>
+                        <label className="block text-[11.5px] text-[#64748B] mb-1 font-medium">
+                          Financial Year
+                        </label>
                         <input
                           type="text"
                           value={newFy}
@@ -140,7 +177,9 @@ export default function SettingsPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-[11.5px] text-[#64748B] mb-1 font-medium">As of Date</label>
+                        <label className="block text-[11.5px] text-[#64748B] mb-1 font-medium">
+                          As of Date
+                        </label>
                         <input
                           type="text"
                           value={newDate}
@@ -149,7 +188,9 @@ export default function SettingsPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-[11.5px] text-[#64748B] mb-1 font-medium">Index Value</label>
+                        <label className="block text-[11.5px] text-[#64748B] mb-1 font-medium">
+                          Index Value
+                        </label>
                         <input
                           type="text"
                           required
@@ -178,7 +219,7 @@ export default function SettingsPage() {
                   </form>
                 )}
 
-                {/* Series List matching Figma 935:8373 */}
+                {/* Series List from DB */}
                 <div className="space-y-2.5">
                   {asxRecords.map((item) => (
                     <div
@@ -223,7 +264,7 @@ export default function SettingsPage() {
                       Advisory Assumptions
                     </h2>
                     <p className="text-[12.5px] text-[#64748B]">
-                      National benchmark tax brackets & hurdle rates.
+                      National benchmark tax brackets &amp; hurdle rates.
                     </p>
                   </div>
                 </div>

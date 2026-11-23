@@ -24,6 +24,11 @@ export class PropertySnapshotItemDto {
   @IsOptional()
   weeklyRent?: number;
 
+  @ApiPropertyOptional({ example: 840 })
+  @IsNumber()
+  @IsOptional()
+  marketWeeklyRent?: number;
+
   @ApiPropertyOptional({ example: 39000 })
   @IsNumber()
   @IsOptional()
@@ -78,6 +83,15 @@ export class PropertySnapshotItemDto {
   @IsNumber()
   @IsOptional()
   depreciationNonCash?: number;
+
+  @ApiPropertyOptional({ example: 'Completed' })
+  @IsString()
+  @IsOptional()
+  status?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  detailsJson?: any;
 }
 
 export class BulkSavePropertySnapshotsDto {

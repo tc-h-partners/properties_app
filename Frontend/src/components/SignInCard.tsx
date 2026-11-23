@@ -6,7 +6,8 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useFormik } from "formik";
 import * as Yup from "yup";
-import { EyeOff, X, CheckCircle2 } from "lucide-react";
+import { EyeOff, X, CheckCircle2, AlertCircle } from "lucide-react";
+import { loginApi } from "@/lib/api";
 
 interface FormValues {
   email: string;
@@ -19,6 +20,7 @@ export default function SignInCard() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [submittedEmail, setSubmittedEmail] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
 
   // Formik validation schema using Yup
   const validationSchema = Yup.object({
@@ -34,21 +36,25 @@ export default function SignInCard() {
 
   const formik = useFormik<FormValues>({
     initialValues: {
-      email: "",
+      email: "testuser@test.com",
       password: "",
-      rememberMe: false,
+      rememberMe: true,
     },
     validationSchema,
-    onSubmit: async (values, { setSubmitting, resetForm }) => {
-      // Simulate API sign in latency
-      await new Promise((resolve) => setTimeout(resolve, 600));
-      setSubmittedEmail(values.email);
-      setIsSuccess(true);
-      setSubmitting(false);
-      resetForm({ values: { email: "", password: "", rememberMe: values.rememberMe } });
-      setTimeout(() => {
-        router.push("/dashboard");
-      }, 700);
+    onSubmit: async (values, { setSubmitting }) => {
+      setErrorMessage("");
+      try {
+        await loginApi(values.email.trim(), values.password);
+        setSubmittedEmail(values.email);
+        setIsSuccess(true);
+        setSubmitting(false);
+        setTimeout(() => {
+          router.push("/dashboard");
+        }, 400);
+      } catch (err: any) {
+        setErrorMessage(err.message || "Invalid email or password");
+        setSubmitting(false);
+      }
     },
   });
 
@@ -65,6 +71,23 @@ export default function SignInCard() {
           </div>
           <button
             onClick={() => setIsSuccess(false)}
+            className="text-white/80 hover:text-white transition-colors ml-2"
+            aria-label="Dismiss"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Error Notification Alert */}
+      {errorMessage && (
+        <div className="mb-3 bg-red-500/90 backdrop-blur-md text-white text-sm rounded-xl p-3.5 shadow-lg flex items-center justify-between border border-red-400/30">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 text-white" />
+            <span>{errorMessage}</span>
+          </div>
+          <button
+            onClick={() => setErrorMessage("")}
             className="text-white/80 hover:text-white transition-colors ml-2"
             aria-label="Dismiss"
           >

@@ -25,7 +25,15 @@ export class ReviewsService {
     const review = await this.prisma.annualReview.findUnique({
       where: { id: reviewId },
       include: {
-        household: true,
+        household: {
+          include: {
+            entities: true,
+            properties: {
+              where: { isActive: true },
+              include: { loans: { where: { isActive: true } } },
+            },
+          },
+        },
         propertySnapshots: { include: { property: true } },
         loanSnapshots: { include: { loan: true } },
         criteria: { orderBy: { sortOrder: 'asc' } },
@@ -40,6 +48,26 @@ export class ReviewsService {
     }
 
     return review;
+  }
+
+  async updateReviewDetails(adviserId: string, reviewId: string, dto: Record<string, any>) {
+    await this.getReviewWithAuth(adviserId, reviewId);
+    return this.prisma.annualReview.update({
+      where: { id: reviewId },
+      data: {
+        executiveSummary: dto.executiveSummary,
+        verdictText: dto.verdictText,
+        objectiveText: dto.objectiveText,
+        portfolioCommentary: dto.portfolioCommentary,
+        propertyCommentary: dto.propertyCommentary,
+        bottomLineText: dto.bottomLineText,
+        finDataStatus: dto.finDataStatus,
+        tchReviewStatus: dto.tchReviewStatus,
+        reviewDateStr: dto.reviewDateStr,
+        shareChannel: dto.shareChannel,
+        complianceAcknowledged: dto.complianceAcknowledged,
+      },
+    });
   }
 
   async createReview(adviserId: string, householdId: string, dto: CreateReviewDto) {
@@ -70,6 +98,8 @@ export class ReviewsService {
       data: {
         householdId,
         financialYear: dto.financialYear,
+        reviewDate: new Date(),
+        reviewDateStr: new Date().toISOString().split('T')[0],
         executiveSummary: dto.executiveSummary,
         finDataStatus: WorkflowStatus.IN_PROGRESS,
         tchReviewStatus: WorkflowStatus.NOT_STARTED,
@@ -111,6 +141,7 @@ export class ReviewsService {
           snapshotPoint: item.snapshotPoint,
           valuation: item.valuation,
           weeklyRent: item.weeklyRent || 0,
+          marketWeeklyRent: item.marketWeeklyRent || item.weeklyRent || 0,
           annualGrossRent,
           vacancyWeeks: item.vacancyWeeks || 0,
           councilRates: item.councilRates || 0,
@@ -122,10 +153,13 @@ export class ReviewsService {
           strataFees: item.strataFees || 0,
           otherExpenses: item.otherExpenses || 0,
           depreciationNonCash: item.depreciationNonCash || 0,
+          status: item.status || 'Completed',
+          detailsJson: item.detailsJson || undefined,
         },
         update: {
           valuation: item.valuation,
           weeklyRent: item.weeklyRent || 0,
+          marketWeeklyRent: item.marketWeeklyRent,
           annualGrossRent,
           vacancyWeeks: item.vacancyWeeks || 0,
           councilRates: item.councilRates || 0,
@@ -137,8 +171,22 @@ export class ReviewsService {
           strataFees: item.strataFees || 0,
           otherExpenses: item.otherExpenses || 0,
           depreciationNonCash: item.depreciationNonCash || 0,
+          status: item.status,
+          detailsJson: item.detailsJson,
         },
       });
+
+      // Keep property's currentValuation & weeklyRent in sync when REVIEW_DATE snapshot is updated
+      if (item.snapshotPoint === SnapshotPoint.REVIEW_DATE) {
+        await this.prisma.property.update({
+          where: { id: item.propertyId },
+          data: {
+            currentValuation: item.valuation,
+            weeklyRent: item.weeklyRent || 0,
+          },
+        });
+      }
+
       results.push(record);
     }
 
@@ -160,6 +208,15 @@ export class ReviewsService {
 
     const results = [];
     for (const item of dto.snapshots) {
+      const normalizedRate =
+        item.interestRate > 1 ? item.interestRate / 100 : item.interestRate;
+      const normalizedMarketRate =
+        item.marketRate !== undefined
+          ? item.marketRate > 1
+            ? item.marketRate / 100
+            : item.marketRate
+          : undefined;
+
       const record = await this.prisma.loanFinancialSnapshot.upsert({
         where: {
           annualReviewId_loanId_snapshotPoint: {
@@ -174,18 +231,22 @@ export class ReviewsService {
           snapshotPoint: item.snapshotPoint,
           loanBalance: item.loanBalance,
           offsetBalance: item.offsetBalance || 0,
-          interestRate: item.interestRate,
+          interestRate: normalizedRate,
+          marketRate: normalizedMarketRate ?? 0.0605,
           annualRepayments: item.annualRepayments || 0,
           interestPaid: item.interestPaid || 0,
           loanLimit: item.loanLimit || 0,
+          status: item.status || 'Completed',
         },
         update: {
           loanBalance: item.loanBalance,
           offsetBalance: item.offsetBalance || 0,
-          interestRate: item.interestRate,
+          interestRate: normalizedRate,
+          marketRate: normalizedMarketRate,
           annualRepayments: item.annualRepayments || 0,
           interestPaid: item.interestPaid || 0,
           loanLimit: item.loanLimit || 0,
+          status: item.status,
         },
       });
       results.push(record);
@@ -222,7 +283,6 @@ export class ReviewsService {
       );
     }
 
-    // Load active properties and latest snapshots (prefer REVIEW_DATE, then EOFY)
     const properties = await this.prisma.property.findMany({
       where: { householdId: review.householdId, isActive: true },
       include: {
@@ -238,7 +298,6 @@ export class ReviewsService {
       where: { annualReviewId: reviewId },
     });
 
-    // Run Calculation Engine to produce system evidence
     const calculatedMetrics = [];
     for (const prop of properties) {
       const snap =
@@ -295,13 +354,11 @@ export class ReviewsService {
 
     const portfolioMetrics = this.calcEngine.calculatePortfolioMetrics(calculatedMetrics);
 
-    // Resolve representative benchmark
     const resolvedBenchmark = await this.benchmarkResolver.resolveBenchmark({
       state: properties.find((p) => p.type === 'INVESTMENT')?.state || 'NSW',
       propertyCategory: properties.find((p) => p.type === 'INVESTMENT')?.propertyCategory || 'Unit',
     });
 
-    // Seed or update standard Assessment Criteria records
     const standardCriteria = [
       {
         category: 'CASH_MANAGEMENT',
@@ -434,7 +491,6 @@ export class ReviewsService {
       throw new BadRequestException('Review must be IN_PROGRESS to complete.');
     }
 
-    // Validate that mandatory criteria have adviser ratings assigned
     const unrated = review.criteria.filter((c) => !c.rating);
     if (unrated.length > 0) {
       throw new BadRequestException(
@@ -447,7 +503,6 @@ export class ReviewsService {
     const completedAt = new Date();
     const reviewDate = review.reviewDate || completedAt;
 
-    // Compile frozen report snapshot
     const snapshotData = {
       reviewId: review.id,
       householdId: review.householdId,

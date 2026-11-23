@@ -62,37 +62,49 @@ model Adviser {
 }
 
 model ClientHousehold {
-  id                  String            @id @default(uuid())
-  adviserId           String
-  householdName       String
-  primaryContactEmail String
-  primaryContactPhone String?
-  notes               String?           @db.Text
-  isArchived          Boolean           @default(false)
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
-  adviser             Adviser           @relation(fields: [adviserId], references: [id], onDelete: Cascade)
-  members             Person[]
-  entities            OwnershipEntity[]
-  properties          Property[]
-  reviews             AnnualReview[]
+  id                   String            @id @default(uuid())
+  adviserId            String
+  householdName        String
+  adviserAssigned      String?           @default("Sarah Jenkins (Senior Property CFO)")
+  primaryContactEmail  String            @default("")
+  primaryContactPhone  String?
+  notes                String?
+  executiveReport      String?           @default("Locked (Pending Review)")
+  householdExpenditure Decimal           @default(0)
+  creditCardLimit      Decimal           @default(0)
+  otherLiabilities     Decimal           @default(0)
+  monthlyPayments      Decimal           @default(0)
+  borrowingCapacity    Decimal           @default(800000)
+  cashSavings          Decimal           @default(47000)
+  isArchived           Boolean           @default(false)
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  adviser              Adviser           @relation(fields: [adviserId], references: [id], onDelete: Cascade)
+  members              Person[]
+  entities             OwnershipEntity[]
+  properties           Property[]
+  reviews              AnnualReview[]
 
   @@map("client_households")
 }
 
 model Person {
-  id                     String          @id @default(uuid())
-  householdId            String
-  firstName              String
-  lastName               String
-  dob                    DateTime?
-  expectedRetirementAge  Int?            @default(65)
-  currentSuperBalance    Decimal         @default(0) @db.Decimal(14, 2)
-  annualSuperContribution Decimal        @default(0) @db.Decimal(14, 2)
-  marginalTaxRate        Decimal         @default(0.3700) @db.Decimal(8, 4)
-  createdAt              DateTime        @default(now())
-  updatedAt              DateTime        @updatedAt
-  household              ClientHousehold @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  id                      String          @id @default(uuid())
+  householdId             String
+  firstName               String
+  lastName                String
+  dob                     DateTime?
+  age                     String?
+  phone                   String?
+  email                   String?
+  annualSalary            Decimal         @default(0)
+  expectedRetirementAge   Int?            @default(65)
+  currentSuperBalance     Decimal         @default(0)
+  annualSuperContribution Decimal         @default(0)
+  marginalTaxRate         Decimal         @default(0.3700)
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+  household               ClientHousehold @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   @@map("people")
 }
@@ -102,7 +114,14 @@ model OwnershipEntity {
   householdId     String
   name            String
   type            EntityType
+  displayType     String?
   abnOrTfnMasked  String?
+  ageOrDob        String?         @default("---")
+  phone           String?
+  email           String?
+  annualSalary    Decimal         @default(0)
+  marginalTaxRate Decimal         @default(0.3700)
+  superBalance    Decimal         @default(0)
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
   household       ClientHousehold @relation(fields: [householdId], references: [id], onDelete: Cascade)
@@ -112,24 +131,38 @@ model OwnershipEntity {
 }
 
 model Property {
-  id               String                     @id @default(uuid())
+  id               String                      @id @default(uuid())
   householdId      String
   entityId         String?
   name             String
   address          String
-  suburb           String
-  state            String
-  postcode         String
-  propertyCategory String                     // e.g. House, Unit, Townhouse
-  type             PropertyType
-  purchaseDate     DateTime
-  purchasePrice    Decimal                    @db.Decimal(14, 2)
-  acquisitionCosts Decimal                    @default(0) @db.Decimal(14, 2)
-  isActive         Boolean                    @default(true)
-  createdAt        DateTime                   @default(now())
-  updatedAt        DateTime                   @updatedAt
-  household        ClientHousehold            @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  entity           OwnershipEntity?           @relation(fields: [entityId], references: [id], onDelete: SetNull)
+  suburb           String                      @default("")
+  state            String                      @default("NSW")
+  postcode         String                      @default("2000")
+  propertyCategory String                      @default("House")
+  type             PropertyType                @default(INVESTMENT)
+  purposeDisplay   String?                     @default("Investment")
+  purchaseDate     DateTime                    @default(now())
+  purchaseDateStr  String?
+  purchasePrice    Decimal                     @default(0)
+  acquisitionCosts Decimal                     @default(45936)
+  currentValuation Decimal                     @default(0)
+  weeklyRent       Decimal                     @default(0)
+  landSize         String?                     @default("600")
+  beds             Int                         @default(4)
+  baths            Int                         @default(2)
+  cars             Int                         @default(2)
+  owner1           String?                     @default("Primary Owner")
+  owner1Pct        String?                     @default("100%")
+  owner2           String?                     @default("----")
+  owner2Pct        String?                     @default("---")
+  ownersJson       Json?
+  soldDate         String?
+  isActive         Boolean                     @default(true)
+  createdAt        DateTime                    @default(now())
+  updatedAt        DateTime                    @updatedAt
+  household        ClientHousehold             @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  entity           OwnershipEntity?            @relation(fields: [entityId], references: [id], onDelete: SetNull)
   loans            Loan[]
   snapshots        PropertyFinancialSnapshot[]
 
@@ -137,65 +170,89 @@ model Property {
 }
 
 model Loan {
-  id                String                 @id @default(uuid())
+  id                String                  @id @default(uuid())
   propertyId        String
   lender            String
   accountName       String
-  loanType          String                 // e.g. IO, P&I
-  isOffsetAvailable Boolean                @default(false)
-  isActive          Boolean                @default(true)
-  createdAt         DateTime               @default(now())
-  updatedAt         DateTime               @updatedAt
-  property          Property               @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  loanReference     String?
+  isTchLoan         Boolean                 @default(true)
+  purpose           String?                 @default("Investment")
+  repaymentType     String?                 @default("Interest only")
+  rateType          String?                 @default("Variable")
+  loanType          String                  @default("IO")
+  ioExpiry          String?                 @default("----")
+  fixedExpiry       String?                 @default("----")
+  maturityDate      String?                 @default("24/10/2026")
+  security1         String?
+  security2         String?                 @default("----")
+  security3         String?                 @default("----")
+  isClosed          Boolean                 @default(false)
+  closedDate        String?
+  isOffsetAvailable Boolean                 @default(true)
+  isActive          Boolean                 @default(true)
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  property          Property                @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   snapshots         LoanFinancialSnapshot[]
 
   @@map("loans")
 }
 
 model AnnualReview {
-  id                String                     @id @default(uuid())
-  householdId       String
-  financialYear     Int
-  reviewDate        DateTime?
-  finDataStatus     WorkflowStatus             @default(IN_PROGRESS)
-  tchReviewStatus   WorkflowStatus             @default(NOT_STARTED)
-  completedAt       DateTime?
-  executiveSummary  String?                    @db.Text
-  createdAt         DateTime                   @default(now())
-  updatedAt         DateTime                   @updatedAt
-  household         ClientHousehold            @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  propertySnapshots PropertyFinancialSnapshot[]
-  loanSnapshots     LoanFinancialSnapshot[]
-  criteria          AssessmentCriterion[]
-  futureOutlook     FutureOutlookScenario?
-  reportSnapshot    ReportSnapshot?
+  id                         String                      @id @default(uuid())
+  householdId                String
+  financialYear              Int
+  reviewDate                 DateTime?
+  reviewDateStr              String?
+  finDataStatus              WorkflowStatus              @default(IN_PROGRESS)
+  tchReviewStatus            WorkflowStatus              @default(NOT_STARTED)
+  completedAt                DateTime?
+  executiveSummary           String?
+  verdictText                String?
+  objectiveText              String?
+  portfolioCommentary        String?
+  propertyCommentary         String?
+  bottomLineText             String?
+  shareChannel               String?                     @default("Launch")
+  complianceAcknowledged     String?                     @default("-")
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
+  household                  ClientHousehold             @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  propertySnapshots          PropertyFinancialSnapshot[]
+  loanSnapshots              LoanFinancialSnapshot[]
+  criteria                   AssessmentCriterion[]
+  futureOutlook              FutureOutlookScenario?
+  reportSnapshot             ReportSnapshot?
 
   @@unique([householdId, financialYear])
   @@map("annual_reviews")
 }
 
 model PropertyFinancialSnapshot {
-  id                     String         @id @default(uuid())
+  id                     String        @id @default(uuid())
   annualReviewId         String
   propertyId             String
   snapshotPoint          SnapshotPoint
-  valuation              Decimal        @db.Decimal(14, 2)
-  weeklyRent             Decimal        @default(0) @db.Decimal(14, 2)
-  annualGrossRent        Decimal        @default(0) @db.Decimal(14, 2)
-  vacancyWeeks           Decimal        @default(0) @db.Decimal(8, 4)
-  councilRates           Decimal        @default(0) @db.Decimal(14, 2)
-  waterRates             Decimal        @default(0) @db.Decimal(14, 2)
-  insurance              Decimal        @default(0) @db.Decimal(14, 2)
-  propertyManagementFees Decimal        @default(0) @db.Decimal(14, 2)
-  repairsMaintenance     Decimal        @default(0) @db.Decimal(14, 2)
-  landTax                Decimal        @default(0) @db.Decimal(14, 2)
-  strataFees             Decimal        @default(0) @db.Decimal(14, 2)
-  otherExpenses          Decimal        @default(0) @db.Decimal(14, 2)
-  depreciationNonCash    Decimal        @default(0) @db.Decimal(14, 2)
-  createdAt              DateTime       @default(now())
-  updatedAt              DateTime       @updatedAt
-  annualReview           AnnualReview   @relation(fields: [annualReviewId], references: [id], onDelete: Cascade)
-  property               Property       @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  valuation              Decimal       @default(0)
+  weeklyRent             Decimal       @default(0)
+  marketWeeklyRent       Decimal       @default(0)
+  annualGrossRent        Decimal       @default(0)
+  vacancyWeeks           Decimal       @default(0)
+  councilRates           Decimal       @default(0)
+  waterRates             Decimal       @default(0)
+  insurance              Decimal       @default(0)
+  propertyManagementFees Decimal       @default(0)
+  repairsMaintenance     Decimal       @default(0)
+  landTax                Decimal       @default(0)
+  strataFees             Decimal       @default(0)
+  otherExpenses          Decimal       @default(0)
+  depreciationNonCash    Decimal       @default(0)
+  status                 String        @default("Completed")
+  detailsJson            Json?
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+  annualReview           AnnualReview  @relation(fields: [annualReviewId], references: [id], onDelete: Cascade)
+  property               Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
   @@unique([annualReviewId, propertyId, snapshotPoint])
   @@map("property_financial_snapshots")
@@ -206,12 +263,14 @@ model LoanFinancialSnapshot {
   annualReviewId   String
   loanId           String
   snapshotPoint    SnapshotPoint
-  loanBalance      Decimal       @db.Decimal(14, 2)
-  offsetBalance    Decimal       @default(0) @db.Decimal(14, 2)
-  interestRate     Decimal       @db.Decimal(8, 4)
-  annualRepayments Decimal       @default(0) @db.Decimal(14, 2)
-  interestPaid     Decimal       @default(0) @db.Decimal(14, 2)
-  loanLimit        Decimal       @default(0) @db.Decimal(14, 2)
+  loanBalance      Decimal       @default(0)
+  offsetBalance    Decimal       @default(0)
+  interestRate     Decimal       @default(0.0595)
+  marketRate       Decimal       @default(0.0605)
+  annualRepayments Decimal       @default(0)
+  interestPaid     Decimal       @default(0)
+  loanLimit        Decimal       @default(0)
+  status           String        @default("Completed")
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
   annualReview     AnnualReview  @relation(fields: [annualReviewId], references: [id], onDelete: Cascade)
@@ -222,43 +281,49 @@ model LoanFinancialSnapshot {
 }
 
 model AssessmentCriterion {
-  id                    String             @id @default(uuid())
-  annualReviewId        String
-  category              String             // CASH_MANAGEMENT, CAPITAL_MANAGEMENT, DEBT_STRUCTURE, PORTFOLIO_STRATEGY
-  criterionCode         String
-  criterionTitle        String
-  calculatedEvidenceJson Json               @default("{}")
-  rating                CriterionRating?   // ★ Adviser field
-  insight               String?            @db.Text // ★ Adviser field
-  recommendation        String?            @db.Text // ★ Adviser field
-  potentialOpportunity  String?            @db.Text // ★ Adviser field
-  priority              CriterionPriority? // ★ Adviser field
-  adviserNotes          String?            @db.Text // ★ Adviser field
-  sortOrder             Int                @default(0)
-  createdAt             DateTime           @default(now())
-  updatedAt             DateTime           @updatedAt
-  annualReview          AnnualReview       @relation(fields: [annualReviewId], references: [id], onDelete: Cascade)
+  id                     String             @id @default(uuid())
+  annualReviewId         String
+  category               String             @default("PROPERTY_ANALYSIS")
+  criterionCode          String             @default("CUSTOM_INSIGHT")
+  criterionTitle         String
+  screen                 String?            @default("Property Analysis")
+  propertyName           String?            @default("Portfolio-Wide")
+  maintenanceInsight     String?            @default("-")
+  metric                 String?            @default("Rental Income")
+  owner                  String?            @default("Adviser")
+  action                 String?            @default("Review")
+  calculatedEvidenceJson Json?
+  rating                 CriterionRating?
+  insight                String?
+  recommendation         String?
+  potentialOpportunity   String?
+  priority               CriterionPriority? @default(MEDIUM)
+  adviserNotes           String?
+  sortOrder              Int                @default(0)
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  annualReview           AnnualReview       @relation(fields: [annualReviewId], references: [id], onDelete: Cascade)
 
   @@map("assessment_criteria")
 }
 
 model FutureOutlookScenario {
-  id                           String       @id @default(uuid())
-  annualReviewId               String       @unique
-  forecastYears                Int          @default(15)
-  propertyGrowthRate           Decimal      @default(0.0500) @db.Decimal(8, 4)
-  rentalGrowthRate             Decimal      @default(0.0350) @db.Decimal(8, 4)
-  inflationRate                Decimal      @default(0.0250) @db.Decimal(8, 4)
-  superReturnRate              Decimal      @default(0.0700) @db.Decimal(8, 4)
-  extraMonthlyHomeLoanRepayment Decimal     @default(0) @db.Decimal(14, 2)
-  downsizeEnabled              Boolean      @default(false)
-  downsizeYearOffset           Int?         @default(10)
-  downsizeNetProceedsToSuper   Decimal?     @default(0) @db.Decimal(14, 2)
-  targetRetirementIncomeAfterTax Decimal    @default(0) @db.Decimal(14, 2)
-  assumptionsJson              Json         @default("{}")
-  createdAt                    DateTime     @default(now())
-  updatedAt                    DateTime     @updatedAt
-  annualReview                 AnnualReview @relation(fields: [annualReviewId], references: [id], onDelete: Cascade)
+  id                             String       @id @default(uuid())
+  annualReviewId                 String       @unique
+  forecastYears                  Int          @default(20)
+  propertyGrowthRate             Decimal      @default(0.0400)
+  rentalGrowthRate               Decimal      @default(0.0350)
+  inflationRate                  Decimal      @default(0.0250)
+  superReturnRate                Decimal      @default(0.0700)
+  extraMonthlyHomeLoanRepayment  Decimal      @default(0)
+  downsizeEnabled                Boolean      @default(false)
+  downsizeYearOffset             Int?         @default(10)
+  downsizeNetProceedsToSuper     Decimal?     @default(800000)
+  targetRetirementIncomeAfterTax Decimal      @default(120000)
+  assumptionsJson                Json?
+  createdAt                      DateTime     @default(now())
+  updatedAt                      DateTime     @updatedAt
+  annualReview                   AnnualReview @relation(fields: [annualReviewId], references: [id], onDelete: Cascade)
 
   @@map("future_outlook_scenarios")
 }
@@ -274,19 +339,20 @@ model ReportSnapshot {
 }
 
 model MarketBenchmark {
-  id                     String    @id @default(uuid())
+  id                     String   @id @default(uuid())
   effectiveDate          DateTime
   state                  String?
   suburb                 String?
   propertyCategory       String?
-  benchmarkInterestRate  Decimal?  @db.Decimal(8, 4)
-  benchmarkGrossYield    Decimal?  @db.Decimal(8, 4)
-  benchmarkWeeklyRent    Decimal?  @db.Decimal(14, 2)
-  benchmarkRentalGrowth  Decimal?  @db.Decimal(8, 4)
-  benchmarkCapitalGrowth Decimal?  @db.Decimal(8, 4)
+  benchmarkInterestRate  Decimal?
+  benchmarkGrossYield    Decimal?
+  benchmarkWeeklyRent    Decimal?
+  benchmarkRentalGrowth  Decimal?
+  benchmarkCapitalGrowth Decimal?
+  asxIndexValue          Decimal?
   sourceNotes            String?
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
   @@map("market_benchmarks")
 }
@@ -296,8 +362,8 @@ model PublicEnquiry {
   fullName    String
   email       String
   phone       String?
-  enquiryType String   // ANNUAL_REVIEW_BOOKING, PRE_PURCHASE, STRATEGIC_ADVISORY
-  message     String   @db.Text
+  enquiryType String
+  message     String
   status      String   @default("NEW")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

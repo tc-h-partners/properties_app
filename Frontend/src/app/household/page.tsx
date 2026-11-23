@@ -1,12 +1,18 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Search, Eye, MoreVertical, ChevronDown } from "lucide-react";
+import { Plus, Search, Eye, Trash2, ChevronDown } from "lucide-react";
 import Sidebar from "@/components/dashboard/Sidebar";
 import TopNav from "@/components/dashboard/TopNav";
 import AddHouseholdModal from "@/components/household/AddHouseholdModal";
+import {
+  fetchHouseholds,
+  createHouseholdApi,
+  deleteHouseholdApi,
+  setActiveHouseholdInfo,
+} from "@/lib/api";
 
 interface HouseholdRow {
   id: string;
@@ -14,86 +20,90 @@ interface HouseholdRow {
   reviewYear: string;
   reviewStatus: "COMPLETED" | "NOT STARTED" | "IN PROGRESS";
   reviewDate: string;
-  executiveReport: "Acknowledged" | "Locked (Pending Review)" | "Available (Unacknowledged)";
+  executiveReport:
+    | "Acknowledged"
+    | "Locked (Pending Review)"
+    | "Available (Unacknowledged)";
   workflowStatus: "COMPLETED" | "IN PROGRESS";
 }
 
-const FIGMA_HOUSEHOLDS: HouseholdRow[] = [
-  {
-    id: "harrison-family",
-    name: "THE HARRISON FAMILY",
-    reviewYear: "FY2025",
-    reviewStatus: "COMPLETED",
-    reviewDate: "2026-10-06",
-    executiveReport: "Acknowledged",
-    workflowStatus: "COMPLETED",
-  },
-  {
-    id: "laeonardo-decaprio-1",
-    name: "LAEONARDO DECAPRIO",
-    reviewYear: "FY2026",
-    reviewStatus: "NOT STARTED",
-    reviewDate: "2026-10-06",
-    executiveReport: "Locked (Pending Review)",
-    workflowStatus: "IN PROGRESS",
-  },
-  {
-    id: "laeonardo-decaprio-2",
-    name: "LAEONARDO DECAPRIO",
-    reviewYear: "FY2026",
-    reviewStatus: "COMPLETED",
-    reviewDate: "2026-10-06",
-    executiveReport: "Acknowledged",
-    workflowStatus: "COMPLETED",
-  },
-  {
-    id: "john-doe",
-    name: "JOHN DOE",
-    reviewYear: "FY2026",
-    reviewStatus: "NOT STARTED",
-    reviewDate: "2026-10-06",
-    executiveReport: "Locked (Pending Review)",
-    workflowStatus: "IN PROGRESS",
-  },
-  {
-    id: "laeonardo-decaprio-3",
-    name: "LAEONARDO DECAPRIO",
-    reviewYear: "FY2026",
-    reviewStatus: "COMPLETED",
-    reviewDate: "2026-10-06",
-    executiveReport: "Acknowledged",
-    workflowStatus: "COMPLETED",
-  },
-  {
-    id: "laeonardo-decaprio-4",
-    name: "LAEONARDO DECAPRIO",
-    reviewYear: "FY2026",
-    reviewStatus: "COMPLETED",
-    reviewDate: "2026-10-06",
-    executiveReport: "Available (Unacknowledged)",
-    workflowStatus: "COMPLETED",
-  },
-  {
-    id: "kaiser-brown",
-    name: "KAISER BROWN",
-    reviewYear: "FY2026",
-    reviewStatus: "NOT STARTED",
-    reviewDate: "2026-10-06",
-    executiveReport: "Locked (Pending Review)",
-    workflowStatus: "IN PROGRESS",
-  },
-];
+function mapDbHouseholdToRow(h: any): HouseholdRow {
+  const latestReview = Array.isArray(h.reviews) && h.reviews.length > 0 ? h.reviews[0] : null;
+  const fy = latestReview?.financialYear ? `FY${latestReview.financialYear}` : "FY2026";
+
+  const rawTchStatus = latestReview?.tchReviewStatus || "NOT_STARTED";
+  const reviewStatus: HouseholdRow["reviewStatus"] =
+    rawTchStatus === "COMPLETED"
+      ? "COMPLETED"
+      : rawTchStatus === "IN_PROGRESS"
+      ? "IN PROGRESS"
+      : "NOT STARTED";
+
+  const workflowStatus: HouseholdRow["workflowStatus"] =
+    rawTchStatus === "COMPLETED" ? "COMPLETED" : "IN PROGRESS";
+
+  const reviewDate =
+    latestReview?.reviewDateStr ||
+    (latestReview?.reviewDate
+      ? new Date(latestReview.reviewDate).toISOString().split("T")[0]
+      : new Date(h.createdAt || Date.now()).toISOString().split("T")[0]);
+
+  const executiveReport: HouseholdRow["executiveReport"] =
+    h.executiveReport ||
+    (rawTchStatus === "COMPLETED"
+      ? "Acknowledged"
+      : "Locked (Pending Review)");
+
+  return {
+    id: h.id,
+    name: (h.householdName || "UNNAMED HOUSEHOLD").toUpperCase(),
+    reviewYear: fy,
+    reviewStatus,
+    reviewDate,
+    executiveReport,
+    workflowStatus,
+  };
+}
 
 export default function HouseholdPage() {
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [households, setHouseholds] = useState<HouseholdRow[]>(FIGMA_HOUSEHOLDS);
+  const [households, setHouseholds] = useState<HouseholdRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedTab, setSelectedTab] = useState<"All" | "In Progress" | "Completed">("All");
+  const [selectedTab, setSelectedTab] = useState<
+    "All" | "In Progress" | "Completed"
+  >("All");
 
   const [sortField, setSortField] = useState<keyof HouseholdRow | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+
+  const loadHouseholdsFromDb = useCallback(async () => {
+    setLoading(true);
+    try {
+      const list = await fetchHouseholds();
+      const mapped = Array.isArray(list) ? list.map(mapDbHouseholdToRow) : [];
+      setHouseholds(mapped);
+    } catch (err) {
+      console.error("Failed to fetch households from DB:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const q = params.get("search");
+      if (q) setSearchQuery(q);
+      const tab = params.get("tab");
+      if (tab === "Completed" || tab === "In Progress") {
+        setSelectedTab(tab);
+      }
+    }
+    loadHouseholdsFromDb();
+  }, [loadHouseholdsFromDb]);
 
   const filteredHouseholds = useMemo(() => {
     const list = households.filter((h) => {
@@ -129,31 +139,37 @@ export default function HouseholdPage() {
     }
   };
 
-  const handleAddHousehold = (newH: {
+  const handleAddHousehold = async (newH: {
     name: string;
     adviser: string;
     objectives: string;
     reviewYear: string;
   }) => {
-    const id = newH.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-    const item: HouseholdRow = {
-      id: id || `household-${Date.now()}`,
-      name: newH.name.toUpperCase(),
-      reviewYear: newH.reviewYear,
-      reviewStatus: "IN PROGRESS",
-      reviewDate: new Date().toISOString().split("T")[0],
-      executiveReport: "Locked (Pending Review)",
-      workflowStatus: "IN PROGRESS",
-    };
-    setHouseholds((prev) => [item, ...prev]);
+    const created = await createHouseholdApi({
+      householdName: newH.name.trim(),
+      adviserAssigned: newH.adviser,
+      initialReviewYear: newH.reviewYear,
+      objectives: newH.objectives,
+    });
+    const row = mapDbHouseholdToRow(created);
+    setHouseholds((prev) => [row, ...prev]);
+    setActiveHouseholdInfo(created.id, created.householdName);
     setIsModalOpen(false);
-    // Proceed directly to the Household Setup screen with all tabs
-    router.push(`/household/${item.id}`);
+    router.push(`/household/${created.id}`);
+  };
+
+  const handleDeleteHousehold = async (id: string) => {
+    try {
+      await deleteHouseholdApi(id);
+      setHouseholds((prev) => prev.filter((h) => h.id !== id));
+    } catch (err) {
+      console.error("Failed to delete household:", err);
+    }
   };
 
   return (
     <div className="h-screen w-full bg-white flex overflow-hidden select-none">
-      {/* Sidebar matching Figma Household Setup */}
+      {/* Sidebar */}
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       {/* Backdrop for mobile */}
@@ -241,33 +257,81 @@ export default function HouseholdPage() {
               <thead>
                 <tr className="border-b border-[#E2E8F0]">
                   <th className="py-3 px-3 font-['Poppins',sans-serif] font-medium text-[13px] text-[#ACB5BB] uppercase tracking-[-0.28px]">
-                    <div onClick={() => handleSort("name")} className="flex items-center gap-1.5 cursor-pointer">
+                    <div
+                      onClick={() => handleSort("name")}
+                      className="flex items-center gap-1.5 cursor-pointer"
+                    >
                       <span>HOUSEHOLD</span>
-                      <ChevronDown className={`w-3.5 h-3.5 transition-transform ${sortField === "name" && sortDirection === "desc" ? "rotate-180" : ""}`} />
+                      <ChevronDown
+                        className={`w-3.5 h-3.5 transition-transform ${
+                          sortField === "name" && sortDirection === "desc"
+                            ? "rotate-180"
+                            : ""
+                        }`}
+                      />
                     </div>
                   </th>
                   <th className="py-3 px-3 font-['Poppins',sans-serif] font-medium text-[13px] text-[#ACB5BB] tracking-[-0.28px]">
-                    <div onClick={() => handleSort("reviewYear")} className="flex items-center gap-1.5 cursor-pointer">
+                    <div
+                      onClick={() => handleSort("reviewYear")}
+                      className="flex items-center gap-1.5 cursor-pointer"
+                    >
                       <span>Latest Review Year</span>
-                      <ChevronDown className={`w-3.5 h-3.5 transition-transform ${sortField === "reviewYear" && sortDirection === "desc" ? "rotate-180" : ""}`} />
+                      <ChevronDown
+                        className={`w-3.5 h-3.5 transition-transform ${
+                          sortField === "reviewYear" && sortDirection === "desc"
+                            ? "rotate-180"
+                            : ""
+                        }`}
+                      />
                     </div>
                   </th>
                   <th className="py-3 px-3 font-['Poppins',sans-serif] font-medium text-[13px] text-[#ACB5BB] tracking-[-0.28px]">
-                    <div onClick={() => handleSort("reviewStatus")} className="flex items-center gap-1.5 cursor-pointer">
+                    <div
+                      onClick={() => handleSort("reviewStatus")}
+                      className="flex items-center gap-1.5 cursor-pointer"
+                    >
                       <span>Review status</span>
-                      <ChevronDown className={`w-3.5 h-3.5 transition-transform ${sortField === "reviewStatus" && sortDirection === "desc" ? "rotate-180" : ""}`} />
+                      <ChevronDown
+                        className={`w-3.5 h-3.5 transition-transform ${
+                          sortField === "reviewStatus" &&
+                          sortDirection === "desc"
+                            ? "rotate-180"
+                            : ""
+                        }`}
+                      />
                     </div>
                   </th>
                   <th className="py-3 px-3 font-['Poppins',sans-serif] font-medium text-[13px] text-[#ACB5BB] tracking-[-0.28px]">
-                    <div onClick={() => handleSort("executiveReport")} className="flex items-center gap-1.5 cursor-pointer">
+                    <div
+                      onClick={() => handleSort("executiveReport")}
+                      className="flex items-center gap-1.5 cursor-pointer"
+                    >
                       <span>Executive Report</span>
-                      <ChevronDown className={`w-3.5 h-3.5 transition-transform ${sortField === "executiveReport" && sortDirection === "desc" ? "rotate-180" : ""}`} />
+                      <ChevronDown
+                        className={`w-3.5 h-3.5 transition-transform ${
+                          sortField === "executiveReport" &&
+                          sortDirection === "desc"
+                            ? "rotate-180"
+                            : ""
+                        }`}
+                      />
                     </div>
                   </th>
                   <th className="py-3 px-3 font-['Poppins',sans-serif] font-medium text-[13px] text-[#ACB5BB] tracking-[-0.28px]">
-                    <div onClick={() => handleSort("workflowStatus")} className="flex items-center gap-1.5 cursor-pointer">
+                    <div
+                      onClick={() => handleSort("workflowStatus")}
+                      className="flex items-center gap-1.5 cursor-pointer"
+                    >
                       <span>Workflow Status</span>
-                      <ChevronDown className={`w-3.5 h-3.5 transition-transform ${sortField === "workflowStatus" && sortDirection === "desc" ? "rotate-180" : ""}`} />
+                      <ChevronDown
+                        className={`w-3.5 h-3.5 transition-transform ${
+                          sortField === "workflowStatus" &&
+                          sortDirection === "desc"
+                            ? "rotate-180"
+                            : ""
+                        }`}
+                      />
                     </div>
                   </th>
                   <th className="py-3 px-3 font-['Poppins',sans-serif] font-medium text-[13px] text-[#ACB5BB] tracking-[-0.28px] text-right">
@@ -279,74 +343,103 @@ export default function HouseholdPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F1F5F9]">
-                {filteredHouseholds.map((row) => (
-                  <tr key={row.id} className="hover:bg-[#F8FAFC] transition-colors">
-                    {/* Household Name */}
-                    <td className="py-4 px-3">
-                      <Link
-                        href={`/household/${row.id}`}
-                        className="font-['Poppins',sans-serif] font-medium text-[14px] text-[#1A1C1E] tracking-[-0.28px] uppercase hover:text-blue-600 transition-colors"
-                      >
-                        {row.name}
-                      </Link>
-                    </td>
-
-                    {/* Latest Review Year */}
-                    <td className="py-4 px-3 font-['Poppins',sans-serif] font-medium text-[14px] text-[#1A1C1E] tracking-[-0.28px]">
-                      {row.reviewYear}
-                    </td>
-
-                    {/* Review Status & Date */}
-                    <td className="py-4 px-3">
-                      <div className="flex flex-col">
-                        <span className="font-['Poppins',sans-serif] font-medium text-[13px] text-[#1A1C1E]">
-                          {row.reviewStatus}
-                        </span>
-                        <span className="font-['Poppins',sans-serif] text-[11px] text-[#8C9BA8]">
-                          Review Date: {row.reviewDate}
-                        </span>
-                      </div>
-                    </td>
-
-                    {/* Executive Report */}
-                    <td className="py-4 px-3 font-['Poppins',sans-serif] text-[13.5px] text-[#1A1C1E]">
-                      {row.executiveReport}
-                    </td>
-
-                    {/* Workflow Status Badge */}
-                    <td className="py-4 px-3">
-                      <span
-                        className={`inline-flex px-3 py-1 rounded-full text-[12px] font-['Poppins',sans-serif] font-semibold tracking-wide uppercase ${
-                          row.workflowStatus === "COMPLETED"
-                            ? "bg-[#D1FADF] text-[#027A48]"
-                            : "bg-[#FEF0C7] text-[#B54708]"
-                        }`}
-                      >
-                        {row.workflowStatus}
-                      </span>
-                    </td>
-
-                    {/* Actions */}
-                    <td className="py-4 px-3 text-right">
-                      <div className="flex items-center justify-end gap-2 text-[#94A3B8]">
-                        <Link
-                          href={`/household/${row.id}`}
-                          className="p-1 hover:text-[#0E2841] transition-colors"
-                          title="View"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Link>
-                        <button
-                          type="button"
-                          className="p-1 hover:text-[#0E2841] transition-colors cursor-pointer"
-                          title="Options"
-                        >
-                          <MoreVertical className="w-4 h-4" />
-                        </button>
-                      </div>
+                {loading ? (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="py-8 text-center text-[14px] text-[#8C9BA8]"
+                    >
+                      Loading households from database...
                     </td>
                   </tr>
-                ))}
+                ) : filteredHouseholds.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="py-8 text-center text-[14px] text-[#8C9BA8]"
+                    >
+                      No households found in database. Click &quot;Add New
+                      Household&quot; to create one.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredHouseholds.map((row) => (
+                    <tr
+                      key={row.id}
+                      className="hover:bg-[#F8FAFC] transition-colors"
+                    >
+                      {/* Household Name */}
+                      <td className="py-4 px-3">
+                        <Link
+                          href={`/household/${row.id}`}
+                          onClick={() => setActiveHouseholdInfo(row.id, row.name)}
+                          className="font-['Poppins',sans-serif] font-medium text-[14px] text-[#1A1C1E] tracking-[-0.28px] uppercase hover:text-blue-600 transition-colors"
+                        >
+                          {row.name}
+                        </Link>
+                      </td>
+
+                      {/* Latest Review Year */}
+                      <td className="py-4 px-3 font-['Poppins',sans-serif] font-medium text-[14px] text-[#1A1C1E] tracking-[-0.28px]">
+                        {row.reviewYear}
+                      </td>
+
+                      {/* Review Status & Date */}
+                      <td className="py-4 px-3">
+                        <div className="flex flex-col">
+                          <span className="font-['Poppins',sans-serif] font-medium text-[13px] text-[#1A1C1E]">
+                            {row.reviewStatus}
+                          </span>
+                          <span className="font-['Poppins',sans-serif] text-[11px] text-[#8C9BA8]">
+                            Review Date: {row.reviewDate}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Executive Report */}
+                      <td className="py-4 px-3 font-['Poppins',sans-serif] text-[13.5px] text-[#1A1C1E]">
+                        {row.executiveReport}
+                      </td>
+
+                      {/* Workflow Status Badge */}
+                      <td className="py-4 px-3">
+                        <span
+                          className={`inline-flex px-3 py-1 rounded-full text-[12px] font-['Poppins',sans-serif] font-semibold tracking-wide uppercase ${
+                            row.workflowStatus === "COMPLETED"
+                              ? "bg-[#D1FADF] text-[#027A48]"
+                              : "bg-[#FEF0C7] text-[#B54708]"
+                          }`}
+                        >
+                          {row.workflowStatus}
+                        </span>
+                      </td>
+
+                      {/* Actions */}
+                      <td className="py-4 px-3 text-right">
+                        <div className="flex items-center justify-end gap-2 text-[#94A3B8]">
+                          <Link
+                            href={`/household/${row.id}`}
+                            onClick={() =>
+                              setActiveHouseholdInfo(row.id, row.name)
+                            }
+                            className="p-1 hover:text-[#0E2841] transition-colors"
+                            title="View"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteHousehold(row.id)}
+                            className="p-1 hover:text-red-600 transition-colors cursor-pointer"
+                            title="Delete Household"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

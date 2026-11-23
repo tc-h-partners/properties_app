@@ -1,23 +1,28 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Sidebar from "@/components/dashboard/Sidebar";
 import TopNav from "@/components/dashboard/TopNav";
 import HouseholdCard from "@/components/dashboard/HouseholdCard";
 import SearchCard from "@/components/dashboard/SearchCard";
 import LoanMetrics from "@/components/dashboard/LoanMetrics";
 import ReviewStatus from "@/components/dashboard/ReviewStatus";
+import { fetchDashboardSummary } from "@/lib/api";
 
 export default function DashboardPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [summary, setSummary] = useState<any>(null);
+
+  useEffect(() => {
+    fetchDashboardSummary()
+      .then((data) => setSummary(data))
+      .catch((err) => console.error("Failed to fetch dashboard summary:", err));
+  }, []);
 
   return (
     <div className="h-screen w-full bg-[#F8F9FB] flex overflow-hidden select-none">
       {/* Sidebar */}
-      <Sidebar
-        isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-      />
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       {/* Backdrop for mobile */}
       {sidebarOpen && (
@@ -43,20 +48,20 @@ export default function DashboardPage() {
 
           {/* Top Row Cards: Household & Search */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            <HouseholdCard />
+            <HouseholdCard totalHouseholds={summary?.totalHouseholds} />
             <SearchCard />
           </div>
 
           {/* Main Grid: Loan Metrics (Left) & Review Status (Right) */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-            {/* Left Column: Loan Metrics (7.5 cols approx) */}
+            {/* Left Column: Loan Metrics */}
             <div className="lg:col-span-7 xl:col-span-7">
-              <LoanMetrics />
+              <LoanMetrics metrics={summary?.loanMetrics} />
             </div>
 
-            {/* Right Column: Review Status (4.5 cols approx) */}
+            {/* Right Column: Review Status */}
             <div className="lg:col-span-5 xl:col-span-5">
-              <ReviewStatus />
+              <ReviewStatus counts={summary?.reviewStatusCounts} />
             </div>
           </div>
         </main>

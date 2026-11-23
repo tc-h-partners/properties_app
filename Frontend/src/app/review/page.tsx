@@ -1,21 +1,53 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar from "@/components/dashboard/Sidebar";
 import TopNav from "@/components/dashboard/TopNav";
 import ReviewWorkspaceReport from "@/components/household/ReviewWorkspaceReport";
+import {
+  fetchHouseholds,
+  fetchHouseholdById,
+  getActiveHouseholdInfo,
+} from "@/lib/api";
 
 export default function ReviewWorkspacePage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [dbHousehold, setDbHousehold] = useState<any>(null);
   const router = useRouter();
+
+  const loadActiveHousehold = useCallback(async () => {
+    try {
+      const stored = getActiveHouseholdInfo();
+      if (stored?.id) {
+        const h = await fetchHouseholdById(stored.id);
+        setDbHousehold(h);
+        return;
+      }
+      const list = await fetchHouseholds();
+      if (Array.isArray(list) && list.length > 0) {
+        const h = await fetchHouseholdById(list[0].id);
+        setDbHousehold(h);
+      }
+    } catch (err) {
+      console.error("Failed to load review workspace household from DB:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadActiveHousehold();
+  }, [loadActiveHousehold]);
+
+  const latestReview = dbHousehold?.reviews?.[0];
+  const householdName = dbHousehold?.householdName || "Household";
+  const reviewYear = String(latestReview?.financialYear || "2026");
 
   return (
     <div className="h-screen w-full bg-[#FBFBFC] flex overflow-hidden select-none font-['Inter',sans-serif]">
       <Sidebar
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
-        activeSubItemLabel={"Harrison Family -\nReview Workspace"}
+        activeSubItemLabel={`${householdName} -\nReview Workspace`}
       />
 
       {sidebarOpen && (
@@ -30,10 +62,22 @@ export default function ReviewWorkspacePage() {
 
         <main className="flex-1 p-6 sm:p-9 max-w-[1440px] w-full mx-auto">
           <ReviewWorkspaceReport
-            householdName="Harrison Family"
-            reviewYear="2026"
-            reviewStatus="In Progress"
-            onBack={() => router.push("/household/harrison-family")}
+            householdId={dbHousehold?.id}
+            reviewId={latestReview?.id}
+            dbHousehold={dbHousehold}
+            onDataChanged={loadActiveHousehold}
+            householdName={householdName}
+            reviewYear={reviewYear}
+            reviewStatus={
+              latestReview?.tchReviewStatus === "COMPLETED"
+                ? "Completed"
+                : "In Progress"
+            }
+            onBack={() =>
+              router.push(
+                dbHousehold?.id ? `/household/${dbHousehold.id}` : "/household"
+              )
+            }
           />
         </main>
       </div>

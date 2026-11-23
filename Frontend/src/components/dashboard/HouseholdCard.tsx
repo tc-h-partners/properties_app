@@ -4,7 +4,11 @@ import React from "react";
 import Link from "next/link";
 import Image from "next/image";
 
-export default function HouseholdCard() {
+interface HouseholdCardProps {
+  totalHouseholds?: number;
+}
+
+export default function HouseholdCard({ totalHouseholds }: HouseholdCardProps) {
   return (
     <Link
       href="/household"
@@ -31,7 +35,7 @@ export default function HouseholdCard() {
             Household
           </p>
           <p className="font-['Familjen_Grotesk',sans-serif] font-bold text-[#0E2841] text-[22px] leading-none">
-            8
+            {totalHouseholds !== undefined ? totalHouseholds : 0}
           </p>
         </div>
       </div>

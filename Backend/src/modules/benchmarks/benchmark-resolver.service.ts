@@ -39,9 +39,9 @@ export class BenchmarkResolverService {
       const match = await this.prisma.marketBenchmark.findFirst({
         where: {
           effectiveDate: { lte: targetDate },
-          suburb: { equals: suburb, mode: 'insensitive' },
-          state: { equals: state, mode: 'insensitive' },
-          propertyCategory: { equals: category, mode: 'insensitive' },
+          suburb: { equals: suburb },
+          state: { equals: state },
+          propertyCategory: { equals: category },
         },
         orderBy: { effectiveDate: 'desc' },
       });
@@ -59,8 +59,8 @@ export class BenchmarkResolverService {
       const match = await this.prisma.marketBenchmark.findFirst({
         where: {
           effectiveDate: { lte: targetDate },
-          state: { equals: state, mode: 'insensitive' },
-          propertyCategory: { equals: category, mode: 'insensitive' },
+          state: { equals: state },
+          propertyCategory: { equals: category },
           suburb: null,
         },
         orderBy: { effectiveDate: 'desc' },
@@ -79,7 +79,7 @@ export class BenchmarkResolverService {
       const match = await this.prisma.marketBenchmark.findFirst({
         where: {
           effectiveDate: { lte: targetDate },
-          state: { equals: state, mode: 'insensitive' },
+          state: { equals: state },
           suburb: null,
           propertyCategory: null,
         },

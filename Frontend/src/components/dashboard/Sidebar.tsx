@@ -1,10 +1,15 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Box, Settings, ChevronDown } from "lucide-react";
+import {
+  fetchHouseholds,
+  getActiveHouseholdInfo,
+  setActiveHouseholdInfo,
+} from "@/lib/api";
 
 interface SidebarProps {
   isOpen?: boolean;
@@ -24,11 +29,54 @@ export default function Sidebar({
   const isSettingsActive = pathname.startsWith("/settings");
 
   const [householdOpen, setHouseholdOpen] = useState(true);
+  const [activeHousehold, setActiveHousehold] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+
+  useEffect(() => {
+    const syncActive = () => {
+      const stored = getActiveHouseholdInfo();
+      if (stored) {
+        setActiveHousehold(stored);
+      }
+    };
+    syncActive();
+    window.addEventListener("cfo-household-changed", syncActive);
+
+    fetchHouseholds()
+      .then((list) => {
+        if (Array.isArray(list) && list.length > 0) {
+          const current = getActiveHouseholdInfo();
+          const matched = current
+            ? list.find((h) => h.id === current.id) || list[0]
+            : list[0];
+          setActiveHousehold({
+            id: matched.id,
+            name: matched.householdName,
+          });
+          if (!current) {
+            setActiveHouseholdInfo(matched.id, matched.householdName);
+          }
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      window.removeEventListener("cfo-household-changed", syncActive);
+    };
+  }, []);
+
+  const displayHouseholdName = activeHousehold?.name || "Households";
   const subLabel =
     activeSubItemLabel ||
     (pathname.startsWith("/review")
-      ? "Harrison Family -\nReview Workspace"
-      : "Harrison Family");
+      ? `${displayHouseholdName} -\nReview Workspace`
+      : displayHouseholdName);
+
+  const subHref = activeHousehold?.id
+    ? `/household/${activeHousehold.id}`
+    : "/household";
 
   return (
     <aside
@@ -70,34 +118,44 @@ export default function Sidebar({
             </span>
           </Link>
 
-          {/* Household Dropdown Item (from Household Setup in Figma) */}
+          {/* Household Dropdown Item */}
           <div className="flex flex-col">
             <div
-              onClick={() => setHouseholdOpen(!householdOpen)}
               className={`flex items-center justify-between px-[12px] py-[10px] rounded-[5px] w-full cursor-pointer transition-colors ${
                 isHouseholdActive
                   ? "bg-[rgba(255,255,255,0.1)] text-white"
                   : "text-white/80 hover:text-white hover:bg-white/5"
               }`}
             >
-              <div className="flex items-center gap-[16px]">
+              <Link
+                href="/household"
+                onClick={onClose}
+                className="flex items-center gap-[16px] flex-1"
+              >
                 <Box className="w-5 h-5 text-white shrink-0 stroke-[1.8]" />
                 <span className="font-['Inter',sans-serif] font-medium text-[16px] leading-[1.4] text-white">
                   Household
                 </span>
-              </div>
-              <ChevronDown
-                className={`w-[17px] h-[17px] text-white transition-transform duration-200 ${
-                  householdOpen ? "rotate-0" : "-rotate-90"
-                }`}
-              />
+              </Link>
+              <button
+                type="button"
+                onClick={() => setHouseholdOpen(!householdOpen)}
+                className="p-0.5 cursor-pointer"
+                aria-label="Toggle household submenu"
+              >
+                <ChevronDown
+                  className={`w-[17px] h-[17px] text-white transition-transform duration-200 ${
+                    householdOpen ? "rotate-0" : "-rotate-90"
+                  }`}
+                />
+              </button>
             </div>
 
-            {/* Nested Sub-item: Harrison Family / TC&H Review Workspace */}
-            {householdOpen && (
+            {/* Nested Sub-item: Active Household from DB */}
+            {householdOpen && activeHousehold && (
               <div className="mt-2.5 pl-3">
                 <Link
-                  href="/household/harrison-family"
+                  href={subHref}
                   onClick={onClose}
                   className="bg-[rgba(255,255,255,0.2)] hover:bg-[rgba(255,255,255,0.28)] flex items-center gap-[9px] min-h-[42px] px-[16px] py-[10px] rounded-[8px] w-full transition-colors"
                 >
