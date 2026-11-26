@@ -23,6 +23,8 @@ import {
   updateInsightApi,
   deleteInsightApi,
   updateReviewApi,
+  completeReviewApi,
+  reopenReviewApi,
   saveFutureOutlookApi,
 } from "@/lib/api";
 
@@ -872,9 +874,19 @@ interface ReviewPropertyCard {
   const handleSetStatus = async (newStatus: "Completed" | "In Progress") => {
     setReviewStatusState(newStatus);
     setIsStatusMenuOpen(false);
-    await persistReviewField({
-      tchReviewStatus: newStatus === "Completed" ? "COMPLETED" : "IN_PROGRESS",
-    });
+    try {
+      if (newStatus === "Completed") {
+        await completeReviewApi(effectiveReviewId);
+      } else {
+        await reopenReviewApi(effectiveReviewId);
+      }
+      await onDataChanged?.();
+    } catch (err) {
+      console.error("Failed to update review status:", err);
+      await persistReviewField({
+        tchReviewStatus: newStatus === "Completed" ? "COMPLETED" : "IN_PROGRESS",
+      });
+    }
   };
 
   // Interactive Metric Selection & Bottom Insights Carousel for Report Screens
@@ -1203,7 +1215,6 @@ interface ReviewPropertyCard {
   };
 
   const handleSelectRow = (item: ReviewInsightItem) => {
-    if (!canEdit) return;
     const idx = filteredInsights.findIndex((i) => i.id === item.id);
     loadInsightFromItem(item, idx !== -1 ? idx : 0);
     setIsAddInsightOpen(true);
@@ -1241,6 +1252,23 @@ interface ReviewPropertyCard {
       openAddInsightModal();
     }
   };
+
+  useEffect(() => {
+    if (!isAddInsightOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeTag = (document.activeElement as HTMLElement)?.tagName?.toLowerCase();
+      if (activeTag === "input" || activeTag === "textarea" || activeTag === "select") {
+        return;
+      }
+      if (e.key === "ArrowLeft" && hasPrevInsight) {
+        handlePrevInsight();
+      } else if (e.key === "ArrowRight") {
+        handleNextInsight();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isAddInsightOpen, hasPrevInsight, hasNextInsight, currentInsightIndex, filteredInsights]);
 
   const handleDeleteCurrentInsight = async () => {
     if (!canEdit) return;
@@ -1298,33 +1326,25 @@ interface ReviewPropertyCard {
           : `Portfolio Overview - ${portfolioSubTab}`
         : activeTab === "future-outlook"
         ? "Future Outlook"
+        : activeTab === "insights"
+        ? "Portfolio Management Insights"
         : "Executive Summary";
 
     try {
       if (editingInsightId) {
         const existingItem = insights.find((i) => i.id === editingInsightId);
-        // Find review by the selected FY if user changed year, or fall back to the existing review of the criterion
-        const matchedReviewByFy = dbHousehold?.reviews?.find(
-          (r: any) => String(r.financialYear) === String(newInsightFy)
-        );
         const matchedExistingReview = dbHousehold?.reviews?.find(
           (r: any) => r.id === existingItem?.reviewId
         );
-        const targetReview = matchedReviewByFy || matchedExistingReview || activeReview;
+        const matchedReviewByFy = dbHousehold?.reviews?.find(
+          (r: any) => String(r.financialYear) === String(newInsightFy)
+        );
+        const targetReview = matchedExistingReview || matchedReviewByFy || activeReview;
         const targetReviewId = targetReview?.id || existingItem?.reviewId || effectiveReviewId;
 
-        // Ensure review is in IN_PROGRESS so it is not locked by the backend rule
-        if (targetReview?.tchReviewStatus && targetReview.tchReviewStatus !== "IN_PROGRESS") {
-          try {
-            await updateReviewApi(targetReviewId, { tchReviewStatus: "IN_PROGRESS" });
-          } catch (statusErr) {
-            console.warn("Could not set review status to IN_PROGRESS:", statusErr);
-          }
-        }
-
-        await updateInsightApi(targetReviewId, editingInsightId, {
+        const res = await updateInsightApi(targetReviewId, editingInsightId, {
           criterionTitle: newInsightHeading.trim(),
-          screen: screenName,
+          screen: existingItem?.screen || screenName,
           propertyName:
             newInsightProperty || currentProperty?.address || "Portfolio-Wide",
           maintenanceInsight:
@@ -1344,30 +1364,33 @@ interface ReviewPropertyCard {
             `Updated in FY${newInsightFy || reviewYear} review`,
         });
 
+        const finalId = res?.id || editingInsightId;
+        const updatedItem: ReviewInsightItem = {
+          id: finalId,
+          fy: newInsightFy,
+          reviewId: targetReviewId,
+          screen: existingItem?.screen || screenName,
+          property: newInsightProperty,
+          maintenanceInsight:
+            newInsightObservation.slice(0, 36) || "Adviser review",
+          metric: newInsightMetric,
+          heading: newInsightHeading.trim(),
+          insight: newInsightObservation.trim() || "-",
+          recommendation: newInsightRecommendation.trim() || "-",
+          priority: newInsightPriority,
+          owner: newInsightOwner,
+          action: newInsightAction.trim() || "Review",
+          notes: newInsightNotes.trim() || "-",
+        };
+
         setInsights((prev) =>
-          prev.map((i) =>
-            i.id === editingInsightId
-              ? {
-                  ...i,
-                  fy: newInsightFy,
-                  reviewId: targetReviewId,
-                  property: newInsightProperty,
-                  metric: newInsightMetric,
-                  heading: newInsightHeading.trim(),
-                  insight: newInsightObservation.trim() || "-",
-                  recommendation: newInsightRecommendation.trim() || "-",
-                  priority: newInsightPriority,
-                  owner: newInsightOwner,
-                  action: newInsightAction.trim() || "Review",
-                  notes: newInsightNotes.trim() || "-",
-                }
-              : i
-          )
+          prev.map((i) => (i.id === editingInsightId ? updatedItem : i))
         );
+        setEditingInsightId(finalId);
 
         await onDataChanged?.();
         setInsightSaveMsg("Insight updated successfully!");
-        setTimeout(() => setInsightSaveMsg(""), 2500);
+        setTimeout(() => setInsightSaveMsg(""), 3000);
       } else {
         const targetReview =
           dbHousehold?.reviews?.find(
@@ -2342,39 +2365,48 @@ interface ReviewPropertyCard {
         </button>
 
         {isStatusMenuOpen && (
-          <div className="absolute right-0 mt-1.5 w-[220px] bg-white rounded-[10px] shadow-lg border border-[#E2E8F0] p-1.5 z-50 animate-in fade-in zoom-in-95">
-            <button
-              type="button"
-              onClick={() => handleSetStatus("In Progress")}
-              className={`w-full flex items-center justify-between px-3 py-2 text-[12.5px] rounded-[6px] font-medium transition-colors cursor-pointer ${
-                !isCompleted
-                  ? "bg-[rgba(246,231,179,0.35)] text-[#d79730]"
-                  : "text-[#475569] hover:bg-[#F8FAFC]"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-[#d79730]" />
-                <span>Review In Progress</span>
+          <>
+            <div
+              className="fixed inset-0 z-40"
+              onClick={() => setIsStatusMenuOpen(false)}
+            />
+            <div className="absolute right-0 mt-1.5 w-[225px] bg-white rounded-[10px] shadow-2xl border border-[#CBD5E1] p-1.5 z-50 animate-in fade-in zoom-in-95">
+              <div className="px-2 py-1 text-[11px] font-semibold text-[#8C9BA8] uppercase border-b border-[#F1F5F9] mb-1">
+                Set Review Status
               </div>
-              {!isCompleted && <Check className="w-3.5 h-3.5 text-[#d79730]" />}
-            </button>
+              <button
+                type="button"
+                onClick={() => handleSetStatus("In Progress")}
+                className={`w-full flex items-center justify-between px-3 py-2 text-[12.5px] rounded-[6px] font-medium transition-colors cursor-pointer ${
+                  !isCompleted
+                    ? "bg-[rgba(246,231,179,0.35)] text-[#d79730]"
+                    : "text-[#475569] hover:bg-[#F8FAFC]"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-[#d79730]" />
+                  <span>Review In Progress</span>
+                </div>
+                {!isCompleted && <Check className="w-3.5 h-3.5 text-[#d79730]" />}
+              </button>
 
-            <button
-              type="button"
-              onClick={() => handleSetStatus("Completed")}
-              className={`w-full flex items-center justify-between px-3 py-2 text-[12.5px] rounded-[6px] font-medium transition-colors cursor-pointer mt-1 ${
-                isCompleted
-                  ? "bg-[#EBF7EE] text-[#18794E]"
-                  : "text-[#475569] hover:bg-[#F8FAFC]"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-[#18794E]" />
-                <span>Completed</span>
-              </div>
-              {isCompleted && <Check className="w-3.5 h-3.5 text-[#18794E]" />}
-            </button>
-          </div>
+              <button
+                type="button"
+                onClick={() => handleSetStatus("Completed")}
+                className={`w-full flex items-center justify-between px-3 py-2 text-[12.5px] rounded-[6px] font-medium transition-colors cursor-pointer mt-1 ${
+                  isCompleted
+                    ? "bg-[#EBF7EE] text-[#18794E]"
+                    : "text-[#475569] hover:bg-[#F8FAFC]"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-[#18794E]" />
+                  <span className="font-semibold">Set as &quot;Completed&quot;</span>
+                </div>
+                {isCompleted && <Check className="w-3.5 h-3.5 text-[#18794E]" />}
+              </button>
+            </div>
+          </>
         )}
       </div>
     );
@@ -2550,25 +2582,44 @@ interface ReviewPropertyCard {
                     <button
                       type="button"
                       onClick={() => setIsEditingVerdict(!isEditingVerdict)}
-                      className="p-1 text-[#6b6b6b] hover:text-[#0e2841] transition-colors cursor-pointer"
+                      className="p-1 text-[#6b6b6b] hover:text-[#0e2841] transition-colors cursor-pointer flex items-center gap-1 text-[12px]"
                       title="Edit Verdict"
                     >
-                      <Pencil className="w-4 h-4" />
+                      <Pencil className="w-3.5 h-3.5" />
+                      <span>{isEditingVerdict ? "Done" : "Edit"}</span>
                     </button>
                   )}
                 </div>
                 {canEdit && (isEditingVerdict || isEditingAllExec) ? (
-                  <textarea
-                    rows={4}
-                    value={verdictText}
-                    onChange={(e) => setVerdictText(e.target.value)}
-                    onBlur={() => {
-                      setIsEditingVerdict(false);
-                      persistReviewField({ verdictText });
-                    }}
-                    className="w-full bg-white border border-[#0e2841] rounded-[8px] p-3 text-[13.5px] leading-[22px] text-[#1a1c1e] focus:outline-none"
-                    placeholder="Enter CEO / Lead Adviser verdict..."
-                  />
+                  <div className="space-y-2">
+                    <textarea
+                      rows={4}
+                      value={verdictText}
+                      onChange={(e) => setVerdictText(e.target.value)}
+                      className="w-full bg-white border border-[#0e2841] rounded-[8px] p-3 text-[13.5px] leading-[22px] text-[#1a1c1e] focus:outline-none"
+                      placeholder="Enter CEO / Lead Adviser verdict..."
+                    />
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingVerdict(false)}
+                        className="px-2.5 py-1 text-[12px] text-[#64748B] hover:text-[#0e2841] cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await persistReviewField({ verdictText });
+                          setIsEditingVerdict(false);
+                        }}
+                        className="px-3.5 py-1.5 bg-[#0e2841] hover:bg-[#163859] text-white rounded-[6px] text-[12px] font-medium cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Save Verdict</span>
+                      </button>
+                    </div>
+                  </div>
                 ) : (
                   <p
                     onClick={() => canEdit && setIsEditingVerdict(true)}
@@ -2592,25 +2643,44 @@ interface ReviewPropertyCard {
                     <button
                       type="button"
                       onClick={() => setIsEditingObjective(!isEditingObjective)}
-                      className="p-1 text-[#6b6b6b] hover:text-[#0e2841] transition-colors cursor-pointer"
+                      className="p-1 text-[#6b6b6b] hover:text-[#0e2841] transition-colors cursor-pointer flex items-center gap-1 text-[12px]"
                       title="Edit Objective"
                     >
-                      <Pencil className="w-4 h-4" />
+                      <Pencil className="w-3.5 h-3.5" />
+                      <span>{isEditingObjective ? "Done" : "Edit"}</span>
                     </button>
                   )}
                 </div>
                 {canEdit && (isEditingObjective || isEditingAllExec) ? (
-                  <textarea
-                    rows={4}
-                    value={objectiveText}
-                    onChange={(e) => setObjectiveText(e.target.value)}
-                    onBlur={() => {
-                      setIsEditingObjective(false);
-                      persistReviewField({ objectiveText });
-                    }}
-                    className="w-full bg-white border border-[#0e2841] rounded-[8px] p-3 text-[13.5px] leading-[22px] text-[#1a1c1e] focus:outline-none"
-                    placeholder="Enter objective..."
-                  />
+                  <div className="space-y-2">
+                    <textarea
+                      rows={4}
+                      value={objectiveText}
+                      onChange={(e) => setObjectiveText(e.target.value)}
+                      className="w-full bg-white border border-[#0e2841] rounded-[8px] p-3 text-[13.5px] leading-[22px] text-[#1a1c1e] focus:outline-none"
+                      placeholder="Enter objective..."
+                    />
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingObjective(false)}
+                        className="px-2.5 py-1 text-[12px] text-[#64748B] hover:text-[#0e2841] cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await persistReviewField({ objectiveText });
+                          setIsEditingObjective(false);
+                        }}
+                        className="px-3.5 py-1.5 bg-[#0e2841] hover:bg-[#163859] text-white rounded-[6px] text-[12px] font-medium cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Save Objective</span>
+                      </button>
+                    </div>
+                  </div>
                 ) : (
                   <p
                     onClick={() => canEdit && setIsEditingObjective(true)}
@@ -5397,62 +5467,54 @@ interface ReviewPropertyCard {
           <div className="bg-white rounded-[12px] p-[24px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)]">
             {/* Table Header & Filters Toolbar */}
             <div className="flex flex-wrap items-center justify-between gap-y-4 gap-x-6 mb-6">
-              {/* Left: Section Title */}
-              <div className="flex items-center gap-3 shrink-0">
+              {/* Left: Section Title & prominent Filter by Property */}
+              <div className="flex flex-wrap items-center gap-4 shrink-0">
                 <h2 className="text-[18px] font-bold text-[#0e2841] whitespace-nowrap">
                   Property Insights &amp; Recommendations (
                   {filteredInsights.length})
                 </h2>
-                {(propertyFilter !== "All" ||
-                  yearFilter !== "All" ||
-                  priorityFilter !== "All") && (
-                  <span className="text-[11.5px] font-medium text-[#64748B] bg-[#F1F5F9] px-2 py-0.5 rounded-full whitespace-nowrap">
-                    Filtered of {insights.length} total
-                  </span>
-                )}
-              </div>
 
-              {/* Center: Dedicated prominent "Filter by Property" control */}
-              <div className="flex items-center gap-2 bg-[#F8FAFC] border border-[#E2E8F0] px-3 py-1.5 rounded-[10px] shrink-0">
-                <span className="text-[13px] font-bold text-[#0e2841] whitespace-nowrap flex items-center gap-1.5">
-                  <Building2 className="w-4 h-4 text-[#0e2841]" />
-                  Filter by Property:
-                </span>
-                <div className="relative">
-                  <select
-                    value={propertyFilter}
-                    onChange={(e) => setPropertyFilter(e.target.value)}
-                    className={`h-[32px] pl-2.5 pr-7 text-[12.5px] rounded-[6px] border font-medium cursor-pointer transition-colors appearance-none focus:outline-none focus:ring-2 focus:ring-[#0e2841]/20 ${
-                      propertyFilter !== "All"
-                        ? "bg-[#0e2841] text-white border-[#0e2841] font-semibold"
-                        : "bg-white border-[#CBD5E1] text-[#0e2841] hover:border-[#94A3B8]"
-                    }`}
-                  >
-                    <option value="All" className="bg-white text-[#0e2841]">
-                      All Properties ({insights.length})
-                    </option>
-                    {availableProperties.map((p) => {
-                      const count = insights.filter(
-                        (i) => i.property === p
-                      ).length;
-                      return (
-                        <option
-                          key={p}
-                          value={p}
-                          className="bg-white text-[#0e2841]"
-                        >
-                          {p} {count > 0 ? `(${count})` : ""}
-                        </option>
-                      );
-                    })}
-                  </select>
-                  <ChevronDown
-                    className={`w-3.5 h-3.5 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none ${
-                      propertyFilter !== "All"
-                        ? "text-white"
-                        : "text-[#64748B]"
-                    }`}
-                  />
+                {/* Filter by Property matching user annotation */}
+                <div className="flex items-center gap-2">
+                  <span className="text-[13.5px] font-bold text-[#DC2626] whitespace-nowrap">
+                    Filter by Property
+                  </span>
+                  <div className="relative">
+                    <select
+                      value={propertyFilter}
+                      onChange={(e) => setPropertyFilter(e.target.value)}
+                      className={`h-[32px] pl-2.5 pr-7 text-[12.5px] rounded-[6px] border font-medium cursor-pointer transition-colors appearance-none focus:outline-none focus:ring-2 focus:ring-[#0e2841]/20 ${
+                        propertyFilter !== "All"
+                          ? "bg-[#0e2841] text-white border-[#0e2841] font-semibold"
+                          : "bg-white border-[#CBD5E1] text-[#0e2841] hover:border-[#94A3B8]"
+                      }`}
+                    >
+                      <option value="All" className="bg-white text-[#0e2841]">
+                        All Properties ({insights.length})
+                      </option>
+                      {availableProperties.map((p) => {
+                        const count = insights.filter(
+                          (i) => i.property === p
+                        ).length;
+                        return (
+                          <option
+                            key={p}
+                            value={p}
+                            className="bg-white text-[#0e2841]"
+                          >
+                            {p} {count > 0 ? `(${count})` : ""}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    <ChevronDown
+                      className={`w-3.5 h-3.5 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none ${
+                        propertyFilter !== "All"
+                          ? "text-white"
+                          : "text-[#64748B]"
+                      }`}
+                    />
+                  </div>
                 </div>
 
                 {/* Companion Year filter */}
@@ -5778,17 +5840,9 @@ interface ReviewPropertyCard {
                     filteredInsights.map((item) => (
                       <tr
                         key={item.id}
-                        onClick={() => canEdit && handleSelectRow(item)}
-                        className={`transition-colors ${
-                          canEdit
-                            ? "hover:bg-[#F4F7FA] cursor-pointer group"
-                            : "hover:bg-[#F8FAFC]"
-                        }`}
-                        title={
-                          canEdit
-                            ? "Click to review / edit this insight"
-                            : undefined
-                        }
+                        onClick={() => handleSelectRow(item)}
+                        className="transition-colors hover:bg-[#F4F7FA] cursor-pointer group"
+                        title="Click to review / edit this insight in popup"
                       >
                         <td className="py-3.5 px-3 font-medium text-[#0e2841] whitespace-nowrap">
                           {item.fy}
@@ -5820,8 +5874,18 @@ interface ReviewPropertyCard {
                         >
                           {item.recommendation}
                         </td>
-                        <td className="py-3.5 px-3 font-semibold text-[#1A1C1E] whitespace-nowrap text-[13.5px]">
-                          {item.priority}
+                        <td className="py-3.5 px-3 whitespace-nowrap">
+                          <span
+                            className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-[12px] font-semibold ${
+                              item.priority === "High"
+                                ? "bg-[#FDF2F2] text-[#DC2626] border border-[#FCA5A5]"
+                                : item.priority === "Medium"
+                                ? "bg-[#FEF9E7] text-[#B45309] border border-[#FDE68A]"
+                                : "bg-[#EFF6FF] text-[#1D4ED8] border border-[#BFDBFE]"
+                            }`}
+                          >
+                            {item.priority}
+                          </span>
                         </td>
                         <td className="py-3.5 px-3 whitespace-nowrap text-[#475569]">
                           {item.owner}
@@ -5850,28 +5914,28 @@ interface ReviewPropertyCard {
           <div className="bg-white rounded-[16px] w-full max-w-[620px] shadow-2xl relative my-auto flex flex-col max-h-[calc(100vh-2rem)] animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
             {/* Header with Navigation Arrows to scroll forward and back across recorded insights */}
             <div className="shrink-0 p-4 sm:p-5 pb-3 border-b border-[#F0F1F3] flex items-center justify-between bg-white">
-              {/* Left Arrow (Previous recorded insight) */}
+              {/* Left Arrow (Previous recorded insight) - Orange accented per user mockup */}
               <div className="flex items-center gap-1.5 sm:gap-2">
                 <button
                   type="button"
                   onClick={handlePrevInsight}
                   disabled={!hasPrevInsight}
-                  className="w-[34px] h-[34px] rounded-full bg-[#f0f4f8] text-[#0e2841] hover:bg-[#e2eaf0] disabled:opacity-25 disabled:cursor-not-allowed flex items-center justify-center transition-colors cursor-pointer shadow-2xs"
+                  className="w-[36px] h-[36px] rounded-full bg-[#FFF7ED] border border-[#F97316] text-[#EA580C] hover:bg-[#FFEDD5] disabled:opacity-20 disabled:cursor-not-allowed flex items-center justify-center transition-colors cursor-pointer shadow-xs active:scale-95"
                   title={
                     hasPrevInsight
                       ? isNewInsightMode
                         ? "Back to last recorded insight"
-                        : "Previous recorded insight"
+                        : "Previous recorded insight (← Arrow Left)"
                       : "No previous insight"
                   }
                 >
-                  <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <ChevronLeft className="w-5 h-5 stroke-[2.5]" />
                 </button>
                 {filteredInsights.length > 0 && (
-                  <span className="text-[11.5px] font-medium text-[#64748B] hidden sm:inline">
+                  <span className="text-[12px] font-bold text-[#EA580C] bg-[#FFF7ED] px-2 py-0.5 rounded-full border border-[#FED7AA] hidden sm:inline">
                     {isNewInsightMode
                       ? "New"
-                      : `${currentInsightIndex + 1}/${filteredInsights.length}`}
+                      : `${currentInsightIndex + 1} of ${filteredInsights.length}`}
                   </span>
                 )}
               </div>
@@ -5914,27 +5978,27 @@ interface ReviewPropertyCard {
                 </div>
               </div>
 
-              {/* Right Arrow (Next recorded insight / New) & Close Button */}
+              {/* Right Arrow (Next recorded insight / New) - Orange accented per user mockup & Close Button */}
               <div className="flex items-center gap-1.5 sm:gap-2">
                 <button
                   type="button"
                   onClick={handleNextInsight}
                   disabled={!hasNextInsight && !(!isNewInsightMode && currentInsightIndex === filteredInsights.length - 1)}
-                  className="w-[34px] h-[34px] rounded-full bg-[#f0f4f8] text-[#0e2841] hover:bg-[#e2eaf0] disabled:opacity-25 disabled:cursor-not-allowed flex items-center justify-center transition-colors cursor-pointer shadow-2xs"
+                  className="w-[36px] h-[36px] rounded-full bg-[#FFF7ED] border border-[#F97316] text-[#EA580C] hover:bg-[#FFEDD5] disabled:opacity-20 disabled:cursor-not-allowed flex items-center justify-center transition-colors cursor-pointer shadow-xs active:scale-95"
                   title={
                     currentInsightIndex < filteredInsights.length - 1
-                      ? "Next recorded insight"
+                      ? "Next recorded insight (→ Arrow Right)"
                       : currentInsightIndex === filteredInsights.length - 1
                       ? "Go to new insight form"
                       : "At latest entry"
                   }
                 >
-                  <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <ChevronRight className="w-5 h-5 stroke-[2.5]" />
                 </button>
                 <button
                   type="button"
                   onClick={() => setIsAddInsightOpen(false)}
-                  className="w-[34px] h-[34px] rounded-full bg-[#0e2841] text-white flex items-center justify-center hover:bg-[#163859] transition-colors cursor-pointer shadow-2xs"
+                  className="w-[34px] h-[34px] rounded-full bg-[#0e2841] text-white flex items-center justify-center hover:bg-[#163859] transition-colors cursor-pointer shadow-2xs ml-1"
                   title="Close"
                 >
                   <X className="w-4 h-4" />
@@ -6279,22 +6343,28 @@ interface ReviewPropertyCard {
                       + New Insight
                     </button>
                   )}
-                  <button
-                    type="submit"
-                    disabled={isSubmittingInsight}
-                    className="bg-[#0e2841] hover:bg-[#163859] disabled:opacity-50 disabled:cursor-not-allowed text-white h-[38px] px-6 rounded-[8px] text-[13px] font-medium transition-colors cursor-pointer shadow-xs flex items-center gap-2"
-                  >
-                    {isSubmittingInsight ? (
-                      <>
-                        <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        <span>Updating...</span>
-                      </>
-                    ) : (
-                      <span>
-                        {editingInsightId ? "Update Insight" : "Save Insight"}
-                      </span>
-                    )}
-                  </button>
+                  {canEdit ? (
+                    <button
+                      type="submit"
+                      disabled={isSubmittingInsight}
+                      className="bg-[#0e2841] hover:bg-[#163859] disabled:opacity-50 disabled:cursor-not-allowed text-white h-[38px] px-6 rounded-[8px] text-[13px] font-medium transition-colors cursor-pointer shadow-xs flex items-center gap-2"
+                    >
+                      {isSubmittingInsight ? (
+                        <>
+                          <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          <span>Updating...</span>
+                        </>
+                      ) : (
+                        <span>
+                          {editingInsightId ? "Update Insight" : "Save Insight"}
+                        </span>
+                      )}
+                    </button>
+                  ) : (
+                    <span className="text-[12px] text-[#64748B] italic px-2">
+                      Read-only report mode
+                    </span>
+                  )}
                 </div>
               </div>
             </form>

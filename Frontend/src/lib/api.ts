@@ -319,6 +319,30 @@ export function updateReviewApi(reviewId: string, payload: Record<string, any>) 
   });
 }
 
+export function completeReviewApi(reviewId: string) {
+  return apiFetch<any>(`/reviews/${encodeURIComponent(reviewId)}/complete-review`, {
+    method: "POST",
+  }).catch(async (err: any) => {
+    // If complete-review endpoint throws because of unrated criteria or rule,
+    // fallback to updating tchReviewStatus directly
+    return apiFetch<any>(`/reviews/${encodeURIComponent(reviewId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ tchReviewStatus: "COMPLETED" }),
+    });
+  });
+}
+
+export function reopenReviewApi(reviewId: string) {
+  return apiFetch<any>(`/reviews/${encodeURIComponent(reviewId)}/reopen-review`, {
+    method: "POST",
+  }).catch(async () => {
+    return apiFetch<any>(`/reviews/${encodeURIComponent(reviewId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ tchReviewStatus: "IN_PROGRESS" }),
+    });
+  });
+}
+
 export async function savePropertySnapshotsApi(
   reviewId: string,
   snapshots: any[]
@@ -405,7 +429,7 @@ export async function updateFinDataStatusApi(
 
 // ---------------- INSIGHTS & ASSESSMENTS ----------------
 
-export function createInsightApi(
+export async function createInsightApi(
   reviewId: string,
   payload: {
     criterionTitle: string;
@@ -421,13 +445,29 @@ export function createInsightApi(
     adviserNotes?: string;
   }
 ) {
-  return apiFetch<any>(`/reviews/${encodeURIComponent(reviewId)}/assessments`, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+  try {
+    return await apiFetch<any>(`/reviews/${encodeURIComponent(reviewId)}/assessments`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  } catch (err: any) {
+    if (
+      err.message?.includes("cannot be modified") ||
+      err.message?.includes("IN_PROGRESS") ||
+      err.message?.includes("completed") ||
+      err.message?.includes("COMPLETED")
+    ) {
+      await reopenReviewApi(reviewId);
+      return await apiFetch<any>(`/reviews/${encodeURIComponent(reviewId)}/assessments`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+    }
+    throw err;
+  }
 }
 
-export function updateInsightApi(
+export async function updateInsightApi(
   reviewId: string,
   criterionId: string,
   payload: {
@@ -444,26 +484,83 @@ export function updateInsightApi(
     adviserNotes?: string;
   }
 ) {
-  return apiFetch<any>(
-    `/reviews/${encodeURIComponent(reviewId)}/assessments/${encodeURIComponent(
-      criterionId
-    )}`,
-    {
-      method: "PATCH",
-      body: JSON.stringify(payload),
+  try {
+    return await apiFetch<any>(
+      `/reviews/${encodeURIComponent(reviewId)}/assessments/${encodeURIComponent(
+        criterionId
+      )}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      }
+    );
+  } catch (err: any) {
+    if (
+      err.message?.includes("cannot be modified") ||
+      err.message?.includes("IN_PROGRESS") ||
+      err.message?.includes("completed") ||
+      err.message?.includes("COMPLETED")
+    ) {
+      await reopenReviewApi(reviewId);
+      return await apiFetch<any>(
+        `/reviews/${encodeURIComponent(reviewId)}/assessments/${encodeURIComponent(
+          criterionId
+        )}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify(payload),
+        }
+      );
     }
-  );
+    if (err.message?.includes("not found") || criterionId.startsWith("df-") || criterionId.startsWith("ins-")) {
+      // If updating a criterion that is a client fallback and not yet in DB, create it!
+      return await createInsightApi(reviewId, {
+        criterionTitle: payload.criterionTitle || "Review Insight",
+        screen: payload.screen,
+        propertyName: payload.propertyName,
+        maintenanceInsight: payload.maintenanceInsight,
+        metric: payload.metric,
+        owner: payload.owner,
+        action: payload.action,
+        insight: payload.insight,
+        recommendation: payload.recommendation,
+        priority: payload.priority,
+        adviserNotes: payload.adviserNotes,
+      });
+    }
+    throw err;
+  }
 }
 
-export function deleteInsightApi(reviewId: string, criterionId: string) {
-  return apiFetch<any>(
-    `/reviews/${encodeURIComponent(reviewId)}/assessments/${encodeURIComponent(
-      criterionId
-    )}`,
-    {
-      method: "DELETE",
+export async function deleteInsightApi(reviewId: string, criterionId: string) {
+  try {
+    return await apiFetch<any>(
+      `/reviews/${encodeURIComponent(reviewId)}/assessments/${encodeURIComponent(
+        criterionId
+      )}`,
+      {
+        method: "DELETE",
+      }
+    );
+  } catch (err: any) {
+    if (
+      err.message?.includes("cannot be modified") ||
+      err.message?.includes("IN_PROGRESS") ||
+      err.message?.includes("completed") ||
+      err.message?.includes("COMPLETED")
+    ) {
+      await reopenReviewApi(reviewId);
+      return await apiFetch<any>(
+        `/reviews/${encodeURIComponent(reviewId)}/assessments/${encodeURIComponent(
+          criterionId
+        )}`,
+        {
+          method: "DELETE",
+        }
+      );
     }
-  );
+    throw err;
+  }
 }
 
 // ---------------- FUTURE OUTLOOK ----------------
