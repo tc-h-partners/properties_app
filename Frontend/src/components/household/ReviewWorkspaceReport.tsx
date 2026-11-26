@@ -5169,13 +5169,22 @@ interface ReviewPropertyCard {
       {/* TAB 4: INTERACTIVE FUTURE OUTLOOK                                 */}
       {/* ================================================================= */}
       {activeTab === "future-outlook" && (
-        <div className="space-y-6 pt-2 font-[Inter,sans-serif]">
+        <div className="space-y-4 pt-2 font-['Inter',sans-serif]">
           {/* Top Subheader: Title on Left, 4 Scenario Controls on Right */}
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="w-[42px] h-[42px] rounded-[10px] bg-[#E0F2FE] flex items-center justify-center text-[#0284C7] shrink-0">
-                <BarChart3 className="w-5 h-5 text-[#0284C7]" />
-              </div>
+              {/* Bare 3-bar chart icon directly next to title (no background box) */}
+              <svg
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                className="shrink-0 text-[#0E2841]"
+              >
+                <rect x="2" y="13" width="4.5" height="9" rx="1.5" fill="#0E2841" />
+                <rect x="9.75" y="8" width="4.5" height="14" rx="1.5" fill="#0E2841" />
+                <rect x="17.5" y="3" width="4.5" height="19" rx="1.5" fill="#0E2841" />
+              </svg>
               <div>
                 <h2 className="font-['Poppins',sans-serif] text-[20px] font-bold text-[#0E2841] leading-tight">
                   Future Outlook
@@ -5198,7 +5207,7 @@ interface ReviewPropertyCard {
                 }`}
               >
                 <span
-                  className={`block text-[10.5px] uppercase tracking-wider font-semibold ${
+                  className={`block text-[10px] uppercase tracking-wider font-semibold ${
                     activeScenario === "a" ? "text-white/80" : "text-[#64748B]"
                   }`}
                 >
@@ -5220,7 +5229,7 @@ interface ReviewPropertyCard {
                 }`}
               >
                 <span
-                  className={`block text-[10.5px] uppercase tracking-wider font-semibold ${
+                  className={`block text-[10px] uppercase tracking-wider font-semibold ${
                     activeScenario === "b" ? "text-white/80" : "text-[#64748B]"
                   }`}
                 >
@@ -5233,7 +5242,7 @@ interface ReviewPropertyCard {
 
               {/* Card 3: What if surplus */}
               <div className="px-4 py-2 rounded-[10px] bg-[#ECFDF5] border border-[#A7F3D0] text-left">
-                <span className="block text-[10.5px] font-semibold text-[#059669]">
+                <span className="block text-[10px] font-semibold text-[#059669]">
                   What if surplus
                 </span>
                 <span className="block text-[15px] font-extrabold text-[#059669] mt-0.5">
@@ -5255,32 +5264,32 @@ interface ReviewPropertyCard {
           </div>
 
           {/* Performance vs Assumptions Banner */}
-          <div className="bg-white border border-[#E2E8F0] rounded-[14px] p-4 shadow-2xs">
+          <div className="bg-white border border-[#E2E8F0] rounded-[14px] p-3.5 shadow-2xs">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
               {/* Col 1 */}
               <div>
-                <h3 className="font-['Poppins',sans-serif] text-[14px] font-bold text-[#0E2841] leading-tight">
+                <h3 className="font-['Poppins',sans-serif] text-[13.5px] font-bold text-[#0E2841] leading-tight">
                   Current Client Portfolio
                 </h3>
-                <p className="text-[12px] text-[#64748B] mt-0.5">
+                <p className="text-[11.5px] text-[#64748B] mt-0.5">
                   Performance (vs Assumptions)
                 </p>
               </div>
 
               {/* Col 2: Home Value Growth */}
-              <div className="flex items-center gap-3">
-                <div className="w-[36px] h-[36px] rounded-[8px] bg-[#F0F6FA] flex items-center justify-center text-[#0E2841] shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-[34px] h-[34px] rounded-[8px] border border-[#E2E8F0] bg-white flex items-center justify-center text-[#0E2841] shrink-0">
                   <Home className="w-4 h-4 text-[#0E2841]" />
                 </div>
                 <div>
-                  <span className="block text-[12.5px] font-semibold text-[#0E2841]">
+                  <span className="block text-[12px] font-semibold text-[#0E2841]">
                     Home Value Growth (CAGR)
                   </span>
-                  <div className="flex items-center gap-1.5 text-[11px] text-[#64748B] mt-0.5">
+                  <div className="flex items-center gap-1 text-[10.5px] text-[#64748B] mt-0.5">
                     <span>Assumption: {activeLevers.homeGrowthRate.toFixed(1)}%</span>
                     <span>|</span>
                     <span>Your Portfolio:</span>
-                    <span className="px-1.5 py-0.2 bg-[#DCFCE7] text-[#15803D] font-bold rounded-[4px] text-[10.5px]">
+                    <span className="px-1.5 py-0.2 bg-[#DCFCE7] text-[#15803D] font-bold rounded-[4px] text-[10px]">
                       {futureOutlookData.clientPortfolioCagr.toFixed(1)}%
                     </span>
                   </div>
@@ -5288,19 +5297,19 @@ interface ReviewPropertyCard {
               </div>
 
               {/* Col 3: Investment Property Growth */}
-              <div className="flex items-center gap-3">
-                <div className="w-[36px] h-[36px] rounded-[8px] bg-[#F0FAF5] flex items-center justify-center text-[#059669] shrink-0">
-                  <Building2 className="w-4 h-4 text-[#059669]" />
+              <div className="flex items-center gap-2.5">
+                <div className="w-[34px] h-[34px] rounded-[8px] border border-[#E2E8F0] bg-white flex items-center justify-center text-[#0E2841] shrink-0">
+                  <Building2 className="w-4 h-4 text-[#0E2841]" />
                 </div>
                 <div>
-                  <span className="block text-[12.5px] font-semibold text-[#0E2841]">
+                  <span className="block text-[12px] font-semibold text-[#0E2841]">
                     Investment Property Growth
                   </span>
-                  <div className="flex items-center gap-1.5 text-[11px] text-[#64748B] mt-0.5">
+                  <div className="flex items-center gap-1 text-[10.5px] text-[#64748B] mt-0.5">
                     <span>Assumption: {activeLevers.invGrowthRate.toFixed(1)}%</span>
                     <span>|</span>
                     <span>Your Portfolio:</span>
-                    <span className="px-1.5 py-0.2 bg-[#DCFCE7] text-[#15803D] font-bold rounded-[4px] text-[10.5px]">
+                    <span className="px-1.5 py-0.2 bg-[#DCFCE7] text-[#15803D] font-bold rounded-[4px] text-[10px]">
                       {(futureOutlookData.clientPortfolioCagr + 2.6).toFixed(1)}%
                     </span>
                   </div>
@@ -5308,19 +5317,31 @@ interface ReviewPropertyCard {
               </div>
 
               {/* Col 4: Investment Return */}
-              <div className="flex items-center gap-3">
-                <div className="w-[36px] h-[36px] rounded-[8px] bg-[#F7F3FF] flex items-center justify-center text-[#7C3AED] shrink-0">
-                  <TrendingUp className="w-4 h-4 text-[#7C3AED]" />
+              <div className="flex items-center gap-2.5">
+                <div className="w-[34px] h-[34px] rounded-[8px] border border-[#E2E8F0] bg-white flex items-center justify-center text-[#0E2841] shrink-0">
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#0E2841"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <circle cx="8" cy="8" r="5" />
+                    <circle cx="16" cy="16" r="5" />
+                  </svg>
                 </div>
                 <div>
-                  <span className="block text-[12.5px] font-semibold text-[#0E2841]">
+                  <span className="block text-[12px] font-semibold text-[#0E2841]">
                     Investment Return
                   </span>
-                  <div className="flex items-center gap-1.5 text-[11px] text-[#64748B] mt-0.5">
+                  <div className="flex items-center gap-1 text-[10.5px] text-[#64748B] mt-0.5">
                     <span>Assumption: {globalAssumptions.investmentReturn.toFixed(1)}%</span>
                     <span>|</span>
                     <span>Your Portfolio:</span>
-                    <span className="px-1.5 py-0.2 bg-[#DCFCE7] text-[#15803D] font-bold rounded-[4px] text-[10.5px]">
+                    <span className="px-1.5 py-0.2 bg-[#DCFCE7] text-[#15803D] font-bold rounded-[4px] text-[10px]">
                       {(globalAssumptions.investmentReturn + 0.3).toFixed(1)}%
                     </span>
                   </div>
@@ -5337,7 +5358,7 @@ interface ReviewPropertyCard {
                 <span className="text-[11.5px] font-medium text-white/70 block">
                   Projected Income – Scenario {activeScenario.toUpperCase()} ({activeScenario === "a" ? "Current Plan" : "What If"})
                 </span>
-                <div className="text-[36px] sm:text-[38px] font-black text-[#FBBF24] tracking-tight leading-tight my-1">
+                <div className="text-[38px] font-black text-[#FBBF24] tracking-tight leading-tight my-1">
                   {fmtMoney(futureOutlookData.projectIncomeTotal)}
                 </div>
                 <p className="text-[11px] text-white/70 leading-snug">
@@ -5423,28 +5444,28 @@ interface ReviewPropertyCard {
                       strokeOpacity="0.8"
                     />
 
-                    {/* 3 Glowing Spline Curves */}
-                    {/* Home Equity Curve (Teal) */}
+                    {/* 3 Spline Curves matching screenshot: Top=Teal ($7.33M), Middle=Amber ($4.22M), Bottom=Purple ($1.24M) */}
+                    {/* Top Curve (Teal #2DD4BF) */}
                     <path
-                      d={futureOutlookData.pathHome}
+                      d={futureOutlookData.pathInv}
                       fill="none"
                       stroke="#2DD4BF"
                       strokeWidth="2.5"
                       strokeLinecap="round"
                     />
 
-                    {/* Investment Net Equity Curve (Amber) */}
+                    {/* Middle Curve (Amber #F59E0B) */}
                     <path
-                      d={futureOutlookData.pathInv}
+                      d={futureOutlookData.pathSuper}
                       fill="none"
                       stroke="#F59E0B"
                       strokeWidth="2.5"
                       strokeLinecap="round"
                     />
 
-                    {/* Superannuation Curve (Purple) */}
+                    {/* Bottom Curve (Purple #C084FC) */}
                     <path
-                      d={futureOutlookData.pathSuper}
+                      d={futureOutlookData.pathHome}
                       fill="none"
                       stroke="#C084FC"
                       strokeWidth="2.5"
@@ -5463,12 +5484,12 @@ interface ReviewPropertyCard {
                       strokeOpacity="0.6"
                     />
 
-                    {/* Marker Dots on Curves at horizon */}
+                    {/* Marker Dots on Curves at horizon: Top=Teal, Middle=Amber, Bottom=Purple */}
                     <circle
                       cx={futureOutlookData.markerX}
                       cy={futureOutlookData.markerYInv}
                       r="4.5"
-                      fill="#F59E0B"
+                      fill="#2DD4BF"
                       stroke="#0B1E33"
                       strokeWidth="2"
                     />
@@ -5476,7 +5497,7 @@ interface ReviewPropertyCard {
                       cx={futureOutlookData.markerX}
                       cy={futureOutlookData.markerYSuper}
                       r="4.5"
-                      fill="#C084FC"
+                      fill="#F59E0B"
                       stroke="#0B1E33"
                       strokeWidth="2"
                     />
@@ -5484,7 +5505,7 @@ interface ReviewPropertyCard {
                       cx={futureOutlookData.markerX}
                       cy={futureOutlookData.markerYHome}
                       r="4.5"
-                      fill="#2DD4BF"
+                      fill="#C084FC"
                       stroke="#0B1E33"
                       strokeWidth="2"
                     />
@@ -5513,13 +5534,13 @@ interface ReviewPropertyCard {
                 </div>
               </div>
 
-              {/* Bottom Sliders inside Dark Navy Card */}
-              <div className="space-y-3.5 pt-4 border-t border-white/10 mt-2">
+              {/* Bottom 2 Sliders inside Dark Navy Card — SIDE BY SIDE in 2 columns */}
+              <div className="grid grid-cols-2 gap-4 items-end mt-4 pt-3 border-t border-white/10">
                 {/* Slider 1: Years Until Retirement */}
                 <div>
-                  <div className="flex items-center justify-between text-[12px] font-medium text-white/90 mb-1">
+                  <div className="flex items-center justify-between text-[11px] font-medium text-white/80 mb-1.5">
                     <span>Years Until Retirement</span>
-                    <span className="font-bold text-white">
+                    <span className="font-bold text-white text-[13px]">
                       {activeLevers.forecastHorizon} Years
                     </span>
                   </div>
@@ -5532,15 +5553,22 @@ interface ReviewPropertyCard {
                     onChange={(e) =>
                       updateActiveLever("forecastHorizon", Number(e.target.value))
                     }
-                    className="w-full h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer accent-[#38BDF8]"
+                    style={{
+                      background: `linear-gradient(to right, #2DD4BF 0%, #2DD4BF ${
+                        ((activeLevers.forecastHorizon - 5) / 30) * 100
+                      }%, rgba(255,255,255,0.2) ${
+                        ((activeLevers.forecastHorizon - 5) / 30) * 100
+                      }%, rgba(255,255,255,0.2) 100%)`,
+                    }}
+                    className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#2DD4BF]"
                   />
                 </div>
 
                 {/* Slider 2: Income Goal (p.a.) */}
                 <div>
-                  <div className="flex items-center justify-between text-[12px] font-medium text-white/90 mb-1">
+                  <div className="flex items-center justify-between text-[11px] font-medium text-white/80 mb-1.5">
                     <span>Income Goal (p.a.)</span>
-                    <span className="font-bold text-white">
+                    <span className="font-bold text-white text-[13px]">
                       {fmtMoney(activeLevers.incomeGoal)}
                     </span>
                   </div>
@@ -5553,7 +5581,14 @@ interface ReviewPropertyCard {
                     onChange={(e) =>
                       updateActiveLever("incomeGoal", Number(e.target.value))
                     }
-                    className="w-full h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer accent-[#38BDF8]"
+                    style={{
+                      background: `linear-gradient(to right, #2DD4BF 0%, #2DD4BF ${
+                        ((activeLevers.incomeGoal - 20000) / 180000) * 100
+                      }%, rgba(255,255,255,0.2) ${
+                        ((activeLevers.incomeGoal - 20000) / 180000) * 100
+                      }%, rgba(255,255,255,0.2) 100%)`,
+                    }}
+                    className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#2DD4BF]"
                   />
                 </div>
               </div>
@@ -5565,7 +5600,7 @@ interface ReviewPropertyCard {
               <div className="bg-[#F0F6FA] rounded-[14px] p-4 border border-[#DCE7F0] shadow-2xs">
                 <div className="flex items-start justify-between pb-1.5">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-[34px] h-[34px] rounded-[8px] bg-[#0E2841] flex items-center justify-center text-white shrink-0">
+                    <div className="w-[36px] h-[36px] rounded-[8px] bg-[#0E2841] flex items-center justify-center text-white shrink-0">
                       <Home className="w-4 h-4 text-white" />
                     </div>
                     <div>
@@ -5581,7 +5616,7 @@ interface ReviewPropertyCard {
                     <span className="block text-[10px] font-medium text-[#64748B]">
                       Projected Value – FY{targetYear}
                     </span>
-                    <span className="block text-[18px] font-extrabold text-[#0E2841]">
+                    <span className="block text-[19px] font-extrabold text-[#0E2841]">
                       {fmtMillions(futureOutlookData.projectedHomeVal)}
                     </span>
                   </div>
@@ -5605,7 +5640,12 @@ interface ReviewPropertyCard {
                       onChange={(e) =>
                         updateActiveLever("homeGrowthRate", parseFloat(e.target.value))
                       }
-                      className="w-full h-1.5 bg-[#CBD5E1] rounded-lg appearance-none cursor-pointer accent-[#0E2841]"
+                      style={{
+                        background: `linear-gradient(to right, #0E2841 0%, #0E2841 ${
+                          (activeLevers.homeGrowthRate / 10) * 100
+                        }%, #CBD5E1 ${(activeLevers.homeGrowthRate / 10) * 100}%, #CBD5E1 100%)`,
+                      }}
+                      className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#0E2841]"
                     />
                   </div>
 
@@ -5626,7 +5666,14 @@ interface ReviewPropertyCard {
                       onChange={(e) =>
                         updateActiveLever("homeExtraRepayment", Number(e.target.value))
                       }
-                      className="w-full h-1.5 bg-[#CBD5E1] rounded-lg appearance-none cursor-pointer accent-[#0E2841]"
+                      style={{
+                        background: `linear-gradient(to right, #0E2841 0%, #0E2841 ${
+                          (activeLevers.homeExtraRepayment / 5000) * 100
+                        }%, #CBD5E1 ${
+                          (activeLevers.homeExtraRepayment / 5000) * 100
+                        }%, #CBD5E1 100%)`,
+                      }}
+                      className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#0E2841]"
                     />
                   </div>
 
@@ -5655,7 +5702,22 @@ interface ReviewPropertyCard {
                       onChange={(e) =>
                         updateActiveLever("homeDownsizerPrice", Number(e.target.value))
                       }
-                      className="w-full h-1.5 bg-[#CBD5E1] rounded-lg appearance-none cursor-pointer accent-[#0E2841]"
+                      style={{
+                        background: `linear-gradient(to right, #0E2841 0%, #0E2841 ${
+                          ((activeLevers.homeDownsizerPrice <= 1000
+                            ? activeLevers.homeDownsizerPrice * 1000
+                            : activeLevers.homeDownsizerPrice) /
+                            1500000) *
+                          100
+                        }%, #CBD5E1 ${
+                          ((activeLevers.homeDownsizerPrice <= 1000
+                            ? activeLevers.homeDownsizerPrice * 1000
+                            : activeLevers.homeDownsizerPrice) /
+                            1500000) *
+                          100
+                        }%, #CBD5E1 100%)`,
+                      }}
+                      className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#0E2841]"
                     />
                   </div>
                 </div>
@@ -5665,7 +5727,7 @@ interface ReviewPropertyCard {
               <div className="bg-[#F0FAF5] rounded-[14px] p-4 border border-[#D1EFE0] shadow-2xs">
                 <div className="flex items-start justify-between pb-1.5">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-[34px] h-[34px] rounded-[8px] bg-[#059669] flex items-center justify-center text-white shrink-0">
+                    <div className="w-[36px] h-[36px] rounded-[8px] bg-[#059669] flex items-center justify-center text-white shrink-0">
                       <Building2 className="w-4 h-4 text-white" />
                     </div>
                     <div>
@@ -5681,7 +5743,7 @@ interface ReviewPropertyCard {
                     <span className="block text-[10px] font-medium text-[#64748B]">
                       Projected Net Equity – FY{targetYear}
                     </span>
-                    <span className="block text-[18px] font-extrabold text-[#059669]">
+                    <span className="block text-[19px] font-extrabold text-[#059669]">
                       {fmtMillions(futureOutlookData.projectedInvEquity)}
                     </span>
                   </div>
@@ -5705,7 +5767,12 @@ interface ReviewPropertyCard {
                       onChange={(e) =>
                         updateActiveLever("invGrowthRate", parseFloat(e.target.value))
                       }
-                      className="w-full h-1.5 bg-[#CBD5E1] rounded-lg appearance-none cursor-pointer accent-[#059669]"
+                      style={{
+                        background: `linear-gradient(to right, #059669 0%, #059669 ${
+                          (activeLevers.invGrowthRate / 12) * 100
+                        }%, #CBD5E1 ${(activeLevers.invGrowthRate / 12) * 100}%, #CBD5E1 100%)`,
+                      }}
+                      className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#059669]"
                     />
                   </div>
 
@@ -5726,7 +5793,14 @@ interface ReviewPropertyCard {
                       onChange={(e) =>
                         updateActiveLever("invExtraRepayment", Number(e.target.value))
                       }
-                      className="w-full h-1.5 bg-[#CBD5E1] rounded-lg appearance-none cursor-pointer accent-[#059669]"
+                      style={{
+                        background: `linear-gradient(to right, #059669 0%, #059669 ${
+                          (activeLevers.invExtraRepayment / 5000) * 100
+                        }%, #CBD5E1 ${
+                          (activeLevers.invExtraRepayment / 5000) * 100
+                        }%, #CBD5E1 100%)`,
+                      }}
+                      className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#059669]"
                     />
                   </div>
 
@@ -5755,7 +5829,7 @@ interface ReviewPropertyCard {
               <div className="bg-[#F7F3FF] rounded-[14px] p-4 border border-[#EAE2FA] shadow-2xs">
                 <div className="flex items-start justify-between pb-1.5">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-[34px] h-[34px] rounded-[8px] bg-[#7C3AED] flex items-center justify-center text-white shrink-0">
+                    <div className="w-[36px] h-[36px] rounded-[8px] bg-[#7C3AED] flex items-center justify-center text-white shrink-0">
                       <PiggyBank className="w-4 h-4 text-white" />
                     </div>
                     <div>
@@ -5771,7 +5845,7 @@ interface ReviewPropertyCard {
                     <span className="block text-[10px] font-medium text-[#64748B]">
                       Projected Balance – FY{targetYear}
                     </span>
-                    <span className="block text-[18px] font-extrabold text-[#7C3AED]">
+                    <span className="block text-[19px] font-extrabold text-[#7C3AED]">
                       {fmtMillions(futureOutlookData.projectedSuperBal)}
                     </span>
                   </div>
@@ -5795,7 +5869,12 @@ interface ReviewPropertyCard {
                       onChange={(e) =>
                         updateActiveLever("superReturnRate", parseFloat(e.target.value))
                       }
-                      className="w-full h-1.5 bg-[#CBD5E1] rounded-lg appearance-none cursor-pointer accent-[#7C3AED]"
+                      style={{
+                        background: `linear-gradient(to right, #7C3AED 0%, #7C3AED ${
+                          (activeLevers.superReturnRate / 12) * 100
+                        }%, #CBD5E1 ${(activeLevers.superReturnRate / 12) * 100}%, #CBD5E1 100%)`,
+                      }}
+                      className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#7C3AED]"
                     />
                   </div>
 
@@ -5816,214 +5895,20 @@ interface ReviewPropertyCard {
                       onChange={(e) =>
                         updateActiveLever("superExtraContrib", Number(e.target.value))
                       }
-                      className="w-full h-1.5 bg-[#CBD5E1] rounded-lg appearance-none cursor-pointer accent-[#7C3AED]"
+                      style={{
+                        background: `linear-gradient(to right, #7C3AED 0%, #7C3AED ${
+                          (activeLevers.superExtraContrib / 5000) * 100
+                        }%, #CBD5E1 ${
+                          (activeLevers.superExtraContrib / 5000) * 100
+                        }%, #CBD5E1 100%)`,
+                      }}
+                      className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#7C3AED]"
                     />
                   </div>
                 </div>
               </div>
             </div>
           </div>
-
-          {/* Section 2: Forecast Results (2046) */}
-          <div className="pt-3">
-            <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-              <div>
-                <h2 className="font-['Poppins',sans-serif] text-[18px] font-bold text-[#0E2841]">
-                  Forecast Results ({targetYear})
-                </h2>
-                <p className="font-['Poppins',sans-serif] text-[13px] text-[#64748B]">
-                  Projected Wealth &amp; Cash Flow Outcomes for {targetYear}
-                </p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-4">
-                <span className="text-[12.5px] text-[#64748B]">
-                  Based on {forecastHorizon}-year compounding model from FY2026
-                </span>
-                {canEdit && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      openAddInsightModal("Portfolio-Wide", "Capital Growth")
-                    }
-                    className="bg-[#0E2841] hover:bg-[#163859] text-white px-4 py-2 rounded-[6px] text-[13px] font-medium transition-colors cursor-pointer"
-                  >
-                    + Add Insight
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* 3 Outcome Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              {/* Card 1: Home — Owner Occupied */}
-              <div className="bg-[#F0F5FA] rounded-[16px] p-6 border border-[#E2E8F0]/40 relative min-h-[280px] flex flex-col justify-between overflow-hidden">
-                <div>
-                  <div className="flex items-center justify-between pb-3.5 border-b border-[#E2E8F0]/50">
-                    <h3 className="font-['Poppins',sans-serif] text-[16px] font-bold text-[#0E2841]">
-                      Home — Owner Occupied
-                    </h3>
-                    <span className="text-[13px] font-medium text-[#64748B]">
-                      {targetYear}
-                    </span>
-                  </div>
-
-                  <div className="mt-4">
-                    <p className="text-[12px] font-medium text-[#64748B]">
-                      {futureOutlookData.downsizerCostToday > 0
-                        ? "Downsized Replacement Home Value"
-                        : "Projected Home Value"}
-                    </p>
-                    <p className="text-[22px] font-bold text-[#0E2841] mt-0.5 mb-1.5">
-                      {fmtMoney(futureOutlookData.finalProjectedHomeVal)}
-                    </p>
-
-                    {futureOutlookData.downsizerCostToday > 0 ? (
-                      <div className="space-y-1 text-[11px] text-[#475569] leading-relaxed max-w-[230px]">
-                        <span className="inline-block bg-[#0E2841]/10 text-[#0E2841] font-semibold px-2 py-0.5 rounded text-[10.5px] mb-1">
-                          Downsizing Plan Active
-                        </span>
-                        <p>
-                          Original Home: {fmtMoney(futureOutlookData.originalHomeVal)}
-                        </p>
-                        <p className="text-[#0E2841] font-medium">
-                          Released Capital: {fmtMoney(futureOutlookData.releasedCapital)} after purchasing replacement home and eliminating mortgage.
-                        </p>
-                      </div>
-                    ) : (
-                      <p className="text-[11.5px] text-[#64748B] leading-relaxed max-w-[210px]">
-                        Owner-occupied home equity compounds tax-free. Home value is kept separate from invested income capital.
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <img
-                  src="/images/future-outlook/house.png"
-                  alt="Home"
-                  className="w-[110px] h-auto object-contain absolute bottom-3 right-3 pointer-events-none opacity-90"
-                />
-              </div>
-
-              {/* Card 2: Invested Capital */}
-              <div className="bg-[#FFF9F2] rounded-[16px] p-6 border border-[#FDE8B5]/40 relative min-h-[280px] flex flex-col justify-between overflow-hidden">
-                <div>
-                  <div className="flex items-center justify-between pb-3.5 border-b border-[#FDE8B5]/60">
-                    <h3 className="font-['Poppins',sans-serif] text-[16px] font-bold text-[#0E2841]">
-                      Invested Capital
-                    </h3>
-                    <span className="text-[13px] font-medium text-[#64748B]">
-                      {targetYear}
-                    </span>
-                  </div>
-
-                  <div className="mt-3.5 space-y-2.5">
-                    <div>
-                      <p className="text-[11.5px] font-medium text-[#64748B]">
-                        Projected After-Tax Income
-                      </p>
-                      <p className="text-[20px] font-bold text-[#0E2841] mt-0.5">
-                        {fmtMoney(futureOutlookData.projectedAfterTaxIncome)}
-                        <span className="text-[13px] font-normal text-[#64748B]">
-                          {" "}
-                          / yr
-                        </span>
-                      </p>
-                      <p className="text-[10px] text-[#94A3B8]">
-                        At {globalAssumptions.investmentReturn}% return less {globalAssumptions.incomeTaxRate}% tax (3.5% net)
-                      </p>
-                    </div>
-
-                    <div className="pt-1.5 border-t border-[#FDE8B5]/60">
-                      <p className="text-[11.5px] font-medium text-[#64748B]">
-                        Projected Invested Capital
-                      </p>
-                      <p className="text-[17px] font-bold text-[#B45309] mt-0.5">
-                        {fmtMoney(futureOutlookData.projectedInvestedCapital)}
-                      </p>
-                      <div className="text-[10.5px] text-[#64748B] leading-tight mt-1 space-y-0.5 max-w-[230px]">
-                        <p>
-                          Net Property Equity: {fmtMoney(futureOutlookData.projectedInvEquity)}
-                        </p>
-                        {futureOutlookData.downsizeToInvestedCapital > 0 && (
-                          <p className="text-[#15803D] font-medium">
-                            + {fmtMoney(futureOutlookData.downsizeToInvestedCapital)} Downsizing Capital
-                          </p>
-                        )}
-                        <p className="text-[#DC2626] font-medium">
-                          - {fmtMoney(futureOutlookData.totalCgt)} Total CGT Deducted
-                        </p>
-                        <p className="text-[9.5px] text-[#94A3B8]">
-                          (Pre-2027: {fmtMoney(futureOutlookData.cgtPre)} @ 50% disc · Post-2027: {fmtMoney(futureOutlookData.cgtPost)} CPI-indexed)
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <img
-                  src="/images/future-outlook/apartment.png"
-                  alt="Investment Properties"
-                  className="w-[95px] h-auto object-contain absolute bottom-3 right-3 pointer-events-none opacity-90"
-                />
-              </div>
-
-              {/* Card 3: Superannuation */}
-              <div className="bg-[#F3EFFD] rounded-[16px] p-6 border border-[#DDD6FE]/40 relative min-h-[280px] flex flex-col justify-between overflow-hidden">
-                <div>
-                  <div className="flex items-center justify-between pb-3.5 border-b border-[#DDD6FE]/60">
-                    <h3 className="font-['Poppins',sans-serif] text-[16px] font-bold text-[#0E2841]">
-                      Superannuation
-                    </h3>
-                    <span className="text-[13px] font-medium text-[#64748B]">
-                      {targetYear}
-                    </span>
-                  </div>
-
-                  <div className="mt-3.5 space-y-2.5">
-                    <div>
-                      <p className="text-[11.5px] font-medium text-[#64748B]">
-                        Projected Super Balance
-                      </p>
-                      <p className="text-[20px] font-bold text-[#0E2841] mt-0.5">
-                        {fmtMoney(futureOutlookData.projectedSuperBal)}
-                      </p>
-                      {futureOutlookData.downsizeToSuper > 0 && (
-                        <p className="text-[10px] text-[#6D28D9] font-semibold mt-0.5">
-                          Includes {fmtMoney(futureOutlookData.downsizeToSuper)} Downsizer contribution ({futureOutlookData.adultCount} adults @ $300k max)
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="pt-1.5 border-t border-[#DDD6FE]/60">
-                      <p className="text-[11.5px] font-medium text-[#64748B]">
-                        Safe Pension Drawdown (5%)
-                      </p>
-                      <p className="text-[17px] font-bold text-[#7C3AED] mt-0.5">
-                        {fmtMoney(futureOutlookData.projectedSuperPensionIncome)}
-                        <span className="text-[12px] font-normal text-[#64748B]">
-                          {" "}
-                          / yr
-                        </span>
-                      </p>
-                      <p className="text-[10.5px] text-[#64748B] leading-relaxed mt-1 max-w-[220px]">
-                        Tax-free pension stream in retirement. Combined with Invested Capital, total passive income is ~{fmtMoney(futureOutlookData.projectedAfterTaxIncome + futureOutlookData.projectedSuperPensionIncome)}/yr.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <img
-                  src="/images/future-outlook/coins.png"
-                  alt="Superannuation"
-                  className="w-[85px] h-auto object-contain absolute bottom-3 right-3 pointer-events-none opacity-90"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Bottom Insights Carousel for Future Outlook */}
-          {renderInsightsCarousel(selectedMetric, "Portfolio-Wide")}
         </div>
       )}
 
