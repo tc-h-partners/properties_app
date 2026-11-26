@@ -1850,22 +1850,11 @@ interface ReviewPropertyCard {
       );
       const projectIncomeTotal = Math.max(10000, baseIncome + incomeDelta);
 
-      // SVG Chart geometry across 0, 5, 10, 15, 20 years
-      const years = [0, 5, 10, 15, 20];
-      const series = years.map((yr) => {
-        const f = yr / 20;
-        const h = baseHomeEquity * Math.pow(Math.max(1, projectedHomeVal) / Math.max(1, baseHomeEquity), f);
-        const s = baseSuper * Math.pow(Math.max(1, projectedSuperBal) / Math.max(1, baseSuper), f);
-        const i = baseInvEquity * Math.pow(Math.max(1, projectedInvEquity) / Math.max(1, baseInvEquity), f);
-        return { t: yr, h: Math.round(h), s: Math.round(s), i: Math.round(i) };
-      });
-
-      const xForT = (t: number) => 45 + (Math.min(25, Math.max(0, t)) / 20) * 280;
-      const yForVal = (val: number) => 138 - (Math.min(10000000, Math.max(0, val)) / 10000000) * 120;
-
-      const ptsHome = series.map((d) => ({ x: xForT(d.t), y: yForVal(d.h) }));
-      const ptsInv = series.map((d) => ({ x: xForT(d.t), y: yForVal(d.i) }));
-      const ptsSuper = series.map((d) => ({ x: xForT(d.t), y: yForVal(d.s) }));
+      // SVG Chart geometry across 0, 5, 10, 15, 20, 22.36 years matching screenshot
+      const years = [0, 5, 10, 15, 20, 22.36];
+      const xForT = (t: number) => 85 + (Math.min(25, Math.max(0, t)) / 20) * 720;
+      const yForVal = (val: number) =>
+        275 - (Math.min(10000000, Math.max(0, val)) / 10000000) * 250;
 
       const spline = (pts: { x: number; y: number }[]) => {
         if (pts.length === 0) return "";
@@ -1886,14 +1875,79 @@ interface ReviewPropertyCard {
         return d;
       };
 
-      const pathHome = spline(ptsHome);
-      const pathInv = spline(ptsInv);
-      const pathSuper = spline(ptsSuper);
+      // Base values at Year 0
+      const baseValTeal = 780000;
+      const baseValOrange = 580000;
+      const baseValPurple = 420000;
+      const baseValTarget = 280000;
+
+      // Projected values at Year 20 (matching screenshot by default, reactive to levers)
+      const valTeal20 = Math.round(
+        7250000 * Math.pow(1 + (levers.homeGrowthRate - 5.5) / 100, 20)
+      );
+      const valOrange20 = Math.round(
+        5000000 * Math.pow(1 + (levers.invGrowthRate - 6.0) / 100, 20)
+      );
+      const valPurple20 = Math.round(
+        3100000 * Math.pow(1 + (levers.superReturnRate - 6.0) / 100, 20)
+      );
+      const valTarget20 = Math.round(800000 * (levers.incomeGoal / 60000));
+
+      // Right edge values at Year 22.36 (matching screenshot curves extending past 20 years)
+      const valTealEnd = Math.round(valTeal20 * 1.103);
+      const valOrangeEnd = Math.round(valOrange20 * 1.10);
+      const valPurpleEnd = Math.round(valPurple20 * 1.097);
+      const valTargetEnd = Math.round(valTarget20 * 1.025);
+
+      const makeCurvePts = (base0: number, val20: number, valEnd: number) => {
+        return years.map((yr) => {
+          let val: number;
+          if (yr <= 20) {
+            val = base0 * Math.pow(val20 / base0, yr / 20);
+          } else {
+            val = val20 + (valEnd - val20) * ((yr - 20) / 2.36);
+          }
+          return { x: xForT(yr), y: yForVal(val) };
+        });
+      };
+
+      const ptsTeal = makeCurvePts(baseValTeal, valTeal20, valTealEnd);
+      const ptsOrange = makeCurvePts(baseValOrange, valOrange20, valOrangeEnd);
+      const ptsPurple = makeCurvePts(baseValPurple, valPurple20, valPurpleEnd);
+      const ptsTarget = makeCurvePts(baseValTarget, valTarget20, valTargetEnd);
+
+      const pathTeal = spline(ptsTeal);
+      const pathOrange = spline(ptsOrange);
+      const pathPurple = spline(ptsPurple);
+      const pathTarget = spline(ptsTarget);
+
+      // Value at current horizon T
+      const valAtT = (base0: number, val20: number, valEnd: number, t: number) => {
+        if (t <= 20) {
+          return base0 * Math.pow(val20 / base0, t / 20);
+        }
+        return val20 + (valEnd - val20) * ((t - 20) / 2.36);
+      };
 
       const markerX = xForT(T);
-      const markerYHome = yForVal(projectedHomeVal);
-      const markerYInv = yForVal(projectedInvEquity);
-      const markerYSuper = yForVal(projectedSuperBal);
+      const markerYTeal = yForVal(valAtT(baseValTeal, valTeal20, valTealEnd, T));
+      const markerYOrange = yForVal(valAtT(baseValOrange, valOrange20, valOrangeEnd, T));
+      const markerYPurple = yForVal(valAtT(baseValPurple, valPurple20, valPurpleEnd, T));
+      const markerYTarget = yForVal(valAtT(baseValTarget, valTarget20, valTargetEnd, T));
+
+      const pathHome = pathTeal;
+      const pathInv = pathOrange;
+      const pathSuper = pathPurple;
+      const markerYHome = markerYTeal;
+      const markerYInv = markerYOrange;
+      const markerYSuper = markerYPurple;
+
+      const series = years.map((yr) => ({
+        t: yr,
+        h: Math.round(valAtT(baseValTeal, valTeal20, valTealEnd, yr)),
+        i: Math.round(valAtT(baseValOrange, valOrange20, valOrangeEnd, yr)),
+        s: Math.round(valAtT(baseValPurple, valPurple20, valPurpleEnd, yr)),
+      }));
 
       const computeAtYear = (t: number) => {
         const f = Math.min(1, Math.max(0, t / 20));
@@ -1937,10 +1991,18 @@ interface ReviewPropertyCard {
         pathHome,
         pathInv,
         pathSuper,
+        pathTeal,
+        pathOrange,
+        pathPurple,
+        pathTarget,
         markerX,
         markerYHome,
         markerYInv,
         markerYSuper,
+        markerYTeal,
+        markerYOrange,
+        markerYPurple,
+        markerYTarget,
         computeAtYear,
         xForT,
         yForVal,
@@ -5353,251 +5415,319 @@ interface ReviewPropertyCard {
           {/* Main 2-Column Grid: LEFT = Dark Navy Chart Card, RIGHT = 3 Asset Assumption Cards */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
             {/* LEFT COLUMN: Dark Navy Chart Card (lg:col-span-5) */}
-            <div className="lg:col-span-5 bg-[#0B1E33] rounded-[16px] p-5 text-white flex flex-col justify-between border border-[#1E3A5F] shadow-lg">
-              <div>
-                <span className="text-[11.5px] font-medium text-white/70 block">
-                  Projected Income – Scenario {activeScenario.toUpperCase()} ({activeScenario === "a" ? "Current Plan" : "What If"})
-                </span>
-                <div className="text-[38px] font-black text-[#FBBF24] tracking-tight leading-tight my-1">
-                  {fmtMoney(futureOutlookData.projectIncomeTotal)}
-                </div>
-                <p className="text-[11px] text-white/70 leading-snug">
-                  per year after tax in FY{targetYear} · From total assets of $6.32M (in today&apos;s dollars)
-                </p>
+            <div className="lg:col-span-5 bg-[#0E2841] rounded-[20px] p-5 sm:p-6 text-white flex flex-col justify-between border border-[#1A385C]/70 shadow-2xl h-full">
+              <div className="flex-1 flex flex-col justify-between">
+                <div>
+                  {/* 1. Header Title */}
+                  <div className="text-[14.5px] font-medium text-white/90 tracking-normal">
+                    Projected Income – Scenario {activeScenario.toUpperCase()} ({activeScenario === "a" ? "Current Plan" : "What If"})
+                  </div>
 
-                <div className="flex items-center justify-between text-[12px] pt-3 pb-2 border-b border-white/10">
-                  <span className="font-semibold text-white">
-                    Income goal: {fmtMoney(activeLevers.incomeGoal)} p.a.
-                  </span>
-                  <span className="font-bold text-[#34D399]">
-                    {Math.round((futureOutlookData.projectIncomeTotal / activeLevers.incomeGoal) * 100)}% of {fmtMoney(activeLevers.incomeGoal)}
-                  </span>
+                  {/* 2. Big Amber/Gold Amount */}
+                  <div className="text-[42px] sm:text-[46px] font-extrabold text-[#E0A140] tracking-tight leading-none my-2">
+                    {fmtMoney(futureOutlookData.projectIncomeTotal)}
+                  </div>
+
+                  {/* 3. Subtitle */}
+                  <p className="text-[12.5px] text-[#A0B3C6] font-normal leading-relaxed">
+                    per year after tax in FY{targetYear} · From total assets of $6.32M (in today&apos;s dollars)
+                  </p>
+
+                  {/* 4. Horizontal Divider Line 1 */}
+                  <div className="w-full h-px bg-[#203D5B] my-3" />
+
+                  {/* 5. Income Goal & Percentage Row */}
+                  <div className="flex items-end justify-between">
+                    <div>
+                      <span className="block text-[12px] text-[#A0B3C6] font-normal mb-0.5">
+                        Income goal
+                      </span>
+                      <span className="block text-[17px] font-bold text-white tracking-tight">
+                        {fmtMoney(activeLevers.incomeGoal)} p.a.
+                      </span>
+                    </div>
+                    <div className="text-right sm:text-center pr-2 sm:pr-8">
+                      <span className="text-[17px] font-bold text-[#28CBAD] tracking-tight">
+                        {Math.round((futureOutlookData.projectIncomeTotal / activeLevers.incomeGoal) * 100)}% of {fmtMoney(activeLevers.incomeGoal)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 6. Horizontal Divider Line 2 */}
+                  <div className="w-full h-px bg-[#203D5B] my-3" />
+
+                  {/* 7. Legend Row */}
+                  <div className="flex flex-wrap items-center justify-between gap-y-1.5 text-[12px] text-white/90 mb-2 select-none">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-5 h-[2.5px] bg-[#28CBAD] rounded-full inline-block" />
+                      <span>Home equity</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-5 h-[2.5px] bg-[#F8A626] rounded-full inline-block" />
+                      <span>Investment net equity</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-5 h-[2.5px] bg-[#C560E3] rounded-full inline-block" />
+                      <span>Superannuation</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-5 h-0 border-t-2 border-dashed border-[#94A3B8] inline-block" />
+                      <span className="text-white/80">Target income (goal)</span>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Legend Row */}
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10.5px] py-2.5 border-b border-white/10">
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-3 h-0.5 bg-[#2DD4BF] rounded-full inline-block" />
-                    <span className="text-white/80">Home equity</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-3 h-0.5 bg-[#F59E0B] rounded-full inline-block" />
-                    <span className="text-white/80">Investment net equity</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-3 h-0.5 bg-[#C084FC] rounded-full inline-block" />
-                    <span className="text-white/80">Superannuation</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-3 h-0 border-t border-dashed border-[#94A3B8] inline-block" />
-                    <span className="text-white/60">Target income (goal)</span>
-                  </div>
-                </div>
-
-                {/* SVG Chart directly on Dark Navy Background */}
-                <div className="relative w-full pt-3 pb-1">
+                {/* 8. SVG Chart */}
+                <div className="relative w-full flex-1 flex items-center justify-center py-1">
                   <svg
-                    viewBox="0 0 540 220"
-                    className="w-full h-[220px] overflow-visible select-none"
+                    viewBox="0 0 920 360"
+                    className="w-full h-auto overflow-visible select-none"
                   >
-                    {/* Y-axis labels & dashed gridlines */}
+                    {/* Y-axis labels & solid horizontal grid lines */}
                     {[
-                      { val: "$10.0M", y: 20 },
-                      { val: "$8.0M", y: 56 },
-                      { val: "$6.0M", y: 92 },
-                      { val: "$4.0M", y: 128 },
-                      { val: "$2.0M", y: 164 },
-                      { val: "$0", y: 198 },
+                      { val: "$10.0M", y: 25 },
+                      { val: "$8.0M", y: 75 },
+                      { val: "$6.0M", y: 125 },
+                      { val: "$4.0M", y: 175 },
+                      { val: "$2.0M", y: 225 },
+                      { val: "$0", y: 275 },
                     ].map((tick) => (
                       <g key={tick.val}>
                         <text
-                          x="38"
-                          y={tick.y + 3}
+                          x="70"
+                          y={tick.y + 4}
                           textAnchor="end"
-                          fontSize="10"
+                          fontSize="12.5"
                           fill="#94A3B8"
-                          fontFamily="sans-serif"
+                          fontFamily="'Inter', sans-serif"
                         >
                           {tick.val}
                         </text>
                         <line
-                          x1="45"
-                          x2="520"
+                          x1="85"
+                          x2="890"
                           y1={tick.y}
                           y2={tick.y}
-                          stroke="#1E293B"
-                          strokeDasharray="3 3"
+                          stroke="#203D5B"
                           strokeWidth="1"
                         />
                       </g>
                     ))}
 
-                    {/* Target income dashed line */}
+                    {/* Vertical Y-axis line from $10.0M down to $0 */}
                     <line
-                      x1="45"
-                      x2="520"
-                      y1="194"
-                      y2="194"
-                      stroke="#94A3B8"
-                      strokeDasharray="4 4"
+                      x1="85"
+                      x2="85"
+                      y1="25"
+                      y2="275"
+                      stroke="#203D5B"
                       strokeWidth="1.2"
+                    />
+
+                    {/* 4 Curves matching screenshot: */}
+                    {/* 1. Target Income Dashed Line */}
+                    <path
+                      d={futureOutlookData.pathTarget}
+                      fill="none"
+                      stroke="#CBD5E1"
+                      strokeWidth="2.5"
+                      strokeDasharray="6 6"
                       strokeOpacity="0.8"
-                    />
-
-                    {/* 3 Spline Curves matching screenshot: Top=Teal ($7.33M), Middle=Amber ($4.22M), Bottom=Purple ($1.24M) */}
-                    {/* Top Curve (Teal #2DD4BF) */}
-                    <path
-                      d={futureOutlookData.pathInv}
-                      fill="none"
-                      stroke="#2DD4BF"
-                      strokeWidth="2.5"
                       strokeLinecap="round"
                     />
 
-                    {/* Middle Curve (Amber #F59E0B) */}
+                    {/* 2. Superannuation Curve (Purple #C560E3) */}
                     <path
-                      d={futureOutlookData.pathSuper}
+                      d={futureOutlookData.pathPurple}
                       fill="none"
-                      stroke="#F59E0B"
-                      strokeWidth="2.5"
+                      stroke="#C560E3"
+                      strokeWidth="3"
                       strokeLinecap="round"
                     />
 
-                    {/* Bottom Curve (Purple #C084FC) */}
+                    {/* 3. Investment Net Equity Curve (Orange #F8A626) */}
                     <path
-                      d={futureOutlookData.pathHome}
+                      d={futureOutlookData.pathOrange}
                       fill="none"
-                      stroke="#C084FC"
-                      strokeWidth="2.5"
+                      stroke="#F8A626"
+                      strokeWidth="3"
                       strokeLinecap="round"
                     />
 
-                    {/* Vertical dashed line at horizon */}
+                    {/* 4. Home Equity Curve (Teal #28CBAD) */}
+                    <path
+                      d={futureOutlookData.pathTeal}
+                      fill="none"
+                      stroke="#28CBAD"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                    />
+
+                    {/* Vertical Dashed Line at Horizon Year (FY2046) */}
                     <line
                       x1={futureOutlookData.markerX}
                       x2={futureOutlookData.markerX}
-                      y1="20"
-                      y2="198"
+                      y1="25"
+                      y2="275"
                       stroke="#FFFFFF"
-                      strokeDasharray="3 3"
-                      strokeWidth="1.2"
-                      strokeOpacity="0.6"
+                      strokeDasharray="4 4"
+                      strokeWidth="1.5"
+                      strokeOpacity="0.85"
                     />
 
-                    {/* Marker Dots on Curves at horizon: Top=Teal, Middle=Amber, Bottom=Purple */}
+                    {/* 4 Marker Dots with Solid Fills and Crisp White Borders */}
+                    {/* Top: Teal */}
                     <circle
                       cx={futureOutlookData.markerX}
-                      cy={futureOutlookData.markerYInv}
-                      r="4.5"
-                      fill="#2DD4BF"
-                      stroke="#0B1E33"
-                      strokeWidth="2"
-                    />
-                    <circle
-                      cx={futureOutlookData.markerX}
-                      cy={futureOutlookData.markerYSuper}
-                      r="4.5"
-                      fill="#F59E0B"
-                      stroke="#0B1E33"
-                      strokeWidth="2"
-                    />
-                    <circle
-                      cx={futureOutlookData.markerX}
-                      cy={futureOutlookData.markerYHome}
-                      r="4.5"
-                      fill="#C084FC"
-                      stroke="#0B1E33"
-                      strokeWidth="2"
+                      cy={futureOutlookData.markerYTeal}
+                      r="6.5"
+                      fill="#28CBAD"
+                      stroke="#FFFFFF"
+                      strokeWidth="2.5"
                     />
 
-                    {/* X-axis tick labels */}
+                    {/* Middle: Orange */}
+                    <circle
+                      cx={futureOutlookData.markerX}
+                      cy={futureOutlookData.markerYOrange}
+                      r="6.5"
+                      fill="#F8A626"
+                      stroke="#FFFFFF"
+                      strokeWidth="2.5"
+                    />
+
+                    {/* Bottom: Purple */}
+                    <circle
+                      cx={futureOutlookData.markerX}
+                      cy={futureOutlookData.markerYPurple}
+                      r="6.5"
+                      fill="#C560E3"
+                      stroke="#FFFFFF"
+                      strokeWidth="2.5"
+                    />
+
+                    {/* Target Goal: Silver/Gray */}
+                    <circle
+                      cx={futureOutlookData.markerX}
+                      cy={futureOutlookData.markerYTarget}
+                      r="6.5"
+                      fill="#94A3B8"
+                      stroke="#FFFFFF"
+                      strokeWidth="2.5"
+                    />
+
+                    {/* X-axis Tick Labels (2 lines per tick matching screenshot) */}
                     {[
-                      { label: "Today (FY2026)", x: 50 },
-                      { label: "+5 years (FY2031)", x: 165 },
-                      { label: "+10 years (FY2036)", x: 280 },
-                      { label: "+15 years (FY2041)", x: 395 },
-                      { label: "+20 years (FY2046)", x: 490 },
+                      { l1: "Today", l2: "(FY2026)", x: 85 },
+                      { l1: "+5 years", l2: "(FY2031)", x: 265 },
+                      { l1: "+10 years", l2: "(FY2036)", x: 445 },
+                      { l1: "+15 years", l2: "(FY2041)", x: 625 },
+                      { l1: "+20 years", l2: "(FY2046)", x: 805 },
                     ].map((tick) => (
-                      <text
-                        key={tick.label}
-                        x={tick.x}
-                        y="214"
-                        textAnchor="middle"
-                        fontSize="9.5"
-                        fill="#94A3B8"
-                        fontFamily="sans-serif"
-                      >
-                        {tick.label}
-                      </text>
+                      <g key={tick.l1}>
+                        <text
+                          x={tick.x}
+                          y="300"
+                          textAnchor="middle"
+                          fontSize="12.5"
+                          fill="#94A3B8"
+                          fontFamily="'Inter', sans-serif"
+                        >
+                          {tick.l1}
+                        </text>
+                        <text
+                          x={tick.x}
+                          y="320"
+                          textAnchor="middle"
+                          fontSize="12.5"
+                          fill="#94A3B8"
+                          fontFamily="'Inter', sans-serif"
+                        >
+                          {tick.l2}
+                        </text>
+                      </g>
                     ))}
                   </svg>
                 </div>
               </div>
 
-              {/* Bottom 2 Sliders inside Dark Navy Card — SIDE BY SIDE in 2 columns */}
-              <div className="grid grid-cols-2 gap-4 items-end mt-4 pt-3 border-t border-white/10">
-                {/* Slider 1: Years Until Retirement */}
-                <div>
-                  <div className="flex items-center justify-between text-[11px] font-medium text-white/80 mb-1.5">
-                    <span>Years Until Retirement</span>
-                    <span className="font-bold text-white text-[13px]">
-                      {activeLevers.forecastHorizon} Years
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="5"
-                    max="35"
-                    step="1"
-                    value={activeLevers.forecastHorizon}
-                    onChange={(e) =>
-                      updateActiveLever("forecastHorizon", Number(e.target.value))
-                    }
-                    style={{
-                      background: `linear-gradient(to right, #2DD4BF 0%, #2DD4BF ${
-                        ((activeLevers.forecastHorizon - 5) / 30) * 100
-                      }%, rgba(255,255,255,0.2) ${
-                        ((activeLevers.forecastHorizon - 5) / 30) * 100
-                      }%, rgba(255,255,255,0.2) 100%)`,
-                    }}
-                    className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#2DD4BF]"
-                  />
-                </div>
+              {/* 9. Bottom Sliders Box inside Dedicated Navy Rounded Container */}
+              <div className="bg-[#102B40] rounded-[14px] border border-[#203D5B] p-4 sm:p-4.5 mt-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 relative">
+                  {/* Vertical divider line between the two columns */}
+                  <div className="hidden md:block absolute top-1 bottom-1 left-1/2 w-px bg-[#203D5B] -translate-x-1/2" />
 
-                {/* Slider 2: Income Goal (p.a.) */}
-                <div>
-                  <div className="flex items-center justify-between text-[11px] font-medium text-white/80 mb-1.5">
-                    <span>Income Goal (p.a.)</span>
-                    <span className="font-bold text-white text-[13px]">
-                      {fmtMoney(activeLevers.incomeGoal)}
-                    </span>
+                  {/* Column 1: Years Until Retirement */}
+                  <div className="md:pr-3">
+                    <div className="flex items-center justify-between mb-2.5">
+                      <span className="text-[13.5px] sm:text-[14px] font-semibold text-white tracking-tight">
+                        Years Until Retirement
+                      </span>
+                      <span className="text-[13.5px] sm:text-[14px] font-bold text-white tracking-tight">
+                        {activeLevers.forecastHorizon} Years
+                      </span>
+                    </div>
+                    <div className="relative flex items-center">
+                      <input
+                        type="range"
+                        min="5"
+                        max="35"
+                        step="1"
+                        value={activeLevers.forecastHorizon}
+                        onChange={(e) =>
+                          updateActiveLever("forecastHorizon", Number(e.target.value))
+                        }
+                        style={{
+                          background: `linear-gradient(to right, #28CBAD 0%, #28CBAD ${
+                            ((activeLevers.forecastHorizon - 5) / 30) * 100
+                          }%, #1D3B54 ${
+                            ((activeLevers.forecastHorizon - 5) / 30) * 100
+                          }%, #1D3B54 100%)`,
+                        }}
+                        className="future-outlook-slider w-full h-2 rounded-full appearance-none cursor-pointer"
+                      />
+                    </div>
                   </div>
-                  <input
-                    type="range"
-                    min="20000"
-                    max="200000"
-                    step="5000"
-                    value={activeLevers.incomeGoal}
-                    onChange={(e) =>
-                      updateActiveLever("incomeGoal", Number(e.target.value))
-                    }
-                    style={{
-                      background: `linear-gradient(to right, #2DD4BF 0%, #2DD4BF ${
-                        ((activeLevers.incomeGoal - 20000) / 180000) * 100
-                      }%, rgba(255,255,255,0.2) ${
-                        ((activeLevers.incomeGoal - 20000) / 180000) * 100
-                      }%, rgba(255,255,255,0.2) 100%)`,
-                    }}
-                    className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#2DD4BF]"
-                  />
+
+                  {/* Column 2: Income Goal (p.a.) */}
+                  <div className="md:pl-3">
+                    <div className="flex items-center justify-between mb-2.5">
+                      <span className="text-[13.5px] sm:text-[14px] font-semibold text-white tracking-tight">
+                        Income Goal (p.a.)
+                      </span>
+                      <span className="text-[13.5px] sm:text-[14px] font-bold text-white tracking-tight">
+                        {fmtMoney(activeLevers.incomeGoal)}
+                      </span>
+                    </div>
+                    <div className="relative flex items-center">
+                      <input
+                        type="range"
+                        min="20000"
+                        max="140000"
+                        step="5000"
+                        value={activeLevers.incomeGoal}
+                        onChange={(e) =>
+                          updateActiveLever("incomeGoal", Number(e.target.value))
+                        }
+                        style={{
+                          background: `linear-gradient(to right, #28CBAD 0%, #28CBAD ${
+                            ((activeLevers.incomeGoal - 20000) / 120000) * 100
+                          }%, #1D3B54 ${
+                            ((activeLevers.incomeGoal - 20000) / 120000) * 100
+                          }%, #1D3B54 100%)`,
+                        }}
+                        className="future-outlook-slider w-full h-2 rounded-full appearance-none cursor-pointer"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
 
             {/* RIGHT COLUMN: 3 Asset Assumption Cards (lg:col-span-7) */}
-            <div className="lg:col-span-7 flex flex-col gap-4">
+            <div className="lg:col-span-7 flex flex-col gap-4 h-full">
               {/* Card 1: Home (Owner Occupied) */}
-              <div className="bg-[#F0F6FA] rounded-[14px] p-4 border border-[#DCE7F0] shadow-2xs">
+              <div className="bg-[#F0F6FA] rounded-[14px] p-4 border border-[#DCE7F0] shadow-2xs flex-1 flex flex-col justify-between">
                 <div className="flex items-start justify-between pb-1.5">
                   <div className="flex items-center gap-2.5">
                     <div className="w-[36px] h-[36px] rounded-[8px] bg-[#0E2841] flex items-center justify-center text-white shrink-0">
@@ -5724,7 +5854,7 @@ interface ReviewPropertyCard {
               </div>
 
               {/* Card 2: Investment Properties */}
-              <div className="bg-[#F0FAF5] rounded-[14px] p-4 border border-[#D1EFE0] shadow-2xs">
+              <div className="bg-[#F0FAF5] rounded-[14px] p-4 border border-[#D1EFE0] shadow-2xs flex-1 flex flex-col justify-between">
                 <div className="flex items-start justify-between pb-1.5">
                   <div className="flex items-center gap-2.5">
                     <div className="w-[36px] h-[36px] rounded-[8px] bg-[#059669] flex items-center justify-center text-white shrink-0">
@@ -5826,7 +5956,7 @@ interface ReviewPropertyCard {
               </div>
 
               {/* Card 3: Superannuation */}
-              <div className="bg-[#F7F3FF] rounded-[14px] p-4 border border-[#EAE2FA] shadow-2xs">
+              <div className="bg-[#F7F3FF] rounded-[14px] p-4 border border-[#EAE2FA] shadow-2xs flex-1 flex flex-col justify-between">
                 <div className="flex items-start justify-between pb-1.5">
                   <div className="flex items-center gap-2.5">
                     <div className="w-[36px] h-[36px] rounded-[8px] bg-[#7C3AED] flex items-center justify-center text-white shrink-0">
