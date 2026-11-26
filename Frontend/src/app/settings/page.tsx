@@ -818,7 +818,7 @@ export default function SettingsPage() {
       <div className="flex-1 flex flex-col h-screen overflow-y-auto min-w-0 bg-white">
         <TopNav onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
 
-        <main className="flex-1 px-[24px] pt-[26px] pb-[60px] max-w-[1210px] w-full">
+        <main className="flex-1 px-6 sm:px-8 lg:px-10 pt-[26px] pb-[60px] w-full min-w-0">
           {/* Top Super-Title (Figma 922:8247) */}
           <div className="mb-[9px]">
             <p className="font-['Familjen_Grotesk',sans-serif] font-semibold text-[#1a1c1e] text-[16px] tracking-[0.08px] leading-normal">
@@ -901,8 +901,8 @@ export default function SettingsPage() {
           {/* ========================================================================= */}
           {activeTab === "associations" && (
             <>
-              <div className="mt-[21px] py-[10px] flex flex-col lg:flex-row lg:items-center justify-between gap-4 max-w-[1156px]">
-                <div className="max-w-[960px]">
+              <div className="mt-[21px] py-[10px] flex flex-col lg:flex-row lg:items-center justify-between gap-4 w-full">
+                <div className="max-w-[1100px]">
                   <h2 className="font-['Poppins',sans-serif] font-semibold text-[#07315b] text-[18px] leading-[33px] tracking-[-0.64px]">
                     System Settings – Benchmark / Metric Associations
                   </h2>
@@ -930,17 +930,17 @@ export default function SettingsPage() {
               </div>
 
               {/* Table Card (Figma 922:8257) */}
-              <div className="mt-[18px] bg-white rounded-[12px] p-[30px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)] border border-[#F4F5F7] max-w-[1162px]">
+              <div className="mt-[18px] bg-white rounded-[12px] p-[30px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)] border border-[#F4F5F7] w-full">
                 <div className="py-[10px] mb-[14px]">
                   <h3 className="font-['Poppins',sans-serif] font-bold text-[#0e2841] text-[18px] leading-[1.9] tracking-[-0.36px]">
                     Benchmark to PICFO Metric Mappings
                   </h3>
                 </div>
 
-                <div className="px-[10px] overflow-x-auto">
-                  <div className="min-w-[960px]">
+                <div className="px-[10px] overflow-x-auto w-full">
+                  <div className="min-w-[960px] w-full">
                     {/* Header Row */}
-                    <div className="grid grid-cols-[240px_255px_185px_200px_1fr] items-center">
+                    <div className="grid grid-cols-[240px_1.5fr_180px_220px_1fr] items-center">
                       <ColumnHeader label="Measure" />
                       <ColumnHeader label="Equity" />
                       <ColumnHeader label="Category" />
@@ -958,7 +958,7 @@ export default function SettingsPage() {
                       return (
                         <div
                           key={row.id}
-                          className="grid grid-cols-[240px_255px_185px_200px_1fr] items-center min-h-[60px] py-[8px]"
+                          className="grid grid-cols-[240px_1.5fr_180px_220px_1fr] items-center min-h-[60px] py-[8px]"
                         >
                           {/* Measure */}
                           <div className="font-['Poppins',sans-serif] font-medium text-[#1a1c1e] text-[14px] leading-[1.4] tracking-[-0.28px] pr-3">
@@ -1089,7 +1089,7 @@ export default function SettingsPage() {
           {/* ========================================================================= */}
           {activeTab === "annual" && (
             <>
-              <div className="mt-[21px] py-[10px] max-w-[718px]">
+              <div className="mt-[21px] py-[10px] w-full">
                 <h2 className="font-['Poppins',sans-serif] font-semibold text-[#1a1c1e] text-[18px] leading-[33px] tracking-[-0.64px]">
                   System Settings – Annual Benchmark Data
                 </h2>
@@ -1101,17 +1101,17 @@ export default function SettingsPage() {
               </div>
 
               {/* Table Card (Figma 921:7984) */}
-              <div className="mt-[18px] bg-white rounded-[12px] p-[30px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)] border border-[#F4F5F7] max-w-[1162px]">
+              <div className="mt-[18px] bg-white rounded-[12px] p-[30px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)] border border-[#F4F5F7] w-full">
                 <div className="py-[10px] mb-[14px]">
                   <h3 className="font-['Poppins',sans-serif] font-bold text-[#0e2841] text-[18px] leading-[1.9] tracking-[-0.36px]">
                     Annual Benchmark Data Measures
                   </h3>
                 </div>
 
-                <div className="px-[10px] overflow-x-auto">
-                  <div className="min-w-[920px]">
+                <div className="px-[10px] overflow-x-auto w-full">
+                  <div className="min-w-[920px] w-full">
                     {/* Header Row */}
-                    <div className="grid grid-cols-[258px_277px_203px_203px_1fr] items-center">
+                    <div className="grid grid-cols-[260px_1.5fr_200px_160px_120px] items-center">
                       <ColumnHeader label="Measure" />
                       <ColumnHeader label="Equity" />
                       <ColumnHeader label="Category" />
@@ -1127,7 +1127,7 @@ export default function SettingsPage() {
                       return (
                         <div
                           key={row.id}
-                          className="grid grid-cols-[258px_277px_203px_203px_1fr] items-center min-h-[60px] py-[8px]"
+                          className="grid grid-cols-[260px_1.5fr_200px_160px_120px] items-center min-h-[60px] py-[8px]"
                         >
                           <div className="font-['Poppins',sans-serif] font-medium text-[#1a1c1e] text-[14px] leading-[1.4] tracking-[-0.28px] pr-3">
                             {row.measure}
@@ -1167,8 +1167,8 @@ export default function SettingsPage() {
           {/* ========================================================================= */}
           {activeTab === "metrics" && (
             <>
-              <div className="mt-[21px] py-[10px] flex flex-col lg:flex-row lg:items-center justify-between gap-4 max-w-[1156px]">
-                <div className="max-w-[750px]">
+              <div className="mt-[21px] py-[10px] flex flex-col lg:flex-row lg:items-center justify-between gap-4 w-full">
+                <div className="max-w-[1100px]">
                   <h2 className="font-['Poppins',sans-serif] font-semibold text-[#1a1c1e] text-[18px] leading-[33px] tracking-[-0.64px]">
                     System Settings – Benchmark / Metric Associations
                   </h2>
@@ -1196,7 +1196,7 @@ export default function SettingsPage() {
               </div>
 
               {/* Table Card (Figma 934:8032) */}
-              <div className="mt-[18px] bg-white rounded-[12px] p-[30px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)] border border-[#F4F5F7] max-w-[1162px]">
+              <div className="mt-[18px] bg-white rounded-[12px] p-[30px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)] border border-[#F4F5F7] w-full">
                 <div className="py-[10px] mb-[14px]">
                   <h3 className="font-['Poppins',sans-serif] font-bold text-[#0e2841] text-[18px] leading-[1.9] tracking-[-0.36px]">
                     Standard PICFO Metric Definitions &amp; Mathematical
@@ -1204,10 +1204,10 @@ export default function SettingsPage() {
                   </h3>
                 </div>
 
-                <div className="px-[10px] overflow-x-auto">
-                  <div className="min-w-[960px]">
+                <div className="px-[10px] overflow-x-auto w-full">
+                  <div className="min-w-[960px] w-full">
                     {/* Header Row */}
-                    <div className="grid grid-cols-[185px_515px_331px_1fr] items-center">
+                    <div className="grid grid-cols-[220px_2.2fr_1.8fr_70px] items-center">
                       <ColumnHeader label="Metric" />
                       <ColumnHeader label="Equity" />
                       <ColumnHeader label="Formula" />
@@ -1220,7 +1220,7 @@ export default function SettingsPage() {
                       return (
                         <div
                           key={item.id}
-                          className="grid grid-cols-[185px_515px_331px_1fr] items-center min-h-[60px] py-[8px]"
+                          className="grid grid-cols-[220px_2.2fr_1.8fr_70px] items-center min-h-[60px] py-[10px]"
                         >
                           <div className="font-['Poppins',sans-serif] font-medium text-[#1a1c1e] text-[14px] leading-[1.4] tracking-[-0.28px] pr-3">
                             {item.metric}
@@ -1284,8 +1284,8 @@ export default function SettingsPage() {
           {/* ========================================================================= */}
           {activeTab === "advisors" && (
             <>
-              <div className="mt-[21px] py-[10px] flex flex-col lg:flex-row lg:items-center justify-between gap-4 max-w-[1156px]">
-                <div className="max-w-[750px]">
+              <div className="mt-[21px] py-[10px] flex flex-col lg:flex-row lg:items-center justify-between gap-4 w-full">
+                <div className="max-w-[1100px]">
                   <h2 className="font-['Poppins',sans-serif] font-semibold text-[#1a1c1e] text-[18px] leading-[33px] tracking-[-0.64px]">
                     System Settings – Adviser Management
                   </h2>
@@ -1310,7 +1310,7 @@ export default function SettingsPage() {
               </div>
 
               {/* Advisers Table */}
-              <div className="mt-[20px] max-w-[1156px] border border-[#EBEBEB] rounded-[12px] bg-white overflow-hidden shadow-2xs">
+              <div className="mt-[20px] w-full border border-[#EBEBEB] rounded-[12px] bg-white overflow-hidden shadow-2xs">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse min-w-[700px]">
                     <thead>
@@ -1435,8 +1435,8 @@ export default function SettingsPage() {
           {/* ========================================================================= */}
           {activeTab === "dropdowns" && (
             <>
-              <div className="mt-[21px] py-[10px] flex flex-col lg:flex-row lg:items-center justify-between gap-4 max-w-[1380px]">
-                <div className="max-w-[850px]">
+              <div className="mt-[21px] py-[10px] flex flex-col lg:flex-row lg:items-center justify-between gap-4 w-full">
+                <div className="max-w-[1100px]">
                   <h2 className="font-['Poppins',sans-serif] font-semibold text-[#1a1c1e] text-[18px] leading-[33px] tracking-[-0.64px]">
                     System Settings – Drop Down Management
                   </h2>
@@ -1446,7 +1446,7 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <div className="mt-[20px] max-w-[1380px] grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+              <div className="mt-[20px] w-full grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
                 {/* Section 1: States */}
                 <div className="bg-white border border-[#EBEBEB] rounded-[12px] p-5 shadow-2xs flex flex-col justify-between">
                   <div>
