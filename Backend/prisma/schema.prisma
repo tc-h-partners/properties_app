@@ -74,8 +74,8 @@ model ClientHousehold {
   creditCardLimit      Decimal           @default(0)
   otherLiabilities     Decimal           @default(0)
   monthlyPayments      Decimal           @default(0)
-  borrowingCapacity    Decimal           @default(800000)
-  cashSavings          Decimal           @default(47000)
+  borrowingCapacity    Decimal           @default(0)
+  cashSavings          Decimal           @default(0)
   isArchived           Boolean           @default(false)
   createdAt            DateTime          @default(now())
   updatedAt            DateTime          @updatedAt
@@ -247,7 +247,7 @@ model PropertyFinancialSnapshot {
   strataFees             Decimal       @default(0)
   otherExpenses          Decimal       @default(0)
   depreciationNonCash    Decimal       @default(0)
-  status                 String        @default("Completed")
+  status                 String        @default("Not Started")
   detailsJson            Json?
   createdAt              DateTime      @default(now())
   updatedAt              DateTime      @updatedAt
@@ -270,7 +270,7 @@ model LoanFinancialSnapshot {
   annualRepayments Decimal       @default(0)
   interestPaid     Decimal       @default(0)
   loanLimit        Decimal       @default(0)
-  status           String        @default("Completed")
+  status           String        @default("Not Started")
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
   annualReview     AnnualReview  @relation(fields: [annualReviewId], references: [id], onDelete: Cascade)

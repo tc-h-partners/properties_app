@@ -1,7 +1,14 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import { X, ChevronDown } from "lucide-react";
+import {
+  AdvisorItem,
+  getCachedAdvisors,
+  fetchSystemSettingsApi,
+  formatAdvisorLabel,
+} from "@/lib/api";
 
 interface AddHouseholdModalProps {
   isOpen: boolean;
@@ -10,7 +17,7 @@ interface AddHouseholdModalProps {
     name: string;
     adviser: string;
     objectives: string;
-    reviewYear: string;
+    reviewYear?: string;
   }) => Promise<void> | void;
 }
 
@@ -20,11 +27,46 @@ export default function AddHouseholdModal({
   onAddHousehold,
 }: AddHouseholdModalProps) {
   const [householdName, setHouseholdName] = useState("");
-  const [adviser, setAdviser] = useState("Sarah Jenkins (Senior Property CFO)");
+  const [advisors, setAdvisors] = useState<AdvisorItem[]>(getCachedAdvisors());
+  const [adviser, setAdviser] = useState<string>(() => {
+    const cached = getCachedAdvisors();
+    return cached.length > 0
+      ? formatAdvisorLabel(cached[0])
+      : "Sarah Jenkins (Senior Property CFO)";
+  });
   const [objectives, setObjectives] = useState("");
-  const [reviewYear, setReviewYear] = useState("FY2026");
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+
+  // Sync latest advisers from settings/backend when modal opens
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const syncAdvisors = async () => {
+      try {
+        const data = await fetchSystemSettingsApi();
+        if (data?.advisors && Array.isArray(data.advisors) && data.advisors.length > 0) {
+          setAdvisors(data.advisors);
+          // Default screen to the first advisor
+          setAdviser(formatAdvisorLabel(data.advisors[0]));
+        } else {
+          const cached = getCachedAdvisors();
+          if (cached.length > 0) {
+            setAdvisors(cached);
+            setAdviser(formatAdvisorLabel(cached[0]));
+          }
+        }
+      } catch {
+        const cached = getCachedAdvisors();
+        if (cached.length > 0) {
+          setAdvisors(cached);
+          setAdviser(formatAdvisorLabel(cached[0]));
+        }
+      }
+    };
+
+    syncAdvisors();
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -40,7 +82,7 @@ export default function AddHouseholdModal({
           name: householdName.trim(),
           adviser,
           objectives,
-          reviewYear,
+          reviewYear: "FY2026",
         });
       }
       setHouseholdName("");
@@ -54,20 +96,20 @@ export default function AddHouseholdModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs select-none">
-      <div className="relative w-full max-w-[588px] bg-white rounded-[16px] shadow-2xl border border-[#E9E9E9] overflow-hidden p-6 sm:p-9 animate-in fade-in zoom-in-95 duration-150">
-        {/* Close Button */}
+      <div className="relative w-full max-w-[588px] sm:w-[588px] sm:h-[588px] max-h-[95vh] bg-white rounded-[16px] shadow-2xl border border-[#E9E9E9] overflow-y-auto p-6 sm:p-9 animate-in fade-in zoom-in-95 duration-150 flex flex-col justify-between">
+        {/* Close Button - Navy Circle with White X */}
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-5 right-5 text-gray-400 hover:text-gray-700 p-1.5 rounded-full hover:bg-gray-100 transition-colors"
+          className="absolute top-5 right-5 w-8 h-8 rounded-full bg-[#0E2841] text-white flex items-center justify-center hover:bg-[#163859] transition-colors cursor-pointer shadow-xs"
           aria-label="Close"
         >
-          <X className="w-5 h-5" />
+          <X className="w-4 h-4 stroke-[2.5]" />
         </button>
 
         {/* Modal Header */}
-        <div className="text-center mb-7">
-          <h2 className="text-[22px] sm:text-[24px] font-bold text-[#07315B] tracking-tight mb-1.5 font-['Poppins',sans-serif]">
+        <div className="text-center mb-6">
+          <h2 className="text-[22px] sm:text-[24px] font-bold text-[#07315B] tracking-tight mb-1 font-['Poppins',sans-serif]">
             Add New Household
           </h2>
           <p className="text-[14px] sm:text-[15px] text-[#8C9BA8] font-medium font-['Poppins',sans-serif]">
@@ -82,86 +124,77 @@ export default function AddHouseholdModal({
         )}
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Household Name */}
-          <div>
-            <label className="block text-[14px] font-medium text-[#1A1C1E] mb-2 font-['Poppins',sans-serif]">
-              Household Name <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              required
-              value={householdName}
-              onChange={(e) => setHouseholdName(e.target.value)}
-              placeholder="e.g. The Harrison Family"
-              className="w-full h-[48px] px-3.5 bg-[#F9F9F9] border border-[#DEDEDE] rounded-[10px] text-[14px] text-[#1A1C1E] placeholder-[#BCBCBC] focus:outline-none focus:ring-2 focus:ring-[#0E2841]/20 focus:border-[#0E2841] transition-all"
-            />
-          </div>
-
-          {/* Adviser Assigned */}
-          <div>
-            <label className="block text-[14px] font-medium text-[#1A1C1E] mb-2 font-['Poppins',sans-serif]">
-              Adviser Assigned
-            </label>
-            <div className="relative">
-              <select
-                value={adviser}
-                onChange={(e) => setAdviser(e.target.value)}
-                className="w-full h-[48px] px-3.5 pr-10 bg-[#F9F9F9] border border-[#DEDEDE] rounded-[10px] text-[14px] text-[#1A1C1E] focus:outline-none focus:ring-2 focus:ring-[#0E2841]/20 focus:border-[#0E2841] transition-all appearance-none cursor-pointer"
-              >
-                <option value="Sarah Jenkins (Senior Property CFO)">
-                  Sarah Jenkins (Senior Property CFO)
-                </option>
-                <option value="Michael Zhang (Property Strategist)">
-                  Michael Zhang (Property Strategist)
-                </option>
-                <option value="David Brown (Advisory Partner)">
-                  David Brown (Advisory Partner)
-                </option>
-              </select>
-              <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+        <form onSubmit={handleSubmit} className="flex-1 flex flex-col justify-between">
+          <div className="space-y-4">
+            {/* Household Name */}
+            <div>
+              <label className="block text-[14px] font-medium text-[#1A1C1E] mb-2 font-['Poppins',sans-serif]">
+                Household Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                value={householdName}
+                onChange={(e) => setHouseholdName(e.target.value)}
+                placeholder="e.g. The Harrison Family"
+                className="w-full h-[48px] px-3.5 bg-[#F9F9F9] border border-[#DEDEDE] rounded-[10px] text-[14px] text-[#1A1C1E] placeholder-[#BCBCBC] focus:outline-none focus:ring-2 focus:ring-[#0E2841]/20 focus:border-[#0E2841] transition-all"
+              />
             </div>
-          </div>
 
-          {/* Initial Review Year */}
-          <div>
-            <label className="block text-[14px] font-medium text-[#1A1C1E] mb-2 font-['Poppins',sans-serif]">
-              Initial Review Year
-            </label>
-            <div className="relative">
-              <select
-                value={reviewYear}
-                onChange={(e) => setReviewYear(e.target.value)}
-                className="w-full h-[48px] px-3.5 pr-10 bg-[#F9F9F9] border border-[#DEDEDE] rounded-[10px] text-[14px] text-[#1A1C1E] focus:outline-none focus:ring-2 focus:ring-[#0E2841]/20 focus:border-[#0E2841] transition-all appearance-none cursor-pointer"
-              >
-                <option value="FY2026">FY2026</option>
-                <option value="FY2025">FY2025</option>
-                <option value="FY2024">FY2024</option>
-              </select>
-              <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+            {/* Adviser Assigned */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-[14px] font-medium text-[#1A1C1E] font-['Poppins',sans-serif]">
+                  Adviser Assigned
+                </label>
+                <Link
+                  href="/settings?tab=advisors"
+                  onClick={onClose}
+                  className="text-[12px] text-[#07315B] hover:text-[#0E2841] hover:underline font-medium font-['Poppins',sans-serif]"
+                >
+                  Edit in Settings
+                </Link>
+              </div>
+              <div className="relative">
+                <select
+                  value={adviser}
+                  onChange={(e) => setAdviser(e.target.value)}
+                  className="w-full h-[48px] px-3.5 pr-10 bg-[#F9F9F9] border border-[#DEDEDE] rounded-[10px] text-[14px] text-[#1A1C1E] focus:outline-none focus:ring-2 focus:ring-[#0E2841]/20 focus:border-[#0E2841] transition-all appearance-none cursor-pointer"
+                >
+                  {advisors.map((adv) => {
+                    const label = formatAdvisorLabel(adv);
+                    return (
+                      <option key={adv.id || label} value={label}>
+                        {label}
+                      </option>
+                    );
+                  })}
+                </select>
+                <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+              </div>
             </div>
-          </div>
 
-          {/* Advisory Context / Objectives */}
-          <div>
-            <label className="block text-[14px] font-medium text-[#1A1C1E] mb-2 font-['Poppins',sans-serif]">
-              Advisory Context / Objectives
-            </label>
-            <textarea
-              rows={3}
-              value={objectives}
-              onChange={(e) => setObjectives(e.target.value)}
-              placeholder="Key portfolio expansion goals, tax planning requirements, or debt reduction targets..."
-              className="w-full p-3 bg-[#F9F9F9] border border-[#DEDEDE] rounded-[10px] text-[14px] text-[#1A1C1E] placeholder-[#BCBCBC] focus:outline-none focus:ring-2 focus:ring-[#0E2841]/20 focus:border-[#0E2841] transition-all resize-none"
-            />
+            {/* Advisory Context / Objectives */}
+            <div>
+              <label className="block text-[14px] font-medium text-[#1A1C1E] mb-2 font-['Poppins',sans-serif]">
+                Advisory Context / Objectives
+              </label>
+              <textarea
+                rows={3}
+                value={objectives}
+                onChange={(e) => setObjectives(e.target.value)}
+                placeholder="Key portfolio expansion goals, tax planning requirements, or debt reduction targets..."
+                className="w-full p-3 bg-[#F9F9F9] border border-[#DEDEDE] rounded-[10px] text-[14px] text-[#1A1C1E] placeholder-[#BCBCBC] focus:outline-none focus:ring-2 focus:ring-[#0E2841]/20 focus:border-[#0E2841] transition-all resize-none"
+              />
+            </div>
           </div>
 
           {/* Submit Button */}
-          <div className="pt-2">
+          <div className="pt-2 flex justify-center">
             <button
               type="submit"
               disabled={submitting}
-              className="w-full h-[50px] bg-[#0E2841] hover:bg-[#153B5E] disabled:opacity-60 text-white text-[14px] font-semibold rounded-[8px] transition-colors shadow-sm cursor-pointer"
+              className="w-[335px] max-w-full h-[52px] bg-[#0E2841] hover:bg-[#153B5E] disabled:opacity-60 text-white font-['Poppins',sans-serif] font-semibold text-[14px] leading-[100%] tracking-[0px] rounded-[8px] flex items-center justify-center transition-colors shadow-sm cursor-pointer"
             >
               {submitting ? "Creating Household..." : "Create & Proceed to Setup"}
             </button>

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -9,6 +9,7 @@ import {
   Check,
   ChevronLeft,
   Plus,
+  Trash2,
 } from "lucide-react";
 import AddPropertyModal, { NewPropertyFormPayload } from "./AddPropertyModal";
 import AddLoanModal, { NewLoanFormPayload } from "./AddLoanModal";
@@ -54,6 +55,272 @@ function fmtMoney(val: any): string {
   return `$${n.toLocaleString("en-AU", { maximumFractionDigits: 0 })}`;
 }
 
+function cleanMoneyInput(val: string): string {
+  if (!val) return "";
+  // Strip invalid characters but keep $, digits, commas, periods
+  let cleaned = val.replace(/[^0-9$,.]/g, "");
+  if (cleaned === "$") return "$";
+  // Strip leading zeros before a non-zero digit: e.g. "$05" -> "$5", "05" -> "5"
+  cleaned = cleaned.replace(/^\$0+([1-9])/, "$$$1").replace(/^0+([1-9])/, "$1");
+  if (cleaned === "$0$" || cleaned === "0$") return "$";
+  return cleaned;
+}
+
+function formatSavedDateTime(d?: any): string {
+  if (!d) return "";
+  const date = new Date(d);
+  if (isNaN(date.getTime())) return "";
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const yr = String(date.getFullYear()).slice(-2);
+  let hours = date.getHours();
+  const mins = date.getMinutes();
+  const ampm = hours >= 12 ? "pm" : "am";
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  const minsStr = mins > 0 ? `:${String(mins).padStart(2, "0")}` : "";
+  return `${day}/${month}/${yr} @ ${hours}${minsStr}${ampm}`;
+}
+
+function toHtmlDateValue(val: string): string {
+  if (!val) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
+  if (val.includes("T")) return val.split("T")[0];
+  const parts = val.split(/[/-]/);
+  if (parts.length === 3) {
+    if (parts[0].length === 4) return `${parts[0]}-${parts[1].padStart(2, "0")}-${parts[2].padStart(2, "0")}`;
+    if (parts[2].length === 4) return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+  }
+  return "";
+}
+
+
+
+export interface PropertyExpenseItem {
+  id: string;
+  name: string;
+  category: string;
+  amount: string;
+  placeholder?: string;
+  hasAsterisk?: boolean;
+  fieldKey?: string;
+  isFullWidth?: boolean;
+  isCustom?: boolean;
+}
+
+export const STANDARD_EXPENSE_CATEGORIES = [
+  "Property Management",
+  "Property Operating Costs",
+  "Government & Statutory Charges",
+  "Finance Cost",
+];
+
+export const EXPENSE_CATEGORIES_CONFIG = [
+  {
+    key: "Property Management",
+    title: "1. Property Management $",
+    items: [
+      {
+        id: "exp-mgmt-commissions",
+        name: "Management commissions",
+        placeholder: "$780",
+        hasAsterisk: false,
+        fieldKey: "propertyManagementFees",
+      },
+      {
+        id: "exp-letting-fees",
+        name: "Letting fees",
+        placeholder: "$840",
+        hasAsterisk: true,
+        fieldKey: "lettingFees",
+      },
+      {
+        id: "exp-lease-renewal",
+        name: "Lease renewal charges",
+        placeholder: "$780",
+        hasAsterisk: false,
+        fieldKey: "leaseRenewalCharges",
+      },
+      {
+        id: "exp-marketing",
+        name: "Marketing",
+        placeholder: "$780",
+        hasAsterisk: false,
+        fieldKey: "marketing",
+      },
+      {
+        id: "exp-routine-inspections",
+        name: "Routine inspection costs",
+        placeholder: "$840",
+        hasAsterisk: true,
+        fieldKey: "routineInspectionCosts",
+      },
+    ],
+  },
+  {
+    key: "Property Operating Costs",
+    title: "2. Property Operating Costs",
+    items: [
+      {
+        id: "exp-council-rates",
+        name: "Council rates",
+        placeholder: "$780",
+        hasAsterisk: false,
+        fieldKey: "councilRates",
+      },
+      {
+        id: "exp-insurance",
+        name: "Landlord / building insurance",
+        placeholder: "$840",
+        hasAsterisk: true,
+        fieldKey: "insurance",
+      },
+      {
+        id: "exp-pest-control",
+        name: "Pest control",
+        placeholder: "$780",
+        hasAsterisk: false,
+        fieldKey: "pestControl",
+      },
+      {
+        id: "exp-strata-levies",
+        name: "Strata levies",
+        placeholder: "$780",
+        hasAsterisk: false,
+        fieldKey: "strataFees",
+      },
+      {
+        id: "exp-water-charges",
+        name: "Water charges",
+        placeholder: "$840",
+        hasAsterisk: true,
+        fieldKey: "waterRates",
+      },
+      {
+        id: "exp-repairs-maintenance",
+        name: "Repairs & maintenance",
+        placeholder: "$840",
+        hasAsterisk: true,
+        fieldKey: "repairsMaintenance",
+      },
+      {
+        id: "exp-operating-costs-add-total",
+        name: "Add Total $",
+        placeholder: "$780",
+        hasAsterisk: false,
+        fieldKey: "operatingCostsAddTotal",
+      },
+    ],
+  },
+  {
+    key: "Government & Statutory Charges",
+    title: "3. Government & Statutory Charges",
+    items: [
+      {
+        id: "exp-land-tax",
+        name: "State land tax notices",
+        placeholder: "$780",
+        hasAsterisk: false,
+        fieldKey: "landTax",
+      },
+      {
+        id: "exp-statutory-levies",
+        name: "Statutory municipal levies",
+        placeholder: "$840",
+        hasAsterisk: true,
+        fieldKey: "statutoryMunicipalLevies",
+      },
+      {
+        id: "exp-annual-compliance",
+        name: "Annual regulatory compliance inspection",
+        placeholder: "$780",
+        hasAsterisk: false,
+        fieldKey: "annualComplianceInspection",
+      },
+      {
+        id: "exp-statutory-charges-add-total",
+        name: "Add Total $",
+        placeholder: "$780",
+        hasAsterisk: false,
+        fieldKey: "statutoryChargesAddTotal",
+      },
+    ],
+  },
+  {
+    key: "Finance Cost",
+    title: "4. Finance Cost",
+    items: [
+      {
+        id: "exp-bank-mortgage-interest",
+        name: "Bank mortgage interest",
+        placeholder: "$780",
+        hasAsterisk: false,
+        fieldKey: "bankMortgageInterest",
+      },
+      {
+        id: "exp-annual-package-fees",
+        name: "Annual package fees",
+        placeholder: "$840",
+        hasAsterisk: true,
+        fieldKey: "annualPackageFees",
+      },
+      {
+        id: "exp-debt-service-charges",
+        name: "Ongoing debt service charges",
+        placeholder: "$780",
+        hasAsterisk: false,
+        fieldKey: "debtServiceCharges",
+      },
+      {
+        id: "exp-net-taxable-rental-income",
+        name: "Net Taxable Rental Income",
+        placeholder: "$780",
+        hasAsterisk: false,
+        fieldKey: "netTaxableRentalIncome",
+      },
+      {
+        id: "exp-other-expenses",
+        name: "Other expenses",
+        placeholder: "$840",
+        hasAsterisk: true,
+        fieldKey: "otherExpenses",
+      },
+      {
+        id: "exp-net-rent-tax-return",
+        name: "Net Rent (per tax Return)",
+        placeholder: "$780",
+        hasAsterisk: false,
+        fieldKey: "netRentTaxReturn",
+      },
+      {
+        id: "exp-finance-cost-add-total",
+        name: "Add Total $",
+        placeholder: "$780",
+        hasAsterisk: false,
+        fieldKey: "financeCostAddTotal",
+      },
+      {
+        id: "exp-depreciation",
+        name: "Depreciation",
+        placeholder: "Depreciation.....",
+        hasAsterisk: false,
+        fieldKey: "depreciationNonCash",
+        isFullWidth: true,
+      },
+    ],
+  },
+];
+
+// Flat default list of all 24 categorized property expense items
+export const DEFAULT_EXPENSE_ITEMS: PropertyExpenseItem[] = EXPENSE_CATEGORIES_CONFIG.flatMap(
+  (cat) =>
+    cat.items.map((item) => ({
+      ...item,
+      category: cat.key,
+      amount: "",
+    }))
+);
+
 // Small dark solid dropdown arrow matching Figma's `arrow-down` in table headers
 function TableSortArrow() {
   return (
@@ -76,7 +343,7 @@ export default function FinancialDataInput({
   dbHousehold,
   onDataChanged,
   year = "2025",
-  status = "Completed",
+  status = "Not Started",
   householdName = "Harrison family",
   onBackToWorkspace,
 }: FinancialDataInputProps) {
@@ -125,7 +392,7 @@ export default function FinancialDataInput({
       reviewValuation: "$0",
       rentWeekly: "$0/wk",
       marketRentWeekly: "$0",
-      status: "In Progress",
+      status: "Not Started",
     };
 
   const selectedLoan =
@@ -142,15 +409,15 @@ export default function FinancialDataInput({
       fixedExpiry: "----",
       maturity: "----",
       security1: "-",
-      eofyBalance: "$0",
-      reviewBalance: "$0",
+      eofyBalance: "",
+      reviewBalance: "",
       marketRate: "N/A",
-      interestEofy: "5.95%",
-      interestReview: "5.95%",
-      interestMarket: "6.05%",
-      offsetEofy: "$0",
-      offsetReview: "$0",
-      status: "In progress",
+      interestEofy: "",
+      interestReview: "",
+      interestMarket: "",
+      offsetEofy: "",
+      offsetReview: "",
+      status: "Not Started",
     };
 
   // =========================================================================
@@ -171,10 +438,31 @@ export default function FinancialDataInput({
   const [householdExpenditure, setHouseholdExpenditure] = useState("");
   const [monthlyPayments, setMonthlyPayments] = useState("");
   const [otherLiabilities, setOtherLiabilities] = useState("");
-  const [cash, setCash] = useState("$47,000");
-  const [borrowingCapacity, setBorrowingCapacity] = useState("$800,000");
+  const [cash, setCash] = useState("");
+  const [borrowingCapacity, setBorrowingCapacity] = useState("");
   const router = useRouter();
   const [systemBenchmarks, setSystemBenchmarks] = useState<any[]>([]);
+
+  // Focus helper: clears default zero strings on click so user types without backspacing, or selects all text
+  const handleMoneyFocus = (
+    e: React.FocusEvent<HTMLInputElement>,
+    val: string,
+    setter: (v: string) => void
+  ) => {
+    if (
+      val === "$0" ||
+      val === "0" ||
+      val === "$" ||
+      val === "$800,000" ||
+      val === "$47,000" ||
+      val === "$4,500" ||
+      val === "$4500"
+    ) {
+      setter("");
+    } else {
+      e.target.select();
+    }
+  };
 
   useEffect(() => {
     fetchSystemSettingsApi()
@@ -199,33 +487,38 @@ export default function FinancialDataInput({
         const rateNum = Number(e.marginalTaxRate ?? 0.37);
         const pct =
           rateNum <= 1 ? `${Math.round(rateNum * 100)}%` : `${Math.round(rateNum)}%`;
+        const salaryNum = parseNum(e.annualSalary, 0);
+        const superNum = parseNum(e.superBalance, 0);
         return {
           id: e.id,
           client: e.name,
           entity: e.displayType || e.type || "Individual",
-          salary: fmtMoney(e.annualSalary ?? 0),
+          salary: salaryNum > 0 ? fmtMoney(salaryNum) : "",
           taxRate: pct,
-          superAmount: fmtMoney(e.superBalance ?? 0),
+          superAmount: superNum > 0 ? fmtMoney(superNum) : "",
         };
       })
     );
 
-    setHouseholdExpenditure(
-      dbHousehold.householdExpenditure
-        ? fmtMoney(dbHousehold.householdExpenditure)
-        : ""
+    const expNum = parseNum(dbHousehold.householdExpenditure, 0);
+    setHouseholdExpenditure(expNum > 0 && expNum !== 4500 ? fmtMoney(expNum) : "");
+
+    const ccNum = parseNum(dbHousehold.creditCardLimit, 0);
+    setCreditCardLimit(ccNum > 0 ? fmtMoney(ccNum) : "");
+
+    const liabNum = parseNum(dbHousehold.otherLiabilities, 0);
+    setOtherLiabilities(liabNum > 0 ? fmtMoney(liabNum) : "");
+
+    const payNum = parseNum(dbHousehold.monthlyPayments, 0);
+    setMonthlyPayments(payNum > 0 ? fmtMoney(payNum) : "");
+
+    const borrowNum = parseNum(dbHousehold.borrowingCapacity, 0);
+    setBorrowingCapacity(
+      borrowNum > 0 && borrowNum !== 800000 ? fmtMoney(borrowNum) : ""
     );
-    setCreditCardLimit(
-      dbHousehold.creditCardLimit ? fmtMoney(dbHousehold.creditCardLimit) : ""
-    );
-    setOtherLiabilities(
-      dbHousehold.otherLiabilities ? fmtMoney(dbHousehold.otherLiabilities) : ""
-    );
-    setMonthlyPayments(
-      dbHousehold.monthlyPayments ? fmtMoney(dbHousehold.monthlyPayments) : ""
-    );
-    setBorrowingCapacity(fmtMoney(dbHousehold.borrowingCapacity ?? 800000));
-    setCash(fmtMoney(dbHousehold.cashSavings ?? 47000));
+
+    const cashNum = parseNum(dbHousehold.cashSavings, 0);
+    setCash(cashNum > 0 && cashNum !== 47000 ? fmtMoney(cashNum) : "");
 
     // 2. Properties
     const propSnaps = Array.isArray(activeReview?.propertySnapshots)
@@ -268,7 +561,13 @@ export default function FinancialDataInput({
         marketRentWeekly: isOO
           ? "----"
           : fmtMoney(revSnap?.marketWeeklyRent || wkRent),
-        status: (revSnap?.status || "Completed") as "Completed" | "In Progress",
+        status: (
+          revSnap?.detailsJson?.userCompleted
+            ? "Completed"
+            : revSnap?.status === "In Progress" || revSnap?.status === "IN_PROGRESS"
+            ? "In Progress"
+            : "Not Started"
+        ) as "Completed" | "In Progress" | "Not Started",
         rawProperty: p,
         eofySnap,
         revSnap,
@@ -302,9 +601,14 @@ export default function FinancialDataInput({
           (l.snapshots || []).find((s: any) => s.snapshotPoint === "REVIEW_DATE");
 
         const ref = l.loanReference || l.accountName || l.id.slice(0, 8);
-        const eofyRate = eofySnap ? Number(eofySnap.interestRate) : 0.0614;
-        const revRate = revSnap ? Number(revSnap.interestRate) : 0.0594;
-        const mktRate = revSnap?.marketRate ? Number(revSnap.marketRate) : 0.0605;
+        const eofyRate = eofySnap?.interestRate ? Number(eofySnap.interestRate) : 0;
+        const revRate = revSnap?.interestRate ? Number(revSnap.interestRate) : 0;
+        const mktRate = revSnap?.marketRate ? Number(revSnap.marketRate) : 0;
+
+        const eofyBal = parseNum(eofySnap?.loanBalance, 0);
+        const revBal = parseNum(revSnap?.loanBalance, 0);
+        const eofyOffset = parseNum(eofySnap?.offsetBalance, 0);
+        const revOffset = parseNum(revSnap?.offsetBalance, 0);
 
         mappedLoans.push({
           id: l.id,
@@ -318,15 +622,21 @@ export default function FinancialDataInput({
           fixedExpiry: l.fixedExpiry || "----",
           maturity: l.maturityDate || "24/10/2026",
           security1: l.security1 || p.address,
-          eofyBalance: fmtMoney(eofySnap ? eofySnap.loanBalance : 650000),
-          reviewBalance: fmtMoney(revSnap ? revSnap.loanBalance : 650000),
+          eofyBalance: eofyBal > 0 ? fmtMoney(eofyBal) : "",
+          reviewBalance: revBal > 0 ? fmtMoney(revBal) : "",
           marketRate: "N/A",
-          interestEofy: `${((eofyRate <= 1 ? eofyRate * 100 : eofyRate)).toFixed(2)}%`,
-          interestReview: `${((revRate <= 1 ? revRate * 100 : revRate)).toFixed(2)}%`,
-          interestMarket: `${((mktRate <= 1 ? mktRate * 100 : mktRate)).toFixed(2)}%`,
-          offsetEofy: fmtMoney(eofySnap ? eofySnap.offsetBalance : 20000),
-          offsetReview: fmtMoney(revSnap ? revSnap.offsetBalance : 24000),
-          status: (revSnap?.status || "Completed") as "Completed" | "In progress",
+          interestEofy: eofyRate > 0 ? `${((eofyRate <= 1 ? eofyRate * 100 : eofyRate)).toFixed(2)}%` : "",
+          interestReview: revRate > 0 ? `${((revRate <= 1 ? revRate * 100 : revRate)).toFixed(2)}%` : "",
+          interestMarket: mktRate > 0 ? `${((mktRate <= 1 ? mktRate * 100 : mktRate)).toFixed(2)}%` : "",
+          offsetEofy: eofyOffset > 0 ? fmtMoney(eofyOffset) : "",
+          offsetReview: revOffset > 0 ? fmtMoney(revOffset) : "",
+          status: (
+            revSnap?.detailsJson?.userCompleted
+              ? "Completed"
+              : revSnap?.status === "In Progress" || revSnap?.status === "IN_PROGRESS"
+              ? "In progress"
+              : "Not Started"
+          ) as "Completed" | "In progress" | "Not Started",
           isClosed: Boolean(l.isClosed),
           closedDate: l.closedDate || "",
           rawLoan: l,
@@ -348,60 +658,145 @@ export default function FinancialDataInput({
   // =========================================================================
   // TAB 2: Property Data State (Figma Frame 630:5992)
   // =========================================================================
+  const soldDateInputRef = useRef<HTMLInputElement>(null);
   const [soldDate, setSoldDate] = useState("");
-  const [eofyValuation, setEofyValuation] = useState("$840000");
-  const [eofyRent, setEofyRent] = useState("$780");
-  const [eofyMarketRent, setEofyMarketRent] = useState("$840");
-  const [reviewValuation, setReviewValuation] = useState("$840000");
-  const [reviewRent, setReviewRent] = useState("$780");
-  const [reviewMarketRent, setReviewMarketRent] = useState("$840");
-  const [grossRent, setGrossRent] = useState("$40,560");
-  const [weeksRented, setWeeksRented] = useState("$40,560");
+  const [eofyValuation, setEofyValuation] = useState("");
+  const [eofyRent, setEofyRent] = useState("");
+  const [eofyMarketRent, setEofyMarketRent] = useState("");
+  const [reviewValuation, setReviewValuation] = useState("");
+  const [reviewRent, setReviewRent] = useState("");
+  const [reviewMarketRent, setReviewMarketRent] = useState("");
+  const [grossRent, setGrossRent] = useState("");
+  const [weeksRented, setWeeksRented] = useState("");
 
-  // Property Management $
-  const [mgmtCommissions, setMgmtCommissions] = useState("$780");
-  const [lettingFees, setLettingFees] = useState("$840");
-  const [leaseRenewal, setLeaseRenewal] = useState("$780");
-  const [marketing, setMarketing] = useState("$780");
-  const [routineInspection, setRoutineInspection] = useState("$840");
+  // =========================================================================
+  // Property Expense Classification Reference Guide States
+  // =========================================================================
+  const [expenseItems, setExpenseItems] = useState<PropertyExpenseItem[]>(() =>
+    DEFAULT_EXPENSE_ITEMS.map((item) => ({
+      ...item,
+      amount: "",
+    }))
+  );
+  const [allExpenseCategories, setAllExpenseCategories] = useState<string[]>(
+    STANDARD_EXPENSE_CATEGORIES
+  );
+  const [isAddingExpense, setIsAddingExpense] = useState(false);
+  const [newExpenseName, setNewExpenseName] = useState("");
+  const [newExpenseCategory, setNewExpenseCategory] = useState("Property Management");
+  const [newExpenseAmount, setNewExpenseAmount] = useState("");
+  const [isCustomCategoryActive, setIsCustomCategoryActive] = useState(false);
+  const [customCategoryInput, setCustomCategoryInput] = useState("");
 
-  // Property Operating Costs
-  const [councilRates, setCouncilRates] = useState("$780");
-  const [insurance, setInsurance] = useState("$840");
-  const [pestControl, setPestControl] = useState("$780");
-  const [strataLevies, setStrataLevies] = useState("$780");
-  const [waterCharges, setWaterCharges] = useState("$840");
-  const [repairsMaintenance, setRepairsMaintenance] = useState("$840");
-  const [operatingTotal, setOperatingTotal] = useState("$780");
+  const [selectedPropertyStatus, setSelectedPropertyStatus] = useState<string>("Not Started");
+  const [propertySavedAt, setPropertySavedAt] = useState<string | Date | null>(null);
 
-  // Government & Statutory Charges
-  const [landTax, setLandTax] = useState("$780");
-  const [municipalLevies, setMunicipalLevies] = useState("$840");
-  const [complianceInspection, setComplianceInspection] = useState("$780");
-  const [govTotal, setGovTotal] = useState("$780");
+  // Total Property Outgoings / Expenses (Dynamic sum of all active expense items)
+  const totalExpensesSum = useMemo(() => {
+    return expenseItems.reduce((acc, curr) => acc + parseNum(curr.amount, 0), 0);
+  }, [expenseItems]);
 
-  // Finance Cost
-  const [mortgageInterest, setMortgageInterest] = useState("$780");
-  const [annualPackageFees, setAnnualPackageFees] = useState("$840");
-  const [debtServiceCharges, setDebtServiceCharges] = useState("$780");
-  const [netTaxableRentalIncome, setNetTaxableRentalIncome] = useState("$780");
-  const [otherExpenses, setOtherExpenses] = useState("$840");
-  const [netRentTaxReturn, setNetRentTaxReturn] = useState("$780");
-  const [financeTotal, setFinanceTotal] = useState("$780");
-  const [depreciation, setDepreciation] = useState("Depreciation.....");
+  const handleExpenseCategoryChange = (id: string, newCat: string) => {
+    if (newCat === "__ADD_NEW__") {
+      const customCat = window.prompt("Enter new expense category name:");
+      if (customCat && customCat.trim()) {
+        const trimmed = customCat.trim();
+        if (!allExpenseCategories.includes(trimmed)) {
+          setAllExpenseCategories((prev) => [...prev, trimmed]);
+        }
+        setExpenseItems((prev) =>
+          prev.map((i) => (i.id === id ? { ...i, category: trimmed } : i))
+        );
+      }
+      return;
+    }
+    setExpenseItems((prev) =>
+      prev.map((i) => (i.id === id ? { ...i, category: newCat } : i))
+    );
+  };
+
+  const handleExpenseAmountChange = (id: string, rawVal: string) => {
+    const cleaned = cleanMoneyInput(rawVal);
+    setExpenseItems((prev) =>
+      prev.map((i) => (i.id === id ? { ...i, amount: cleaned } : i))
+    );
+  };
+
+  const handleExpenseAmountBlur = (id: string, currentVal: string) => {
+    if (!currentVal) return;
+    const num = parseNum(currentVal, 0);
+    if (num > 0) {
+      setExpenseItems((prev) =>
+        prev.map((i) => (i.id === id ? { ...i, amount: fmtMoney(num) } : i))
+      );
+    }
+  };
+
+  const handleExpenseAmountFocus = (
+    e: React.FocusEvent<HTMLInputElement>,
+    id: string,
+    currentVal: string
+  ) => {
+    if (currentVal === "$0" || currentVal === "0" || currentVal === "$") {
+      setExpenseItems((prev) =>
+        prev.map((i) => (i.id === id ? { ...i, amount: "" } : i))
+      );
+    } else {
+      e.target.select();
+    }
+  };
+
+  const handleDeleteExpenseItem = (id: string) => {
+    setExpenseItems((prev) => prev.filter((i) => i.id !== id));
+  };
+
+  const handleAddExpenseItem = () => {
+    const finalName = newExpenseName.trim();
+    if (!finalName) return;
+    const finalCat = isCustomCategoryActive
+      ? customCategoryInput.trim() || "Property Management"
+      : newExpenseCategory;
+
+    if (finalCat && !allExpenseCategories.includes(finalCat)) {
+      setAllExpenseCategories((prev) => [...prev, finalCat]);
+    }
+
+    const newItem = {
+      id: `custom-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      name: finalName,
+      category: finalCat,
+      amount: newExpenseAmount ? cleanMoneyInput(newExpenseAmount) : "",
+      isCustom: true,
+    };
+
+    setExpenseItems((prev) => {
+      const updated = [...prev, newItem];
+      return updated.sort((a, b) => a.name.localeCompare(b.name));
+    });
+
+    setNewExpenseName("");
+    setNewExpenseCategory("Property Management");
+    setNewExpenseAmount("");
+    setIsCustomCategoryActive(false);
+    setCustomCategoryInput("");
+    setIsAddingExpense(false);
+  };
 
   // =========================================================================
   // TAB 3: Loan Data State (Figma Frame 625:6863)
   // =========================================================================
-  const [isLoanClosed, setIsLoanClosed] = useState(true);
+  const loanClosedDateInputRef = useRef<HTMLInputElement>(null);
+  const [loanStatus, setLoanStatus] = useState<string>("Not Started");
+  const [loanSavedAt, setLoanSavedAt] = useState<string | Date | null>(null);
+  const [isLoanClosed, setIsLoanClosed] = useState(false);
   const [loanClosedDate, setLoanClosedDate] = useState("");
-  const [loanBalanceEofy, setLoanBalanceEofy] = useState("$742000");
-  const [loanBalanceReview, setLoanBalanceReview] = useState("$720000");
-  const [interestRateEofy, setInterestRateEofy] = useState("6.14%");
-  const [interestRateReview, setInterestRateReview] = useState("5.94%");
-  const [interestRateMarket, setInterestRateMarket] = useState("6.05%");
-  const [offsetEofy, setOffsetEofy] = useState("$24,000");
-  const [offsetReview, setOffsetReview] = useState("$32,000");
+  const [loanBalanceEofy, setLoanBalanceEofy] = useState("");
+  const [loanBalanceReview, setLoanBalanceReview] = useState("");
+  const [interestRateEofy, setInterestRateEofy] = useState("");
+  const [interestRateReview, setInterestRateReview] = useState("");
+  const [interestRateMarket, setInterestRateMarket] = useState("");
+  const [offsetEofy, setOffsetEofy] = useState("");
+  const [offsetReview, setOffsetReview] = useState("");
 
   // Populate Property Detail form inputs whenever selectedProperty changes
   useEffect(() => {
@@ -411,41 +806,131 @@ export default function FinancialDataInput({
     const raw = selectedProperty.rawProperty;
 
     setSoldDate(raw?.soldDate || "");
-    setEofyValuation(fmtMoney(eofy ? eofy.valuation : raw?.purchasePrice ?? 840000));
-    setEofyRent(fmtMoney(eofy ? eofy.weeklyRent : raw?.weeklyRent ?? 780));
-    setEofyMarketRent(fmtMoney(eofy?.marketWeeklyRent || eofy?.weeklyRent || 840));
+    const eofyValNum = parseNum(eofy ? eofy.valuation : raw?.purchasePrice, 0);
+    setEofyValuation(eofyValNum > 0 ? fmtMoney(eofyValNum) : "");
 
-    setReviewValuation(
-      fmtMoney(rev ? rev.valuation : raw?.currentValuation ?? raw?.purchasePrice ?? 840000)
+    const eofyRentNum = parseNum(eofy ? eofy.weeklyRent : raw?.weeklyRent, 0);
+    setEofyRent(eofyRentNum > 0 ? fmtMoney(eofyRentNum) : "");
+
+    const eofyMktRentNum = parseNum(eofy?.marketWeeklyRent, 0);
+    setEofyMarketRent(eofyMktRentNum > 0 ? fmtMoney(eofyMktRentNum) : "");
+
+    const revValNum = parseNum(
+      rev ? rev.valuation : raw?.currentValuation ?? raw?.purchasePrice,
+      0
     );
-    setReviewRent(fmtMoney(rev ? rev.weeklyRent : raw?.weeklyRent ?? 780));
-    setReviewMarketRent(fmtMoney(rev?.marketWeeklyRent || rev?.weeklyRent || 840));
-    setGrossRent(fmtMoney(rev ? rev.annualGrossRent : (raw?.weeklyRent ?? 780) * 52));
-    setWeeksRented(String(52 - Number(rev?.vacancyWeeks ?? 0)));
+    setReviewValuation(revValNum > 0 ? fmtMoney(revValNum) : "");
 
-    setMgmtCommissions(fmtMoney(rev?.propertyManagementFees ?? 780));
-    setCouncilRates(fmtMoney(rev?.councilRates ?? 780));
-    setInsurance(fmtMoney(rev?.insurance ?? 840));
-    setStrataLevies(fmtMoney(rev?.strataFees ?? 780));
-    setWaterCharges(fmtMoney(rev?.waterRates ?? 840));
-    setRepairsMaintenance(fmtMoney(rev?.repairsMaintenance ?? 840));
-    setLandTax(fmtMoney(rev?.landTax ?? 780));
-    setOtherExpenses(fmtMoney(rev?.otherExpenses ?? 840));
-    setDepreciation(fmtMoney(rev?.depreciationNonCash ?? 6500));
+    const revRentNum = parseNum(rev ? rev.weeklyRent : raw?.weeklyRent, 0);
+    setReviewRent(revRentNum > 0 ? fmtMoney(revRentNum) : "");
+
+    const revMktRentNum = parseNum(rev?.marketWeeklyRent, 0);
+    setReviewMarketRent(revMktRentNum > 0 ? fmtMoney(revMktRentNum) : "");
+
+    const grossRentNum = parseNum(
+      rev ? rev.annualGrossRent : raw?.weeklyRent ? raw.weeklyRent * 52 : 0,
+      0
+    );
+    setGrossRent(grossRentNum > 0 ? fmtMoney(grossRentNum) : "");
+    setWeeksRented(
+      rev?.vacancyWeeks !== undefined && rev?.vacancyWeeks !== null
+        ? String(52 - Number(rev.vacancyWeeks))
+        : ""
+    );
+
+    // Load Expense Classification field values from DB or detailsJson
+    const savedExp = rev?.detailsJson || {};
+    const isUserCompleted = Boolean(savedExp?.userCompleted);
+    const propStatus = isUserCompleted
+      ? "Completed"
+      : rev?.status === "In Progress" || rev?.status === "IN_PROGRESS"
+      ? "In Progress"
+      : "Not Started";
+    setSelectedPropertyStatus(propStatus);
+    setPropertySavedAt(savedExp?.savedAt || rev?.updatedAt || raw?.updatedAt || null);
+
+    const findSavedValue = (defItem: PropertyExpenseItem) => {
+      // 1. Check savedExp.expenseItems array
+      if (Array.isArray(savedExp.expenseItems)) {
+        const found = savedExp.expenseItems.find(
+          (i: any) =>
+            i.id === defItem.id ||
+            (defItem.fieldKey && i.fieldKey === defItem.fieldKey) ||
+            (i.name && i.name.toLowerCase() === defItem.name.toLowerCase() && i.category === defItem.category) ||
+            (i.name && i.name.toLowerCase() === defItem.name.toLowerCase())
+        );
+        if (found && found.amount) return found.amount;
+      }
+      // 2. Check snapshot columns or detailsJson by fieldKey
+      if (defItem.fieldKey) {
+        if (rev && rev[defItem.fieldKey] !== undefined && rev[defItem.fieldKey] !== null) {
+          const n = parseNum(rev[defItem.fieldKey], 0);
+          if (n > 0) return fmtMoney(n);
+        }
+        if (savedExp[defItem.fieldKey] !== undefined && savedExp[defItem.fieldKey] !== null) {
+          const n = parseNum(savedExp[defItem.fieldKey], 0);
+          if (n > 0) return fmtMoney(n);
+        }
+      }
+      return "";
+    };
+
+    const loadedDefaults = DEFAULT_EXPENSE_ITEMS.map((item) => ({
+      ...item,
+      amount: findSavedValue(item),
+    }));
+
+    // Retain any custom expense items previously added by the user
+    const customSaved = Array.isArray(savedExp.expenseItems)
+      ? savedExp.expenseItems
+          .filter(
+            (si: any) =>
+              si.isCustom ||
+              !DEFAULT_EXPENSE_ITEMS.some(
+                (di) =>
+                  di.id === si.id ||
+                  (di.name.toLowerCase() === (si.name || "").toLowerCase() &&
+                    di.category === si.category)
+              )
+          )
+          .map((si: any) => ({
+            id: si.id || `custom-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+            name: si.name,
+            category: si.category || "Property Management",
+            amount: si.amount || "",
+            isCustom: true,
+          }))
+      : [];
+
+    setExpenseItems([...loadedDefaults, ...customSaved]);
+
+    if (Array.isArray(savedExp.expenseItems) && savedExp.expenseItems.length > 0) {
+      const savedCats = savedExp.expenseItems
+        .map((i: any) => i.category)
+        .filter(Boolean);
+      setAllExpenseCategories((prev) =>
+        Array.from(new Set([...STANDARD_EXPENSE_CATEGORIES, ...savedCats]))
+      );
+    }
   }, [selectedProperty?.id]);
 
   // Populate Loan Detail form inputs whenever selectedLoan changes
   useEffect(() => {
     if (!selectedLoan || !selectedLoan.id) return;
+    const rev = selectedLoan.revSnap;
+    const raw = selectedLoan.rawLoan;
     setIsLoanClosed(Boolean(selectedLoan.isClosed));
     setLoanClosedDate(selectedLoan.closedDate || "");
-    setLoanBalanceEofy(selectedLoan.eofyBalance || "$650,000");
-    setLoanBalanceReview(selectedLoan.reviewBalance || "$650,000");
-    setInterestRateEofy(selectedLoan.interestEofy || "6.14%");
-    setInterestRateReview(selectedLoan.interestReview || "5.94%");
-    setInterestRateMarket(selectedLoan.interestMarket || "6.05%");
-    setOffsetEofy(selectedLoan.offsetEofy || "$20,000");
-    setOffsetReview(selectedLoan.offsetReview || "$24,000");
+    setLoanStatus(selectedLoan.status || rev?.status || "Not Started");
+    setLoanSavedAt(rev?.updatedAt || raw?.updatedAt || null);
+
+    setLoanBalanceEofy(selectedLoan.eofyBalance || "");
+    setLoanBalanceReview(selectedLoan.reviewBalance || "");
+    setInterestRateEofy(selectedLoan.interestEofy || "");
+    setInterestRateReview(selectedLoan.interestReview || "");
+    setInterestRateMarket(selectedLoan.interestMarket || "");
+    setOffsetEofy(selectedLoan.offsetEofy || "");
+    setOffsetReview(selectedLoan.offsetReview || "");
   }, [selectedLoan?.id]);
 
   const combinedSalaryTotal = useMemo(() => {
@@ -466,8 +951,8 @@ export default function FinancialDataInput({
           creditCardLimit: parseNum(creditCardLimit, 0),
           otherLiabilities: parseNum(otherLiabilities, 0),
           monthlyPayments: parseNum(monthlyPayments, 0),
-          borrowingCapacity: parseNum(borrowingCapacity, 800000),
-          cashSavings: parseNum(cash, 47000),
+          borrowingCapacity: parseNum(borrowingCapacity, 0),
+          cashSavings: parseNum(cash, 0),
         }),
         ...salaryRows.map((row) => {
           const rawRate = parseNum(row.taxRate, 37);
@@ -498,35 +983,69 @@ export default function FinancialDataInput({
       if (householdId && soldDate !== (selectedProperty.rawProperty?.soldDate || "")) {
         await updatePropertyApi(householdId, selectedProperty.id, { soldDate });
       }
+      const findAmt = (fieldKeyOrName: string) => {
+        const item = expenseItems.find(
+          (i) =>
+            i.fieldKey === fieldKeyOrName ||
+            i.name.toLowerCase() === fieldKeyOrName.toLowerCase()
+        );
+        return item ? parseNum(item.amount, 0) : 0;
+      };
+
+      const councilRatesNum = findAmt("councilRates");
+      const waterChargesNum = findAmt("waterRates");
+      const insuranceNum = findAmt("insurance");
+      const mgmtCommissionsNum = findAmt("propertyManagementFees");
+      const repairsMaintenanceNum = findAmt("repairsMaintenance");
+      const landTaxNum = findAmt("landTax");
+      const strataLeviesNum = findAmt("strataFees");
+      const otherExpensesNum = findAmt("otherExpenses");
+      const depreciationNum = findAmt("depreciationNonCash");
+
+      const newPropertyStatus = markCompleted ? "Completed" : "In Progress";
+      const now = new Date();
+      const savedDetails = {
+        ...(selectedProperty.revSnap?.detailsJson || {}),
+        expenseItems,
+        totalExpensesSum,
+        userCompleted: markCompleted,
+        savedAt: now.toISOString(),
+      };
+
       await savePropertySnapshotsApi(effectiveReviewId, [
         {
           propertyId: selectedProperty.id,
           snapshotPoint: "EOFY",
-          valuation: parseNum(eofyValuation, 840000),
-          weeklyRent: parseNum(eofyRent, 780),
-          marketWeeklyRent: parseNum(eofyMarketRent, 840),
-          annualGrossRent: parseNum(eofyRent, 780) * 52,
-          status: "Completed",
+          valuation: parseNum(eofyValuation, 0),
+          weeklyRent: parseNum(eofyRent, 0),
+          marketWeeklyRent: parseNum(eofyMarketRent, 0),
+          annualGrossRent: parseNum(eofyRent, 0) * 52,
+          status: newPropertyStatus,
+          detailsJson: savedDetails,
         },
         {
           propertyId: selectedProperty.id,
           snapshotPoint: "REVIEW_DATE",
-          valuation: parseNum(reviewValuation, 840000),
-          weeklyRent: parseNum(reviewRent, 780),
-          marketWeeklyRent: parseNum(reviewMarketRent, 840),
-          annualGrossRent: parseNum(grossRent, parseNum(reviewRent, 780) * 52),
-          councilRates: parseNum(councilRates, 780),
-          waterRates: parseNum(waterCharges, 840),
-          insurance: parseNum(insurance, 840),
-          propertyManagementFees: parseNum(mgmtCommissions, 780),
-          repairsMaintenance: parseNum(repairsMaintenance, 840),
-          landTax: parseNum(landTax, 780),
-          strataFees: parseNum(strataLevies, 780),
-          otherExpenses: parseNum(otherExpenses, 840),
-          depreciationNonCash: parseNum(depreciation, 6500),
-          status: "Completed",
+          valuation: parseNum(reviewValuation, 0),
+          weeklyRent: parseNum(reviewRent, 0),
+          marketWeeklyRent: parseNum(reviewMarketRent, 0),
+          annualGrossRent: parseNum(grossRent, parseNum(reviewRent, 0) * 52),
+          councilRates: councilRatesNum,
+          waterRates: waterChargesNum,
+          insurance: insuranceNum,
+          propertyManagementFees: mgmtCommissionsNum,
+          repairsMaintenance: repairsMaintenanceNum,
+          landTax: landTaxNum,
+          strataFees: strataLeviesNum,
+          otherExpenses: otherExpensesNum,
+          depreciationNonCash: depreciationNum,
+          status: newPropertyStatus,
+          detailsJson: savedDetails,
         },
       ]);
+
+      setSelectedPropertyStatus(newPropertyStatus);
+      setPropertySavedAt(now);
 
       if (markCompleted) {
         await updateFinDataStatusApi(effectiveReviewId, "COMPLETED");
@@ -549,6 +1068,8 @@ export default function FinancialDataInput({
       return;
     }
     setSavingMsg("Saving loan data to database...");
+    const newStatus = markCompleted ? "Completed" : "In Progress";
+    const now = new Date();
     try {
       if (householdId) {
         await updateLoanApi(householdId, selectedLoan.id, {
@@ -556,26 +1077,38 @@ export default function FinancialDataInput({
           closedDate: loanClosedDate,
         });
       }
+      const savedDetails = {
+        ...(selectedLoan.revSnap?.detailsJson || {}),
+        userCompleted: markCompleted,
+        userSaved: true,
+        savedAt: now.toISOString(),
+      };
+
       await saveLoanSnapshotsApi(effectiveReviewId, [
         {
           loanId: selectedLoan.id,
           snapshotPoint: "EOFY",
-          loanBalance: parseNum(loanBalanceEofy, 650000),
-          offsetBalance: parseNum(offsetEofy, 20000),
-          interestRate: parseNum(interestRateEofy, 6.14),
-          marketRate: parseNum(interestRateMarket, 6.05),
-          status: "Completed",
+          loanBalance: parseNum(loanBalanceEofy, 0),
+          offsetBalance: parseNum(offsetEofy, 0),
+          interestRate: parseNum(interestRateEofy, 0),
+          marketRate: parseNum(interestRateMarket, 0),
+          status: newStatus,
+          detailsJson: savedDetails,
         },
         {
           loanId: selectedLoan.id,
           snapshotPoint: "REVIEW_DATE",
-          loanBalance: parseNum(loanBalanceReview, 650000),
-          offsetBalance: parseNum(offsetReview, 24000),
-          interestRate: parseNum(interestRateReview, 5.94),
-          marketRate: parseNum(interestRateMarket, 6.05),
-          status: "Completed",
+          loanBalance: parseNum(loanBalanceReview, 0),
+          offsetBalance: parseNum(offsetReview, 0),
+          interestRate: parseNum(interestRateReview, 0),
+          marketRate: parseNum(interestRateMarket, 0),
+          status: newStatus,
+          detailsJson: savedDetails,
         },
       ]);
+
+      setLoanStatus(newStatus);
+      setLoanSavedAt(now);
 
       if (markCompleted) {
         await updateFinDataStatusApi(effectiveReviewId, "COMPLETED");
@@ -598,7 +1131,7 @@ export default function FinancialDataInput({
     value: string,
     onChange: (val: string) => void,
     required: boolean = false,
-    placeholder: string = "$780"
+    placeholder: string = "$ Enter amount"
   ) => (
     <div>
       <label className="block text-[13.5px] font-normal text-[#1A1C1E] mb-2 font-['Poppins',sans-serif]">
@@ -607,9 +1140,16 @@ export default function FinancialDataInput({
       <input
         type="text"
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onFocus={(e) => {
+          if (value === "$0" || value === "0") {
+            onChange("");
+          } else {
+            e.target.select();
+          }
+        }}
+        onChange={(e) => onChange(cleanMoneyInput(e.target.value))}
         placeholder={placeholder}
-        className="w-full h-[48px] px-3.5 bg-[#F7F8FA] border border-[#D8E0E8] rounded-[8px] text-[13.5px] text-[#8C9BA8] placeholder-[#9AA5B1] focus:text-[#1A1C1E] focus:bg-white focus:outline-none focus:border-[#0E2841] transition-colors font-['Poppins',sans-serif]"
+        className="w-full h-[48px] px-3.5 bg-[#F7F8FA] border border-[#D8E0E8] rounded-[8px] text-[13.5px] text-[#1A1C1E] placeholder-[#9AA5B1] focus:bg-white focus:outline-none focus:border-[#0E2841] transition-colors font-['Poppins',sans-serif]"
       />
     </div>
   );
@@ -636,7 +1176,7 @@ export default function FinancialDataInput({
             className="flex items-center gap-1.5 text-[13px] text-[#8C9BA8] hover:text-[#071E36] transition-colors cursor-pointer"
           >
             <ChevronLeft className="w-4 h-4 stroke-[1.8]" />
-            <span>ack to Household Hub - Review Workspace</span>
+            <span>Back to Household Hub - Review Workspace</span>
           </button>
         )}
 
@@ -704,18 +1244,42 @@ export default function FinancialDataInput({
       {/* Main Title matching Figma Frames (width="507" height="25", 20px font)     */}
       {/* ========================================================================= */}
       <div className="mb-5">
-        {activeTab === "household-income" ? (
-          <h1 className="text-[20px] leading-[26px] font-bold text-[#071E36] tracking-tight">
-            FInancial data input, {householdName} &nbsp;-- {year} {status}
-          </h1>
-        ) : (
-          <h1 className="text-[20px] leading-[26px] text-[#071E36] tracking-tight">
-            <span className="font-bold">
-              {activeTab === "market-data"
-                ? "Financial data input,"
-                : "FInancial data input,"}
-            </span>{" "}
-            <span className="font-normal">{householdName} &nbsp;-- {year}</span>{" "}
+        <h1 className="text-[20px] leading-[26px] text-[#071E36] tracking-tight">
+          <span className="font-bold">Financial data input,</span>{" "}
+          <span className="font-normal">{householdName} &nbsp;-- {year}</span>{" "}
+          {activeTab === "property-data" && propertyViewMode === "detail" ? (
+            <span
+              className={
+                selectedPropertyStatus === "Completed"
+                  ? "text-[#18794E] font-bold"
+                  : selectedPropertyStatus === "In Progress"
+                  ? "text-[#C66900] font-bold"
+                  : "text-[#8C9BA8] font-bold"
+              }
+            >
+              {propertySavedAt && selectedPropertyStatus !== "Not Started"
+                ? `${selectedPropertyStatus} – Saved ${formatSavedDateTime(propertySavedAt)}`
+                : selectedPropertyStatus}
+            </span>
+          ) : activeTab === "loan-data" && loanViewMode === "detail" ? (
+            <span
+              className={
+                loanStatus === "Completed"
+                  ? "text-[#18794E] font-bold"
+                  : loanStatus === "In progress" || loanStatus === "In Progress"
+                  ? "text-[#C66900] font-bold"
+                  : "text-[#8C9BA8] font-bold"
+              }
+            >
+              {loanSavedAt && loanStatus !== "Not Started"
+                ? `${
+                    loanStatus === "In progress" ? "In Progress" : loanStatus
+                  } – Saved ${formatSavedDateTime(loanSavedAt)}`
+                : loanStatus === "In progress"
+                ? "In Progress"
+                : loanStatus}
+            </span>
+          ) : (
             <span
               className={
                 status === "Completed"
@@ -725,8 +1289,8 @@ export default function FinancialDataInput({
             >
               {status}
             </span>
-          </h1>
-        )}
+          )}
+        </h1>
       </div>
 
       {/* ========================================================================= */}
@@ -809,7 +1373,7 @@ export default function FinancialDataInput({
                   </th>
                   <th className="py-3.5 px-2 font-medium text-[13.5px] text-[#ACB5BB] w-[14%]">
                     <div className="flex items-center gap-2 cursor-pointer">
-                      <span>Super ($)</span>
+                      <span>Super Balance</span>
                       <TableSortArrow />
                     </div>
                   </th>
@@ -828,21 +1392,34 @@ export default function FinancialDataInput({
                       <input
                         type="text"
                         value={row.salary}
+                        onFocus={(e) => {
+                          if (row.salary === "$0" || row.salary === "0") {
+                            setSalaryRows((prev) =>
+                              prev.map((r) =>
+                                r.id === row.id ? { ...r, salary: "" } : r
+                              )
+                            );
+                          } else {
+                            e.target.select();
+                          }
+                        }}
                         onChange={(e) => {
-                          const val = e.target.value;
+                          const val = cleanMoneyInput(e.target.value);
                           setSalaryRows((prev) =>
                             prev.map((r) =>
                               r.id === row.id ? { ...r, salary: val } : r
                             )
                           );
                         }}
-                        className="h-[40px] px-3 bg-[#F7F8FA] border border-[#E2E8F0] rounded-[8px] text-[13px] text-[#1A1C1E] w-[134px] focus:bg-white focus:outline-none focus:border-[#0E2841] transition-colors"
+                        placeholder="$ Enter amount"
+                        className="h-[40px] px-3 bg-[#F7F8FA] border border-[#E2E8F0] rounded-[8px] text-[13px] text-[#1A1C1E] placeholder-[#9AA5B1] w-[134px] focus:bg-white focus:outline-none focus:border-[#0E2841] transition-colors"
                       />
                     </td>
                     <td className="py-2.5 px-2">
                       <input
                         type="text"
                         value={row.taxRate}
+                        onFocus={(e) => e.target.select()}
                         onChange={(e) => {
                           const val = e.target.value;
                           setSalaryRows((prev) =>
@@ -851,22 +1428,35 @@ export default function FinancialDataInput({
                             )
                           );
                         }}
-                        className="h-[40px] px-3 bg-[#F7F8FA] border border-[#E2E8F0] rounded-[8px] text-[13px] text-[#1A1C1E] w-[110px] focus:bg-white focus:outline-none focus:border-[#0E2841] transition-colors"
+                        placeholder="37%"
+                        className="h-[40px] px-3 bg-[#F7F8FA] border border-[#E2E8F0] rounded-[8px] text-[13px] text-[#1A1C1E] placeholder-[#9AA5B1] w-[110px] focus:bg-white focus:outline-none focus:border-[#0E2841] transition-colors"
                       />
                     </td>
                     <td className="py-2.5 px-2">
                       <input
                         type="text"
                         value={row.superAmount}
+                        onFocus={(e) => {
+                          if (row.superAmount === "$0" || row.superAmount === "0") {
+                            setSalaryRows((prev) =>
+                              prev.map((r) =>
+                                r.id === row.id ? { ...r, superAmount: "" } : r
+                              )
+                            );
+                          } else {
+                            e.target.select();
+                          }
+                        }}
                         onChange={(e) => {
-                          const val = e.target.value;
+                          const val = cleanMoneyInput(e.target.value);
                           setSalaryRows((prev) =>
                             prev.map((r) =>
                               r.id === row.id ? { ...r, superAmount: val } : r
                             )
                           );
                         }}
-                        className="h-[40px] px-3 bg-[#F7F8FA] border border-[#E2E8F0] rounded-[8px] text-[13px] text-[#1A1C1E] w-[136px] focus:bg-white focus:outline-none focus:border-[#0E2841] transition-colors"
+                        placeholder="$ Enter amount"
+                        className="h-[40px] px-3 bg-[#F7F8FA] border border-[#E2E8F0] rounded-[8px] text-[13px] text-[#1A1C1E] placeholder-[#9AA5B1] w-[136px] focus:bg-white focus:outline-none focus:border-[#0E2841] transition-colors"
                       />
                     </td>
                   </tr>
@@ -919,7 +1509,23 @@ export default function FinancialDataInput({
                 <input
                   type="text"
                   value={householdExpenditure}
-                  onChange={(e) => setHouseholdExpenditure(e.target.value)}
+                  onFocus={(e) =>
+                    handleMoneyFocus(e, householdExpenditure, setHouseholdExpenditure)
+                  }
+                  onClick={() => {
+                    if (householdExpenditure === "$0" || householdExpenditure === "0") {
+                      setHouseholdExpenditure("");
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "$" && (householdExpenditure === "$0" || householdExpenditure === "0")) {
+                      e.preventDefault();
+                      setHouseholdExpenditure("$");
+                    }
+                  }}
+                  onChange={(e) =>
+                    setHouseholdExpenditure(cleanMoneyInput(e.target.value))
+                  }
                   placeholder="$ Enter amount"
                   className="w-full h-[48px] px-3.5 bg-[#F7F8FA] border border-[#D8E0E8] rounded-[8px] text-[13.5px] text-[#1A1C1E] placeholder-[#9AA5B1] focus:bg-white focus:outline-none focus:border-[#0E2841]"
                 />
@@ -933,7 +1539,23 @@ export default function FinancialDataInput({
                 <input
                   type="text"
                   value={creditCardLimit}
-                  onChange={(e) => setCreditCardLimit(e.target.value)}
+                  onFocus={(e) =>
+                    handleMoneyFocus(e, creditCardLimit, setCreditCardLimit)
+                  }
+                  onClick={() => {
+                    if (creditCardLimit === "$0" || creditCardLimit === "0") {
+                      setCreditCardLimit("");
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "$" && (creditCardLimit === "$0" || creditCardLimit === "0")) {
+                      e.preventDefault();
+                      setCreditCardLimit("$");
+                    }
+                  }}
+                  onChange={(e) =>
+                    setCreditCardLimit(cleanMoneyInput(e.target.value))
+                  }
                   placeholder="$ Enter amount"
                   className="w-full h-[48px] px-3.5 bg-[#F7F8FA] border border-[#D8E0E8] rounded-[8px] text-[13.5px] text-[#1A1C1E] placeholder-[#9AA5B1] focus:bg-white focus:outline-none focus:border-[#0E2841]"
                 />
@@ -947,7 +1569,23 @@ export default function FinancialDataInput({
                 <input
                   type="text"
                   value={otherLiabilities}
-                  onChange={(e) => setOtherLiabilities(e.target.value)}
+                  onFocus={(e) =>
+                    handleMoneyFocus(e, otherLiabilities, setOtherLiabilities)
+                  }
+                  onClick={() => {
+                    if (otherLiabilities === "$0" || otherLiabilities === "0") {
+                      setOtherLiabilities("");
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "$" && (otherLiabilities === "$0" || otherLiabilities === "0")) {
+                      e.preventDefault();
+                      setOtherLiabilities("$");
+                    }
+                  }}
+                  onChange={(e) =>
+                    setOtherLiabilities(cleanMoneyInput(e.target.value))
+                  }
                   placeholder="$ Enter amount"
                   className="w-full h-[48px] px-3.5 bg-[#F7F8FA] border border-[#D8E0E8] rounded-[8px] text-[13.5px] text-[#1A1C1E] placeholder-[#9AA5B1] focus:bg-white focus:outline-none focus:border-[#0E2841]"
                 />
@@ -961,7 +1599,23 @@ export default function FinancialDataInput({
                 <input
                   type="text"
                   value={monthlyPayments}
-                  onChange={(e) => setMonthlyPayments(e.target.value)}
+                  onFocus={(e) =>
+                    handleMoneyFocus(e, monthlyPayments, setMonthlyPayments)
+                  }
+                  onClick={() => {
+                    if (monthlyPayments === "$0" || monthlyPayments === "0") {
+                      setMonthlyPayments("");
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "$" && (monthlyPayments === "$0" || monthlyPayments === "0")) {
+                      e.preventDefault();
+                      setMonthlyPayments("$");
+                    }
+                  }}
+                  onChange={(e) =>
+                    setMonthlyPayments(cleanMoneyInput(e.target.value))
+                  }
                   placeholder="$ Enter amount"
                   className="w-full h-[48px] px-3.5 bg-[#F7F8FA] border border-[#D8E0E8] rounded-[8px] text-[13.5px] text-[#1A1C1E] placeholder-[#9AA5B1] focus:bg-white focus:outline-none focus:border-[#0E2841]"
                 />
@@ -975,9 +1629,25 @@ export default function FinancialDataInput({
                 <input
                   type="text"
                   value={borrowingCapacity}
-                  onChange={(e) => setBorrowingCapacity(e.target.value)}
-                  placeholder="$800,000"
-                  className="w-full h-[48px] px-3.5 bg-[#F7F8FA] border border-[#D8E0E8] rounded-[8px] text-[13.5px] text-[#8C9BA8] placeholder-[#9AA5B1] focus:text-[#1A1C1E] focus:bg-white focus:outline-none focus:border-[#0E2841]"
+                  onFocus={(e) =>
+                    handleMoneyFocus(e, borrowingCapacity, setBorrowingCapacity)
+                  }
+                  onClick={() => {
+                    if (borrowingCapacity === "$0" || borrowingCapacity === "0") {
+                      setBorrowingCapacity("");
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "$" && (borrowingCapacity === "$0" || borrowingCapacity === "0")) {
+                      e.preventDefault();
+                      setBorrowingCapacity("$");
+                    }
+                  }}
+                  onChange={(e) =>
+                    setBorrowingCapacity(cleanMoneyInput(e.target.value))
+                  }
+                  placeholder="$ Enter amount"
+                  className="w-full h-[48px] px-3.5 bg-[#F7F8FA] border border-[#D8E0E8] rounded-[8px] text-[13.5px] text-[#1A1C1E] placeholder-[#9AA5B1] focus:bg-white focus:outline-none focus:border-[#0E2841]"
                 />
               </div>
 
@@ -989,9 +1659,21 @@ export default function FinancialDataInput({
                 <input
                   type="text"
                   value={cash}
-                  onChange={(e) => setCash(e.target.value)}
-                  placeholder="$47,000"
-                  className="w-full h-[48px] px-3.5 bg-[#F7F8FA] border border-[#D8E0E8] rounded-[8px] text-[13.5px] text-[#8C9BA8] placeholder-[#9AA5B1] focus:text-[#1A1C1E] focus:bg-white focus:outline-none focus:border-[#0E2841]"
+                  onFocus={(e) => handleMoneyFocus(e, cash, setCash)}
+                  onClick={() => {
+                    if (cash === "$0" || cash === "0") {
+                      setCash("");
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "$" && (cash === "$0" || cash === "0")) {
+                      e.preventDefault();
+                      setCash("$");
+                    }
+                  }}
+                  onChange={(e) => setCash(cleanMoneyInput(e.target.value))}
+                  placeholder="$ Enter amount"
+                  className="w-full h-[48px] px-3.5 bg-[#F7F8FA] border border-[#D8E0E8] rounded-[8px] text-[13.5px] text-[#1A1C1E] placeholder-[#9AA5B1] focus:bg-white focus:outline-none focus:border-[#0E2841]"
                 />
               </div>
             </div>
@@ -1063,7 +1745,13 @@ export default function FinancialDataInput({
                     <div className="text-[13px] leading-[20px] text-[#1A1C1E] space-y-0.5">
                       <div>
                         <span>Status: </span>
-                        <span className="text-[#18794E] font-bold">
+                        <span
+                          className={`font-bold ${
+                            selectedProperty.status === "Completed"
+                              ? "text-[#18794E]"
+                              : "text-[#C66900]"
+                          }`}
+                        >
                           {selectedProperty.status}
                         </span>
                       </div>
@@ -1083,13 +1771,31 @@ export default function FinancialDataInput({
                       </span>
                       <div className="relative">
                         <input
-                          type="text"
-                          value={soldDate}
+                          ref={soldDateInputRef}
+                          type="date"
+                          value={toHtmlDateValue(soldDate)}
                           onChange={(e) => setSoldDate(e.target.value)}
-                          placeholder="dd-mm-yyyy"
-                          className="h-[44px] w-[156px] px-3.5 pr-9 bg-white border border-[#E2E8F0] rounded-[8px] text-[13px] text-[#1A1C1E] placeholder-[#9AA5B1] focus:outline-none focus:border-[#0E2841]"
+                          onClick={() => {
+                            try {
+                              soldDateInputRef.current?.showPicker();
+                            } catch {}
+                          }}
+                          className="h-[44px] w-[170px] px-3.5 pr-10 bg-white border border-[#E2E8F0] rounded-[8px] text-[13px] text-[#1A1C1E] focus:outline-none focus:border-[#0E2841] cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:right-0 [&::-webkit-calendar-picker-indicator]:w-10 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
                         />
-                        <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-[#64748B] pointer-events-none" />
+                        <button
+                          type="button"
+                          tabIndex={-1}
+                          onClick={() => {
+                            try {
+                              soldDateInputRef.current?.showPicker();
+                            } catch {
+                              soldDateInputRef.current?.focus();
+                            }
+                          }}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#0E2841] transition-colors cursor-pointer"
+                        >
+                          <Calendar className="w-[18px] h-[18px]" />
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -1115,7 +1821,7 @@ export default function FinancialDataInput({
                       eofyValuation,
                       setEofyValuation,
                       false,
-                      "$840000"
+                      "$ Enter amount"
                     )}
                   </div>
 
@@ -1125,14 +1831,14 @@ export default function FinancialDataInput({
                       eofyRent,
                       setEofyRent,
                       false,
-                      "$780"
+                      "$ Enter amount"
                     )}
                     {renderPropertyField(
                       "Market Rent (pw) ($)",
                       eofyMarketRent,
                       setEofyMarketRent,
                       true,
-                      "$840"
+                      "$ Enter amount"
                     )}
                   </div>
                 </div>
@@ -1154,7 +1860,7 @@ export default function FinancialDataInput({
                       reviewValuation,
                       setReviewValuation,
                       false,
-                      "$840000"
+                      "$ Enter amount"
                     )}
                   </div>
 
@@ -1164,14 +1870,14 @@ export default function FinancialDataInput({
                       reviewRent,
                       setReviewRent,
                       false,
-                      "$780"
+                      "$ Enter amount"
                     )}
                     {renderPropertyField(
                       "Market Rent (pw) ($)",
                       reviewMarketRent,
                       setReviewMarketRent,
                       true,
-                      "$840"
+                      "$ Enter amount"
                     )}
                   </div>
                 </div>
@@ -1188,7 +1894,7 @@ export default function FinancialDataInput({
                       Total Outgoings
                     </div>
                     <div className="text-[12px] font-medium text-[#1A1C1E]">
-                      $50,779
+                      {fmtMoney(totalExpensesSum)}
                     </div>
                   </div>
                 </div>
@@ -1199,226 +1905,107 @@ export default function FinancialDataInput({
                     grossRent,
                     setGrossRent,
                     false,
-                    "$40,560"
+                    "$ Enter amount"
                   )}
                   {renderPropertyField(
                     "weeks rented",
                     weeksRented,
                     setWeeksRented,
                     false,
-                    "$40,560"
+                    "52"
                   )}
                 </div>
               </div>
 
-              {/* Card 5: Expense Classification Reference Guide (Figma Frame 633:6848 - Separate Card!) */}
-              <div className="bg-white rounded-[16px] p-6 sm:p-7 shadow-[0px_2px_12px_rgba(0,0,0,0.03)] border border-[#EDEDF0] space-y-6">
-                <div className="border-b border-[#F2F3F5] pb-4 w-[542px] max-w-full">
-                  <h3 className="text-[18px] font-bold text-[#071E36]">
+              {/* Card 5: Expense Classification Reference Guide */}
+              <div className="bg-white rounded-[16px] p-6 sm:p-8 shadow-[0px_2px_12px_rgba(0,0,0,0.03)] border border-[#EDEDF0]">
+                {/* Header matching image */}
+                <div className="border-b border-[#F0F1F3] pb-4 mb-6">
+                  <h3 className="text-[17px] sm:text-[18px] font-bold text-[#071E36] tracking-tight">
                     Expense Classification Reference Guide
                   </h3>
                 </div>
 
-                {/* Section 1: Property Management $ (Figma 633:6916) */}
-                <div className="bg-[#FBFBFC] border border-[#F0F1F3] rounded-[12px] p-5 space-y-4">
-                  <div className="border-b border-[#E5E7EB] pb-2.5 w-[496px] max-w-full">
-                    <h4 className="text-[14px] font-bold text-[#071E36]">
-                      Property Management $
-                    </h4>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                    {renderPropertyField(
-                      "Management commissions",
-                      mgmtCommissions,
-                      setMgmtCommissions
-                    )}
-                    {renderPropertyField(
-                      "Letting fees",
-                      lettingFees,
-                      setLettingFees,
-                      true,
-                      "$840"
-                    )}
-                    {renderPropertyField(
-                      "Lease renewal charges",
-                      leaseRenewal,
-                      setLeaseRenewal
-                    )}
-                    {renderPropertyField("Marketing", marketing, setMarketing)}
-                    {renderPropertyField(
-                      "Routine inspection costs",
-                      routineInspection,
-                      setRoutineInspection,
-                      true,
-                      "$840"
-                    )}
-                  </div>
-                </div>
+                {/* 4 Grouped Category Sections */}
+                <div className="space-y-5">
+                  {EXPENSE_CATEGORIES_CONFIG.map((catConfig) => {
+                    const items = expenseItems.filter(
+                      (i) => i.category === catConfig.key
+                    );
 
-                {/* Section 2: Property Operating Costs (Figma 741:9392) */}
-                <div className="bg-[#FBFBFC] border border-[#F0F1F3] rounded-[12px] p-5 space-y-4">
-                  <div className="border-b border-[#E5E7EB] pb-2.5 w-[496px] max-w-full">
-                    <h4 className="text-[14px] font-bold text-[#071E36]">
-                      Property Operating Costs
-                    </h4>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                    {renderPropertyField(
-                      "Council rates",
-                      councilRates,
-                      setCouncilRates
-                    )}
-                    {renderPropertyField(
-                      "Landlord / building insurance",
-                      insurance,
-                      setInsurance,
-                      true,
-                      "$840"
-                    )}
-                    {renderPropertyField(
-                      "Pest control",
-                      pestControl,
-                      setPestControl
-                    )}
-                    {renderPropertyField(
-                      "Strata levies",
-                      strataLevies,
-                      setStrataLevies
-                    )}
-                    {renderPropertyField(
-                      "Water charges",
-                      waterCharges,
-                      setWaterCharges,
-                      true,
-                      "$840"
-                    )}
-                    {renderPropertyField(
-                      "Repairs & maintenance",
-                      repairsMaintenance,
-                      setRepairsMaintenance,
-                      true,
-                      "$840"
-                    )}
-                  </div>
-                  {/* Full-width Add Total $ (Figma 958:3976 width=1094) */}
-                  <div>
-                    {renderPropertyField(
-                      "Add Total $",
-                      operatingTotal,
-                      setOperatingTotal
-                    )}
-                  </div>
-                </div>
+                    return (
+                      <div
+                        key={catConfig.key}
+                        className="bg-[#F1F3F5] rounded-[14px] p-5 sm:p-6"
+                      >
+                        <h4 className="text-[14px] sm:text-[15px] font-bold text-[#111827] mb-4">
+                          {catConfig.title}
+                        </h4>
 
-                {/* Section 3: Government & Statutory Charges (Figma 741:9480) */}
-                <div className="bg-[#FBFBFC] border border-[#F0F1F3] rounded-[12px] p-5 space-y-4">
-                  <div className="border-b border-[#E5E7EB] pb-2.5 w-[496px] max-w-full">
-                    <h4 className="text-[14px] font-bold text-[#071E36]">
-                      Government &amp; Statutory Charges
-                    </h4>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                    {renderPropertyField(
-                      "State land tax notices",
-                      landTax,
-                      setLandTax
-                    )}
-                    {renderPropertyField(
-                      "Statutory municipal levies",
-                      municipalLevies,
-                      setMunicipalLevies,
-                      true,
-                      "$840"
-                    )}
-                    {renderPropertyField(
-                      "Annual regulatory compliance inspection",
-                      complianceInspection,
-                      setComplianceInspection
-                    )}
-                  </div>
-                  {/* Full-width Add Total $ (Figma 958:4069 width=1094) */}
-                  <div>
-                    {renderPropertyField("Add Total $", govTotal, setGovTotal)}
-                  </div>
-                </div>
-
-                {/* Section 4: Finance Cost (Figma 741:9569) */}
-                <div className="bg-[#FBFBFC] border border-[#F0F1F3] rounded-[12px] p-5 space-y-4">
-                  <div className="border-b border-[#E5E7EB] pb-2.5 w-[496px] max-w-full">
-                    <h4 className="text-[14px] font-bold text-[#071E36]">
-                      Finance Cost
-                    </h4>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                    {renderPropertyField(
-                      "Bank mortgage interest",
-                      mortgageInterest,
-                      setMortgageInterest
-                    )}
-                    {renderPropertyField(
-                      "Annual package fees",
-                      annualPackageFees,
-                      setAnnualPackageFees,
-                      true,
-                      "$840"
-                    )}
-                    {renderPropertyField(
-                      "Ongoing debt service charges",
-                      debtServiceCharges,
-                      setDebtServiceCharges
-                    )}
-                    {renderPropertyField(
-                      "Net Taxable Rental Income",
-                      netTaxableRentalIncome,
-                      setNetTaxableRentalIncome
-                    )}
-                    {renderPropertyField(
-                      "Other expenses",
-                      otherExpenses,
-                      setOtherExpenses,
-                      true,
-                      "$840"
-                    )}
-                    {renderPropertyField(
-                      "Net Rent (per tax Return)",
-                      netRentTaxReturn,
-                      setNetRentTaxReturn
-                    )}
-                  </div>
-                  {/* Full-width Add Total $ (Figma 958:4160 width=1094) */}
-                  <div>
-                    {renderPropertyField(
-                      "Add Total $",
-                      financeTotal,
-                      setFinanceTotal
-                    )}
-                  </div>
-                  {/* Full-width Depreciation (Figma 958:4169 width=1094 height=69) */}
-                  <div>
-                    <label className="block text-[13.5px] font-normal text-[#1A1C1E] mb-2">
-                      Depreciation
-                    </label>
-                    <input
-                      type="text"
-                      value={depreciation}
-                      onChange={(e) => setDepreciation(e.target.value)}
-                      placeholder="Depreciation....."
-                      className="w-full h-[69px] px-3.5 bg-[#F7F8FA] border border-[#D8E0E8] rounded-[8px] text-[13.5px] text-[#8C9BA8] placeholder-[#9AA5B1] focus:text-[#1A1C1E] focus:bg-white focus:outline-none focus:border-[#0E2841] transition-colors"
-                    />
-                  </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4">
+                          {items.map((item) => (
+                            <div
+                              key={item.id}
+                              className={
+                                item.isFullWidth
+                                  ? "col-span-1 md:col-span-3"
+                                  : "col-span-1"
+                              }
+                            >
+                              <div className="flex items-center justify-between mb-1.5">
+                                <label className="block text-[13px] font-medium text-[#1A1C1E]">
+                                  <span>{item.name}</span>
+                                  {item.hasAsterisk && (
+                                    <span className="text-[#9AA5B1] ml-1 font-normal">
+                                      *
+                                    </span>
+                                  )}
+                                </label>
+                                {item.isCustom && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteExpenseItem(item.id)}
+                                    title="Delete custom item"
+                                    className="text-[#9AA5B1] hover:text-[#DC2626] transition-colors cursor-pointer"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                              <input
+                                type="text"
+                                value={item.amount}
+                                onFocus={(e) =>
+                                  handleExpenseAmountFocus(e, item.id, item.amount)
+                                }
+                                onChange={(e) =>
+                                  handleExpenseAmountChange(item.id, e.target.value)
+                                }
+                                onBlur={(e) =>
+                                  handleExpenseAmountBlur(item.id, e.target.value)
+                                }
+                                placeholder={item.placeholder || "$780"}
+                                className="w-full h-[44px] px-3.5 bg-white border border-[#E2E8F0] rounded-[8px] text-[13.5px] text-[#1A1C1E] placeholder-[#ACB5BB] focus:outline-none focus:border-[#071E36] focus:ring-1 focus:ring-[#071E36]/20 transition-all font-['Poppins',sans-serif]"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* Action Buttons matching Figma 633:10089 (Back on far left, Save & Completed on far right) */}
-              <div className="flex items-center justify-between pt-2">
+              {/* Action Buttons matching design (Back on far left, Save & Completed on far right) */}
+              <div className="flex items-center justify-between pt-4">
                 <button
                   type="button"
                   onClick={() => setPropertyViewMode("list")}
-                  className="h-[40px] w-[86px] rounded-[8px] border border-[#E2E8F0] bg-white text-[#071E36] hover:bg-gray-50 text-[13.5px] font-medium transition-colors cursor-pointer"
+                  className="h-[40px] px-7 rounded-[8px] bg-[#071E36] hover:bg-[#122D4D] text-white text-[13.5px] font-medium transition-colors cursor-pointer shadow-xs"
                 >
                   Back
                 </button>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3">
                   {savingMsg && (
                     <span className="text-[13px] text-[#18794E] font-medium">
                       {savingMsg}
@@ -1427,14 +2014,14 @@ export default function FinancialDataInput({
                   <button
                     type="button"
                     onClick={() => handleSavePropertySnapshots(false)}
-                    className="h-[40px] w-[80px] rounded-[8px] border border-[#071E36] bg-white text-[#071E36] hover:bg-gray-50 text-[13.5px] font-medium transition-colors cursor-pointer"
+                    className="h-[40px] px-7 rounded-[8px] bg-[#071E36] hover:bg-[#122D4D] text-white text-[13.5px] font-medium transition-colors cursor-pointer shadow-xs"
                   >
                     Save
                   </button>
                   <button
                     type="button"
                     onClick={() => handleSavePropertySnapshots(true)}
-                    className="h-[40px] w-[123px] rounded-[8px] bg-[#071E36] hover:bg-[#122D4D] text-white text-[13.5px] font-medium transition-colors cursor-pointer shadow-xs"
+                    className="h-[40px] px-6 rounded-[8px] bg-[#071E36] hover:bg-[#122D4D] text-white text-[13.5px] font-medium transition-colors cursor-pointer shadow-xs"
                   >
                     Completed
                   </button>
@@ -1609,9 +2196,11 @@ export default function FinancialDataInput({
                       )}
                     </div>
                   </div>
-                  <span className="text-[13px] text-[#8C9BA8] font-normal">
-                    Facility ID: {selectedLoan.facilityId}
-                  </span>
+                  <div className="flex flex-col sm:items-end gap-1 shrink-0">
+                    <span className="text-[13px] text-[#8C9BA8] font-normal">
+                      Facility ID: {selectedLoan.facilityId}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -1642,15 +2231,36 @@ export default function FinancialDataInput({
                         Loan closed:
                       </span>
                     </div>
-                    <div className="relative">
+                    <div className="relative flex items-center">
+                      <input
+                        ref={loanClosedDateInputRef}
+                        type="date"
+                        value={toHtmlDateValue(loanClosedDate)}
+                        onChange={(e) => setLoanClosedDate(e.target.value)}
+                        className="sr-only"
+                        tabIndex={-1}
+                      />
                       <input
                         type="text"
                         value={loanClosedDate}
                         onChange={(e) => setLoanClosedDate(e.target.value)}
                         placeholder="dd-mm-yyyy"
-                        className="h-[44px] w-[156px] px-3.5 pr-9 bg-white border border-[#E2E8F0] rounded-[8px] text-[13px] text-[#1A1C1E] placeholder-[#1A1C1E] focus:outline-none focus:border-[#0E2841]"
+                        className="h-[44px] w-[156px] px-3.5 pr-9 bg-white border border-[#E2E8F0] rounded-[8px] text-[13px] text-[#1A1C1E] placeholder-[#9AA5B1] focus:outline-none focus:border-[#0E2841]"
                       />
-                      <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-[#1A1C1E] pointer-events-none" />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          try {
+                            loanClosedDateInputRef.current?.showPicker();
+                          } catch {
+                            loanClosedDateInputRef.current?.focus();
+                          }
+                        }}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-[#1A1C1E] hover:text-[#0E2841] transition-colors cursor-pointer"
+                        title="Choose date"
+                      >
+                        <Calendar className="w-[18px] h-[18px]" />
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1802,18 +2412,32 @@ export default function FinancialDataInput({
                           <input
                             type="text"
                             value={loanBalanceEofy}
-                            onChange={(e) => setLoanBalanceEofy(e.target.value)}
-                            className="bg-transparent text-[13.5px] text-[#1A1C1E] w-[130px] focus:bg-[#F7F8FA] focus:px-2 py-1 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#071E36] transition-all"
+                            placeholder="$ Enter amount"
+                            onFocus={(e) => {
+                              if (loanBalanceEofy === "$0" || loanBalanceEofy === "0") {
+                                setLoanBalanceEofy("");
+                              } else {
+                                e.target.select();
+                              }
+                            }}
+                            onChange={(e) => setLoanBalanceEofy(cleanMoneyInput(e.target.value))}
+                            className="bg-transparent text-[13.5px] text-[#1A1C1E] placeholder-[#9AA5B1] w-[150px] focus:bg-[#F7F8FA] focus:px-2 py-1.5 rounded-[6px] border border-transparent hover:border-[#D8E0E8] focus:border-[#0E2841] focus:outline-none transition-all"
                           />
                         </td>
                         <td className="py-3 px-2">
                           <input
                             type="text"
                             value={loanBalanceReview}
-                            onChange={(e) =>
-                              setLoanBalanceReview(e.target.value)
-                            }
-                            className="bg-transparent text-[13.5px] text-[#1A1C1E] w-[130px] focus:bg-[#F7F8FA] focus:px-2 py-1 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#071E36] transition-all"
+                            placeholder="$ Enter amount"
+                            onFocus={(e) => {
+                              if (loanBalanceReview === "$0" || loanBalanceReview === "0") {
+                                setLoanBalanceReview("");
+                              } else {
+                                e.target.select();
+                              }
+                            }}
+                            onChange={(e) => setLoanBalanceReview(cleanMoneyInput(e.target.value))}
+                            className="bg-transparent text-[13.5px] text-[#1A1C1E] placeholder-[#9AA5B1] w-[150px] focus:bg-[#F7F8FA] focus:px-2 py-1.5 rounded-[6px] border border-transparent hover:border-[#D8E0E8] focus:border-[#0E2841] focus:outline-none transition-all"
                           />
                         </td>
                         <td className="py-3 px-2 text-[13.5px] text-[#1A1C1E]">
@@ -1829,30 +2453,27 @@ export default function FinancialDataInput({
                           <input
                             type="text"
                             value={interestRateEofy}
-                            onChange={(e) =>
-                              setInterestRateEofy(e.target.value)
-                            }
-                            className="bg-transparent text-[13.5px] text-[#1A1C1E] w-[130px] focus:bg-[#F7F8FA] focus:px-2 py-1 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#071E36] transition-all"
+                            placeholder="e.g. 5.94%"
+                            onChange={(e) => setInterestRateEofy(e.target.value)}
+                            className="bg-transparent text-[13.5px] text-[#1A1C1E] placeholder-[#9AA5B1] w-[130px] focus:bg-[#F7F8FA] focus:px-2 py-1.5 rounded-[6px] border border-transparent hover:border-[#D8E0E8] focus:border-[#0E2841] focus:outline-none transition-all"
                           />
                         </td>
                         <td className="py-3 px-2">
                           <input
                             type="text"
                             value={interestRateReview}
-                            onChange={(e) =>
-                              setInterestRateReview(e.target.value)
-                            }
-                            className="bg-transparent text-[13.5px] text-[#1A1C1E] w-[130px] focus:bg-[#F7F8FA] focus:px-2 py-1 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#071E36] transition-all"
+                            placeholder="e.g. 5.94%"
+                            onChange={(e) => setInterestRateReview(e.target.value)}
+                            className="bg-transparent text-[13.5px] text-[#1A1C1E] placeholder-[#9AA5B1] w-[130px] focus:bg-[#F7F8FA] focus:px-2 py-1.5 rounded-[6px] border border-transparent hover:border-[#D8E0E8] focus:border-[#0E2841] focus:outline-none transition-all"
                           />
                         </td>
                         <td className="py-3 px-2">
                           <input
                             type="text"
                             value={interestRateMarket}
-                            onChange={(e) =>
-                              setInterestRateMarket(e.target.value)
-                            }
-                            className="bg-transparent text-[13.5px] text-[#1A1C1E] w-[130px] focus:bg-[#F7F8FA] focus:px-2 py-1 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#071E36] transition-all"
+                            placeholder="e.g. 6.05%"
+                            onChange={(e) => setInterestRateMarket(e.target.value)}
+                            className="bg-transparent text-[13.5px] text-[#1A1C1E] placeholder-[#9AA5B1] w-[130px] focus:bg-[#F7F8FA] focus:px-2 py-1.5 rounded-[6px] border border-transparent hover:border-[#D8E0E8] focus:border-[#0E2841] focus:outline-none transition-all"
                           />
                         </td>
                       </tr>
@@ -1865,16 +2486,32 @@ export default function FinancialDataInput({
                           <input
                             type="text"
                             value={offsetEofy}
-                            onChange={(e) => setOffsetEofy(e.target.value)}
-                            className="bg-transparent text-[13.5px] text-[#1A1C1E] w-[130px] focus:bg-[#F7F8FA] focus:px-2 py-1 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#071E36] transition-all"
+                            placeholder="$ Enter amount"
+                            onFocus={(e) => {
+                              if (offsetEofy === "$0" || offsetEofy === "0") {
+                                setOffsetEofy("");
+                              } else {
+                                e.target.select();
+                              }
+                            }}
+                            onChange={(e) => setOffsetEofy(cleanMoneyInput(e.target.value))}
+                            className="bg-transparent text-[13.5px] text-[#1A1C1E] placeholder-[#9AA5B1] w-[150px] focus:bg-[#F7F8FA] focus:px-2 py-1.5 rounded-[6px] border border-transparent hover:border-[#D8E0E8] focus:border-[#0E2841] focus:outline-none transition-all"
                           />
                         </td>
                         <td className="py-3 px-2">
                           <input
                             type="text"
                             value={offsetReview}
-                            onChange={(e) => setOffsetReview(e.target.value)}
-                            className="bg-transparent text-[13.5px] text-[#1A1C1E] w-[130px] focus:bg-[#F7F8FA] focus:px-2 py-1 rounded-[6px] focus:outline-none focus:ring-1 focus:ring-[#071E36] transition-all"
+                            placeholder="$ Enter amount"
+                            onFocus={(e) => {
+                              if (offsetReview === "$0" || offsetReview === "0") {
+                                setOffsetReview("");
+                              } else {
+                                e.target.select();
+                              }
+                            }}
+                            onChange={(e) => setOffsetReview(cleanMoneyInput(e.target.value))}
+                            className="bg-transparent text-[13.5px] text-[#1A1C1E] placeholder-[#9AA5B1] w-[150px] focus:bg-[#F7F8FA] focus:px-2 py-1.5 rounded-[6px] border border-transparent hover:border-[#D8E0E8] focus:border-[#0E2841] focus:outline-none transition-all"
                           />
                         </td>
                         <td className="py-3 px-2 text-[13.5px] text-[#1A1C1E]">
@@ -2219,6 +2856,15 @@ export default function FinancialDataInput({
       <AddPropertyModal
         isOpen={isPropertyModalOpen}
         onClose={() => setIsPropertyModalOpen(false)}
+        availableEntities={
+          Array.isArray(dbHousehold?.entities)
+            ? dbHousehold.entities.map((e: any) => ({
+                id: e.id,
+                name: e.name,
+                type: e.displayType || e.type,
+              }))
+            : []
+        }
         onAddProperty={async (newP: NewPropertyFormPayload) => {
           if (householdId) {
             const fullAddress =
@@ -2236,7 +2882,8 @@ export default function FinancialDataInput({
               type: newP.purpose,
               purchaseDateStr: newP.purchaseDate,
               purchasePrice: parseNum(newP.purchasePrice, 800000),
-              currentValuation: parseNum(newP.currentValue, 1150000),
+              acquisitionCosts: parseNum(newP.purchaseCosts, 45936),
+              currentValuation: parseNum(newP.purchasePrice, 800000),
               weeklyRent: parseNum(newP.rentWeekly, 850),
               landSize: newP.landSize,
               beds: newP.beds,
@@ -2246,6 +2893,10 @@ export default function FinancialDataInput({
               owner1Pct: newP.owner1Pct,
               owner2: newP.owner2,
               owner2Pct: newP.owner2Pct,
+              ownersJson: {
+                livingArea: newP.livingArea,
+                additionalPersons: newP.additionalPersons,
+              },
             });
             await onDataChanged?.();
           }

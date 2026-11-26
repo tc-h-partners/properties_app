@@ -45,6 +45,9 @@ describe('Workflow State Machine & Product Locks Spec', () => {
       reportSnapshot: {
         upsert: jest.fn(),
       },
+      futureOutlookScenario: {
+        create: jest.fn().mockResolvedValue({}),
+      },
     };
 
     mockCalcEngine = {

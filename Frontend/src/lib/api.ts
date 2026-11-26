@@ -427,6 +427,34 @@ export function createInsightApi(
   });
 }
 
+export function updateInsightApi(
+  reviewId: string,
+  criterionId: string,
+  payload: {
+    criterionTitle?: string;
+    screen?: string;
+    propertyName?: string;
+    maintenanceInsight?: string;
+    metric?: string;
+    owner?: string;
+    action?: string;
+    insight?: string;
+    recommendation?: string;
+    priority?: string;
+    adviserNotes?: string;
+  }
+) {
+  return apiFetch<any>(
+    `/reviews/${encodeURIComponent(reviewId)}/assessments/${encodeURIComponent(
+      criterionId
+    )}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
 export function deleteInsightApi(reviewId: string, criterionId: string) {
   return apiFetch<any>(
     `/reviews/${encodeURIComponent(reviewId)}/assessments/${encodeURIComponent(
@@ -472,20 +500,146 @@ export function createBenchmarkApi(payload: Record<string, any>) {
   });
 }
 
+export interface AdvisorItem {
+  id: string;
+  name: string;
+  role: string;
+}
+
+export const DEFAULT_ADVISORS: AdvisorItem[] = [
+  { id: "adv-1", name: "Sarah Jenkins", role: "Senior Property CFO" },
+  { id: "adv-2", name: "Michael Zhang", role: "Property Strategist" },
+  { id: "adv-3", name: "David Brown", role: "Advisory Partner" },
+];
+
+export function formatAdvisorLabel(advisor: AdvisorItem): string {
+  if (!advisor) return "";
+  return advisor.role ? `${advisor.name} (${advisor.role})` : advisor.name;
+}
+
+const ADVISORS_CACHE_KEY = "picfo_advisors_cache";
+
+export function getCachedAdvisors(): AdvisorItem[] {
+  if (typeof window === "undefined") return DEFAULT_ADVISORS;
+  try {
+    const raw = localStorage.getItem(ADVISORS_CACHE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {}
+  return DEFAULT_ADVISORS;
+}
+
+export function setCachedAdvisors(advisors: AdvisorItem[]) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(ADVISORS_CACHE_KEY, JSON.stringify(advisors));
+    window.dispatchEvent(new CustomEvent("picfo-advisors-changed", { detail: advisors }));
+  } catch {}
+}
+
+export const DEFAULT_LENDERS = [
+  "ANZ",
+  "Commonwealth Bank",
+  "NAB",
+  "Westpac",
+  "Macquarie Bank",
+  "Bankwest",
+  "ING",
+  "St. George",
+  "Suncorp",
+  "Bank of Queensland",
+  "Bendigo Bank",
+  "AMP Bank",
+  "ME Bank",
+  "Pepper Money",
+  "Liberty Financial",
+  "La Trobe Financial",
+];
+
+export interface DropdownOptionsSettings {
+  states: string[];
+  propertyTypes: string[];
+  propertyPurposes: string[];
+  lenders: string[];
+}
+
+export const DEFAULT_DROPDOWN_SETTINGS: DropdownOptionsSettings = {
+  states: ["VIC", "NSW", "QLD", "WA", "SA", "TAS", "ACT", "NT"],
+  propertyTypes: [
+    "House",
+    "Apartment / Unit",
+    "Townhouse",
+    "Duplex",
+    "Commercial",
+    "Land",
+    "Rural",
+  ],
+  propertyPurposes: ["Investment", "Owner-Occupied"],
+  lenders: DEFAULT_LENDERS,
+};
+
+const DROPDOWNS_CACHE_KEY = "picfo_dropdown_settings_cache";
+
+export function getCachedDropdownSettings(): DropdownOptionsSettings {
+  if (typeof window === "undefined") return DEFAULT_DROPDOWN_SETTINGS;
+  try {
+    const raw = localStorage.getItem(DROPDOWNS_CACHE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        states:
+          Array.isArray(parsed.states) && parsed.states.length > 0
+            ? parsed.states
+            : DEFAULT_DROPDOWN_SETTINGS.states,
+        propertyTypes:
+          Array.isArray(parsed.propertyTypes) && parsed.propertyTypes.length > 0
+            ? parsed.propertyTypes
+            : DEFAULT_DROPDOWN_SETTINGS.propertyTypes,
+        propertyPurposes:
+          Array.isArray(parsed.propertyPurposes) &&
+          parsed.propertyPurposes.length > 0
+            ? parsed.propertyPurposes
+            : DEFAULT_DROPDOWN_SETTINGS.propertyPurposes,
+        lenders:
+          Array.isArray(parsed.lenders) && parsed.lenders.length > 0
+            ? parsed.lenders
+            : DEFAULT_DROPDOWN_SETTINGS.lenders,
+      };
+    }
+  } catch {}
+  return DEFAULT_DROPDOWN_SETTINGS;
+}
+
+export function setCachedDropdownSettings(settings: DropdownOptionsSettings) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(DROPDOWNS_CACHE_KEY, JSON.stringify(settings));
+    window.dispatchEvent(new CustomEvent("picfo-dropdowns-changed", { detail: settings }));
+  } catch {}
+}
+
 export function fetchSystemSettingsApi() {
   return apiFetch<{
     benchmarks: any[];
     picfoMetrics: any[];
+    advisors?: AdvisorItem[];
+    dropdowns?: DropdownOptionsSettings;
   }>("/benchmarks/system-settings");
 }
 
 export function saveSystemSettingsApi(payload: {
   benchmarks: any[];
   picfoMetrics: any[];
+  advisors?: AdvisorItem[];
+  dropdowns?: DropdownOptionsSettings;
 }) {
   return apiFetch<{
     benchmarks: any[];
     picfoMetrics: any[];
+    advisors?: AdvisorItem[];
+    dropdowns?: DropdownOptionsSettings;
   }>("/benchmarks/system-settings", {
     method: "PUT",
     body: JSON.stringify(payload),

@@ -91,6 +91,24 @@ const DEFAULT_SYSTEM_SETTINGS = {
       category: 'Total Return',
     },
   ],
+  advisors: [
+    { id: 'adv-1', name: 'Sarah Jenkins', role: 'Senior Property CFO' },
+    { id: 'adv-2', name: 'Michael Zhang', role: 'Property Strategist' },
+    { id: 'adv-3', name: 'David Brown', role: 'Advisory Partner' },
+  ],
+  dropdowns: {
+    states: ['VIC', 'NSW', 'QLD', 'WA', 'SA', 'TAS', 'ACT', 'NT'],
+    propertyTypes: [
+      'House',
+      'Apartment / Unit',
+      'Townhouse',
+      'Duplex',
+      'Commercial',
+      'Land',
+      'Rural',
+    ],
+    propertyPurposes: ['Investment', 'Owner-Occupied'],
+  },
 };
 
 @Injectable()
@@ -107,7 +125,14 @@ export class BenchmarksService {
 
     if (existing && existing.sourceNotes) {
       try {
-        return JSON.parse(existing.sourceNotes);
+        const parsed = JSON.parse(existing.sourceNotes);
+        if (!parsed.advisors || !Array.isArray(parsed.advisors) || parsed.advisors.length === 0) {
+          parsed.advisors = DEFAULT_SYSTEM_SETTINGS.advisors;
+        }
+        if (!parsed.dropdowns || typeof parsed.dropdowns !== 'object') {
+          parsed.dropdowns = DEFAULT_SYSTEM_SETTINGS.dropdowns;
+        }
+        return parsed;
       } catch {
         // Fallback to default if malformed
       }
@@ -125,13 +150,24 @@ export class BenchmarksService {
       },
     });
 
+    let existingParsed: Record<string, any> = {};
+    if (existing && existing.sourceNotes) {
+      try {
+        existingParsed = JSON.parse(existing.sourceNotes);
+      } catch {}
+    }
+
     const merged = {
       benchmarks: Array.isArray(payload.benchmarks)
         ? payload.benchmarks
-        : DEFAULT_SYSTEM_SETTINGS.benchmarks,
+        : existingParsed.benchmarks || DEFAULT_SYSTEM_SETTINGS.benchmarks,
       picfoMetrics: Array.isArray(payload.picfoMetrics)
         ? payload.picfoMetrics
-        : DEFAULT_SYSTEM_SETTINGS.picfoMetrics,
+        : existingParsed.picfoMetrics || DEFAULT_SYSTEM_SETTINGS.picfoMetrics,
+      advisors: Array.isArray(payload.advisors)
+        ? payload.advisors
+        : existingParsed.advisors || DEFAULT_SYSTEM_SETTINGS.advisors,
+      dropdowns: payload.dropdowns || existingParsed.dropdowns || DEFAULT_SYSTEM_SETTINGS.dropdowns,
     };
 
     if (existing) {

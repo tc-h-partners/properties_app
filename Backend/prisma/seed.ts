@@ -511,7 +511,7 @@ async function main() {
           strataFees: 780,
           otherExpenses: 840,
           depreciationNonCash: 6800,
-          status: 'Completed',
+          status: 'Not Started',
         },
         {
           annualReviewId: review2025.id,
@@ -531,7 +531,7 @@ async function main() {
           strataFees: 2400,
           otherExpenses: 840,
           depreciationNonCash: 7500,
-          status: 'Completed',
+          status: 'Not Started',
         },
         {
           annualReviewId: review2025.id,
@@ -551,7 +551,7 @@ async function main() {
           strataFees: 0,
           otherExpenses: 0,
           depreciationNonCash: 0,
-          status: 'Completed',
+          status: 'Not Started',
         },
       ],
     });
@@ -569,7 +569,7 @@ async function main() {
           annualRepayments: 38436,
           interestPaid: 38436,
           loanLimit: 700000,
-          status: 'Completed',
+          status: 'Not Started',
         },
         {
           annualReviewId: review2025.id,
@@ -582,7 +582,7 @@ async function main() {
           annualRepayments: 32500,
           interestPaid: 27202,
           loanLimit: 520000,
-          status: 'Completed',
+          status: 'Not Started',
         },
         {
           annualReviewId: review2025.id,
@@ -595,7 +595,7 @@ async function main() {
           annualRepayments: 48600,
           interestPaid: 40867,
           loanLimit: 750000,
-          status: 'Completed',
+          status: 'Not Started',
         },
       ],
     });
@@ -796,6 +796,137 @@ async function main() {
         forecastYears: 20,
       },
     });
+
+    // Seed properties and loans for additional households to align with dashboard metrics
+    if (item.householdName === 'THOMPSON FAMILY') {
+      const propThompson = await prisma.property.create({
+        data: {
+          householdId: h.id,
+          name: '12 Marine Parade, Manly NSW 2095',
+          address: '12 Marine Parade, Manly NSW 2095',
+          suburb: 'Manly',
+          state: 'NSW',
+          postcode: '2095',
+          propertyCategory: 'Apartment',
+          type: PropertyType.INVESTMENT,
+          purposeDisplay: 'Investment',
+          purchaseDate: new Date('2022-04-12'),
+          purchaseDateStr: '15/11/2026',
+          purchasePrice: 1450000,
+          currentValuation: 1650000,
+          weeklyRent: 950,
+          landSize: '180',
+          beds: 3,
+          baths: 2,
+          cars: 1,
+          owner1: 'Mark Thompson',
+          owner1Pct: '100%',
+        },
+      });
+
+      const loanThompson = await prisma.loan.create({
+        data: {
+          propertyId: propThompson.id,
+          lender: 'Macquarie',
+          accountName: 'MAC-991204 — Macquarie Bank (Investment)',
+          loanReference: 'MAC-991204',
+          isTchLoan: true,
+          purpose: 'Investment',
+          repaymentType: 'Interest only',
+          rateType: 'Variable',
+          loanType: 'IO',
+          ioExpiry: '15/11/2026',
+          fixedExpiry: '----',
+          maturityDate: '15/11/2026',
+          security1: '12 Marine Parade, Manly NSW 2095',
+          security2: '----',
+          security3: '----',
+          isOffsetAvailable: true,
+        },
+      });
+
+      for (const point of [SnapshotPoint.EOFY, SnapshotPoint.REVIEW_DATE]) {
+        await prisma.loanFinancialSnapshot.create({
+          data: {
+            annualReviewId: rev.id,
+            loanId: loanThompson.id,
+            snapshotPoint: point,
+            loanBalance: 700000,
+            offsetBalance: 35000,
+            interestRate: 0.0594,
+            marketRate: 0.0605,
+            annualRepayments: 41580,
+            interestPaid: 41580,
+            loanLimit: 750000,
+            status: 'Not Started',
+          },
+        });
+      }
+    } else if (item.householdName === 'KAISER BROWN') {
+      const propKaiser = await prisma.property.create({
+        data: {
+          householdId: h.id,
+          name: '88 Queen Street, Melbourne VIC 3000',
+          address: '88 Queen Street, Melbourne VIC 3000',
+          suburb: 'Melbourne',
+          state: 'VIC',
+          postcode: '3000',
+          propertyCategory: 'Apartment',
+          type: PropertyType.INVESTMENT,
+          purposeDisplay: 'Investment',
+          purchaseDate: new Date('2021-11-20'),
+          purchaseDateStr: '10/12/2026',
+          purchasePrice: 1200000,
+          currentValuation: 1350000,
+          weeklyRent: 820,
+          landSize: '120',
+          beds: 2,
+          baths: 2,
+          cars: 1,
+          owner1: 'Kaiser Brown',
+          owner1Pct: '100%',
+        },
+      });
+
+      const loanKaiser = await prisma.loan.create({
+        data: {
+          propertyId: propKaiser.id,
+          lender: 'Westpac',
+          accountName: 'WBC-552109 — Westpac Banking Corp (Investment)',
+          loanReference: 'WBC-552109',
+          isTchLoan: true,
+          purpose: 'Investment',
+          repaymentType: 'Interest only',
+          rateType: 'Variable',
+          loanType: 'IO',
+          ioExpiry: '10/12/2026',
+          fixedExpiry: '----',
+          maturityDate: '10/12/2026',
+          security1: '88 Queen Street, Melbourne VIC 3000',
+          security2: '----',
+          security3: '----',
+          isOffsetAvailable: true,
+        },
+      });
+
+      for (const point of [SnapshotPoint.EOFY, SnapshotPoint.REVIEW_DATE]) {
+        await prisma.loanFinancialSnapshot.create({
+          data: {
+            annualReviewId: rev.id,
+            loanId: loanKaiser.id,
+            snapshotPoint: point,
+            loanBalance: 600000,
+            offsetBalance: 20000,
+            interestRate: 0.0585,
+            marketRate: 0.0605,
+            annualRepayments: 35100,
+            interestPaid: 35100,
+            loanLimit: 650000,
+            status: 'Not Started',
+          },
+        });
+      }
+    }
   }
 
   console.log('🎉 Database seed completed successfully!');

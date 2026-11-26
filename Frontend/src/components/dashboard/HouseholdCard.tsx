@@ -31,7 +31,17 @@ export default function HouseholdCard({ totalHouseholds }: HouseholdCardProps) {
 
         {/* Text Details */}
         <div className="flex flex-col h-[50px] items-start justify-between">
-          <p className="capitalize font-['Poppins',sans-serif] font-semibold text-[#1E1E1E] text-[20px] sm:text-[22px] leading-tight">
+          <p
+            className="capitalize font-['Poppins',sans-serif] font-semibold text-[#1E1E1E] text-[22px] leading-[100%] tracking-[0%]"
+            style={{
+              fontFamily: "Poppins, sans-serif",
+              fontWeight: 600,
+              fontSize: "22px",
+              lineHeight: "100%",
+              letterSpacing: "0%",
+              textTransform: "capitalize",
+            }}
+          >
             Household
           </p>
           <p className="font-['Familjen_Grotesk',sans-serif] font-bold text-[#0E2841] text-[22px] leading-none">
@@ -41,13 +51,13 @@ export default function HouseholdCard({ totalHouseholds }: HouseholdCardProps) {
       </div>
 
       {/* Right: Watermark Icon */}
-      <div className="absolute right-[20px] top-[12px] opacity-20 pointer-events-none select-none">
+      <div className="absolute right-[20px] top-[12px] w-[83px] h-[83px] pointer-events-none select-none">
         <Image
           src="/images/dashboard/family-watermark.svg"
           alt=""
           width={83}
           height={83}
-          className="object-contain"
+          className="w-[83px] h-[83px] object-contain"
         />
       </div>
     </Link>

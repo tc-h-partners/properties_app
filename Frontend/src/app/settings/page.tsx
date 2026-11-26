@@ -1,13 +1,33 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { ChevronDown, Check, Pencil, MoreVertical, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  Check,
+  Pencil,
+  MoreVertical,
+  Trash2,
+  Plus,
+  ArrowUp,
+  ArrowDown,
+  Star,
+  UserCheck,
+  RotateCcw,
+} from "lucide-react";
 import Sidebar from "@/components/dashboard/Sidebar";
 import TopNav from "@/components/dashboard/TopNav";
 import {
   fetchSystemSettingsApi,
   saveSystemSettingsApi,
   createBenchmarkApi,
+  AdvisorItem,
+  DEFAULT_ADVISORS,
+  getCachedAdvisors,
+  setCachedAdvisors,
+  DropdownOptionsSettings,
+  DEFAULT_DROPDOWN_SETTINGS,
+  getCachedDropdownSettings,
+  setCachedDropdownSettings,
 } from "@/lib/api";
 
 export interface HistoricalValueItem {
@@ -211,7 +231,7 @@ function ColumnHeader({
 export default function SettingsPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<
-    "associations" | "annual" | "metrics"
+    "associations" | "annual" | "metrics" | "advisors" | "dropdowns"
   >("associations");
 
   const [benchmarks, setBenchmarks] =
@@ -219,6 +239,14 @@ export default function SettingsPage() {
   const [picfoMetrics, setPicfoMetrics] = useState<PicfoMetricItem[]>(
     DEFAULT_PICFO_METRICS
   );
+  const [advisors, setAdvisors] = useState<AdvisorItem[]>(getCachedAdvisors());
+  const [dropdownSettings, setDropdownSettings] =
+    useState<DropdownOptionsSettings>(getCachedDropdownSettings());
+
+  const [newStateInput, setNewStateInput] = useState("");
+  const [newTypeInput, setNewTypeInput] = useState("");
+  const [newPurposeInput, setNewPurposeInput] = useState("");
+  const [newLenderInput, setNewLenderInput] = useState("");
 
   // Dropdown state in Tab 1 table
   const [openMetricSelectRowId, setOpenMetricSelectRowId] = useState<
@@ -263,6 +291,12 @@ export default function SettingsPage() {
   const [metricCategoryInput, setMetricCategoryInput] =
     useState("Property Yield");
 
+  // Modal 5: Add / Edit Advisor
+  const [showAddAdvisorModal, setShowAddAdvisorModal] = useState(false);
+  const [editingAdvisor, setEditingAdvisor] = useState<AdvisorItem | null>(null);
+  const [advisorNameInput, setAdvisorNameInput] = useState("");
+  const [advisorRoleInput, setAdvisorRoleInput] = useState("");
+
   const loadSettings = useCallback(async () => {
     try {
       const data = await fetchSystemSettingsApi();
@@ -278,6 +312,14 @@ export default function SettingsPage() {
         if (Array.isArray(data.picfoMetrics) && data.picfoMetrics.length > 0) {
           setPicfoMetrics(data.picfoMetrics);
         }
+        if (Array.isArray(data.advisors) && data.advisors.length > 0) {
+          setAdvisors(data.advisors);
+          setCachedAdvisors(data.advisors);
+        }
+        if (data.dropdowns) {
+          setDropdownSettings(data.dropdowns);
+          setCachedDropdownSettings(data.dropdowns);
+        }
       }
     } catch (err) {
       console.error("Failed to fetch system settings from DB:", err);
@@ -285,12 +327,27 @@ export default function SettingsPage() {
   }, []);
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get("tab");
+      if (
+        tabParam === "advisors" ||
+        tabParam === "annual" ||
+        tabParam === "metrics" ||
+        tabParam === "associations" ||
+        tabParam === "dropdowns"
+      ) {
+        setActiveTab(tabParam as any);
+      }
+    }
     loadSettings();
   }, [loadSettings]);
 
   const persistSettings = async (
     nextBenchmarks: BenchmarkMeasureItem[],
-    nextMetrics: PicfoMetricItem[]
+    nextMetrics: PicfoMetricItem[],
+    nextAdvisors?: AdvisorItem[],
+    nextDropdowns?: DropdownOptionsSettings
   ) => {
     const normalizedBenchmarks = nextBenchmarks.map((b) => ({
       ...b,
@@ -298,14 +355,193 @@ export default function SettingsPage() {
     }));
     setBenchmarks(normalizedBenchmarks);
     setPicfoMetrics(nextMetrics);
+    const updatedAdvisors = nextAdvisors || advisors;
+    if (nextAdvisors) {
+      setAdvisors(nextAdvisors);
+      setCachedAdvisors(nextAdvisors);
+    }
+    const updatedDropdowns = nextDropdowns || dropdownSettings;
+    if (nextDropdowns) {
+      setDropdownSettings(nextDropdowns);
+      setCachedDropdownSettings(nextDropdowns);
+    }
     try {
       await saveSystemSettingsApi({
         benchmarks: normalizedBenchmarks,
         picfoMetrics: nextMetrics,
+        advisors: updatedAdvisors,
+        dropdowns: updatedDropdowns,
       });
     } catch (err) {
       console.error("Failed to persist system settings:", err);
     }
+  };
+
+  const handleSaveAdvisor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!advisorNameInput.trim()) return;
+
+    let nextAdvisors: AdvisorItem[];
+    if (editingAdvisor) {
+      nextAdvisors = advisors.map((adv) =>
+        adv.id === editingAdvisor.id
+          ? {
+              ...adv,
+              name: advisorNameInput.trim(),
+              role: advisorRoleInput.trim(),
+            }
+          : adv
+      );
+    } else {
+      const newAdv: AdvisorItem = {
+        id: `adv-${Date.now()}`,
+        name: advisorNameInput.trim(),
+        role: advisorRoleInput.trim(),
+      };
+      nextAdvisors = [...advisors, newAdv];
+    }
+
+    await persistSettings(benchmarks, picfoMetrics, nextAdvisors);
+    setShowAddAdvisorModal(false);
+    setEditingAdvisor(null);
+    setAdvisorNameInput("");
+    setAdvisorRoleInput("");
+  };
+
+  const handleDeleteAdvisor = async (id: string) => {
+    if (advisors.length <= 1) {
+      alert("At least one advisor must remain configured as the default.");
+      return;
+    }
+    const nextAdvisors = advisors.filter((a) => a.id !== id);
+    await persistSettings(benchmarks, picfoMetrics, nextAdvisors);
+  };
+
+  const handleMakeDefaultAdvisor = async (id: string) => {
+    const target = advisors.find((a) => a.id === id);
+    if (!target) return;
+    const remaining = advisors.filter((a) => a.id !== id);
+    const nextAdvisors = [target, ...remaining];
+    await persistSettings(benchmarks, picfoMetrics, nextAdvisors);
+  };
+
+  const handleMoveAdvisor = async (index: number, direction: "up" | "down") => {
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= advisors.length) return;
+    const nextAdvisors = [...advisors];
+    const temp = nextAdvisors[index];
+    nextAdvisors[index] = nextAdvisors[targetIndex];
+    nextAdvisors[targetIndex] = temp;
+    await persistSettings(benchmarks, picfoMetrics, nextAdvisors);
+  };
+
+  // Dropdown Management Handlers
+  const handleAddState = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const clean = newStateInput.trim().toUpperCase();
+    if (!clean || dropdownSettings.states.includes(clean)) return;
+    const nextStates = [...dropdownSettings.states, clean];
+    const nextDropdowns = { ...dropdownSettings, states: nextStates };
+    await persistSettings(benchmarks, picfoMetrics, advisors, nextDropdowns);
+    setNewStateInput("");
+  };
+
+  const handleRemoveState = async (stateToRemove: string) => {
+    if (dropdownSettings.states.length <= 1) return;
+    const nextStates = dropdownSettings.states.filter((s) => s !== stateToRemove);
+    const nextDropdowns = { ...dropdownSettings, states: nextStates };
+    await persistSettings(benchmarks, picfoMetrics, advisors, nextDropdowns);
+  };
+
+  const handleResetStates = async () => {
+    const nextDropdowns = {
+      ...dropdownSettings,
+      states: DEFAULT_DROPDOWN_SETTINGS.states,
+    };
+    await persistSettings(benchmarks, picfoMetrics, advisors, nextDropdowns);
+  };
+
+  const handleAddType = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const clean = newTypeInput.trim();
+    if (!clean || dropdownSettings.propertyTypes.includes(clean)) return;
+    const nextTypes = [...dropdownSettings.propertyTypes, clean];
+    const nextDropdowns = { ...dropdownSettings, propertyTypes: nextTypes };
+    await persistSettings(benchmarks, picfoMetrics, advisors, nextDropdowns);
+    setNewTypeInput("");
+  };
+
+  const handleRemoveType = async (typeToRemove: string) => {
+    if (dropdownSettings.propertyTypes.length <= 1) return;
+    const nextTypes = dropdownSettings.propertyTypes.filter(
+      (t) => t !== typeToRemove
+    );
+    const nextDropdowns = { ...dropdownSettings, propertyTypes: nextTypes };
+    await persistSettings(benchmarks, picfoMetrics, advisors, nextDropdowns);
+  };
+
+  const handleResetTypes = async () => {
+    const nextDropdowns = {
+      ...dropdownSettings,
+      propertyTypes: DEFAULT_DROPDOWN_SETTINGS.propertyTypes,
+    };
+    await persistSettings(benchmarks, picfoMetrics, advisors, nextDropdowns);
+  };
+
+  const handleAddPurpose = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const clean = newPurposeInput.trim();
+    if (!clean || dropdownSettings.propertyPurposes.includes(clean)) return;
+    const nextPurposes = [...dropdownSettings.propertyPurposes, clean];
+    const nextDropdowns = { ...dropdownSettings, propertyPurposes: nextPurposes };
+    await persistSettings(benchmarks, picfoMetrics, advisors, nextDropdowns);
+    setNewPurposeInput("");
+  };
+
+  const handleRemovePurpose = async (purposeToRemove: string) => {
+    if (dropdownSettings.propertyPurposes.length <= 1) return;
+    const nextPurposes = dropdownSettings.propertyPurposes.filter(
+      (p) => p !== purposeToRemove
+    );
+    const nextDropdowns = { ...dropdownSettings, propertyPurposes: nextPurposes };
+    await persistSettings(benchmarks, picfoMetrics, advisors, nextDropdowns);
+  };
+
+  const handleResetPurposes = async () => {
+    const nextDropdowns = {
+      ...dropdownSettings,
+      propertyPurposes: DEFAULT_DROPDOWN_SETTINGS.propertyPurposes,
+    };
+    await persistSettings(benchmarks, picfoMetrics, advisors, nextDropdowns);
+  };
+
+  const handleAddLender = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const clean = newLenderInput.trim();
+    const currentLenders =
+      dropdownSettings.lenders || DEFAULT_DROPDOWN_SETTINGS.lenders || [];
+    if (!clean || currentLenders.includes(clean)) return;
+    const nextLenders = [...currentLenders, clean];
+    const nextDropdowns = { ...dropdownSettings, lenders: nextLenders };
+    await persistSettings(benchmarks, picfoMetrics, advisors, nextDropdowns);
+    setNewLenderInput("");
+  };
+
+  const handleRemoveLender = async (lenderToRemove: string) => {
+    const currentLenders =
+      dropdownSettings.lenders || DEFAULT_DROPDOWN_SETTINGS.lenders || [];
+    if (currentLenders.length <= 1) return;
+    const nextLenders = currentLenders.filter((l) => l !== lenderToRemove);
+    const nextDropdowns = { ...dropdownSettings, lenders: nextLenders };
+    await persistSettings(benchmarks, picfoMetrics, advisors, nextDropdowns);
+  };
+
+  const handleResetLenders = async () => {
+    const nextDropdowns = {
+      ...dropdownSettings,
+      lenders: DEFAULT_DROPDOWN_SETTINGS.lenders,
+    };
+    await persistSettings(benchmarks, picfoMetrics, advisors, nextDropdowns);
   };
 
   // Toggle Include in Review Workspace – Market Data checkbox
@@ -635,6 +871,28 @@ export default function SettingsPage() {
               }`}
             >
               PICFO Metrics
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("advisors")}
+              className={`px-[16px] py-[10px] rounded-[4px] text-[14px] leading-[1.4] tracking-[-0.28px] font-['Poppins',sans-serif] transition-all cursor-pointer ${
+                activeTab === "advisors"
+                  ? "bg-white font-bold text-[#0e2841] shadow-2xs"
+                  : "font-medium text-[#a0a0a0] hover:text-[#0e2841]"
+              }`}
+            >
+              Advisers
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("dropdowns")}
+              className={`px-[16px] py-[10px] rounded-[4px] text-[14px] leading-[1.4] tracking-[-0.28px] font-['Poppins',sans-serif] transition-all cursor-pointer ${
+                activeTab === "dropdowns"
+                  ? "bg-white font-bold text-[#0e2841] shadow-2xs"
+                  : "font-medium text-[#a0a0a0] hover:text-[#0e2841]"
+              }`}
+            >
+              Drop Downs
             </button>
           </div>
 
@@ -1020,6 +1278,422 @@ export default function SettingsPage() {
               </div>
             </>
           )}
+
+          {/* ========================================================================= */}
+          {/* TAB 4: ADVISERS                                                           */}
+          {/* ========================================================================= */}
+          {activeTab === "advisors" && (
+            <>
+              <div className="mt-[21px] py-[10px] flex flex-col lg:flex-row lg:items-center justify-between gap-4 max-w-[1156px]">
+                <div className="max-w-[750px]">
+                  <h2 className="font-['Poppins',sans-serif] font-semibold text-[#1a1c1e] text-[18px] leading-[33px] tracking-[-0.64px]">
+                    System Settings – Adviser Management
+                  </h2>
+                  <p className="font-['Poppins',sans-serif] font-medium text-[#7A8699] text-[14.5px] leading-[24px]">
+                    Configure advisory practitioners and roles. The first adviser in this list automatically defaults as the assigned adviser on the Add New Household screen.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingAdvisor(null);
+                    setAdvisorNameInput("");
+                    setAdvisorRoleInput("");
+                    setShowAddAdvisorModal(true);
+                  }}
+                  className="bg-[#0e2841] hover:bg-[#163859] text-white font-['Poppins',sans-serif] font-semibold text-[13.5px] h-[44px] px-[22px] rounded-[8px] flex items-center justify-center gap-2 transition-colors shrink-0 shadow-2xs cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add Adviser</span>
+                </button>
+              </div>
+
+              {/* Advisers Table */}
+              <div className="mt-[20px] max-w-[1156px] border border-[#EBEBEB] rounded-[12px] bg-white overflow-hidden shadow-2xs">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse min-w-[700px]">
+                    <thead>
+                      <tr className="bg-[#FAFBFD] border-b border-[#EBEBEB]">
+                        <th className="py-3.5 px-5 font-['Poppins',sans-serif] font-semibold text-[13px] text-[#5A6876] w-[70px]">
+                          #
+                        </th>
+                        <th className="py-3.5 px-5 font-['Poppins',sans-serif] font-semibold text-[13px] text-[#5A6876]">
+                          Adviser Name
+                        </th>
+                        <th className="py-3.5 px-5 font-['Poppins',sans-serif] font-semibold text-[13px] text-[#5A6876]">
+                          Designation / Role
+                        </th>
+                        <th className="py-3.5 px-5 font-['Poppins',sans-serif] font-semibold text-[13px] text-[#5A6876]">
+                          Default Status
+                        </th>
+                        <th className="py-3.5 px-5 font-['Poppins',sans-serif] font-semibold text-[13px] text-[#5A6876] text-right">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#F0F1F3]">
+                      {advisors.map((adv, idx) => {
+                        const isDefault = idx === 0;
+                        return (
+                          <tr
+                            key={adv.id || idx}
+                            className={`hover:bg-[#F8FAFC] transition-colors ${
+                              isDefault ? "bg-[#F4F9FF]/50" : ""
+                            }`}
+                          >
+                            <td className="py-4 px-5 font-['Poppins',sans-serif] text-[13.5px] text-[#8C9BA8] font-medium">
+                              {idx + 1}
+                            </td>
+                            <td className="py-4 px-5 font-['Poppins',sans-serif] text-[14px] font-semibold text-[#0E2841]">
+                              <div className="flex items-center gap-2">
+                                <span>{adv.name}</span>
+                                {isDefault && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-[#E6F4EA] text-[#137333] border border-[#CEEAD6]">
+                                    <Star className="w-3 h-3 fill-[#137333]" />
+                                    First / Default
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-4 px-5 font-['Poppins',sans-serif] text-[14px] text-[#4A5568]">
+                              {adv.role || "—"}
+                            </td>
+                            <td className="py-4 px-5 font-['Poppins',sans-serif] text-[13px]">
+                              {isDefault ? (
+                                <span className="text-[#137333] font-medium flex items-center gap-1.5">
+                                  <UserCheck className="w-4 h-4 text-[#137333]" />
+                                  Default in Add Household
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleMakeDefaultAdvisor(adv.id)}
+                                  className="text-[#07315B] hover:text-[#0E2841] hover:underline font-medium text-[13px] flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Star className="w-3.5 h-3.5" />
+                                  Make Default
+                                </button>
+                              )}
+                            </td>
+                            <td className="py-4 px-5 text-right">
+                              <div className="inline-flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  disabled={idx === 0}
+                                  onClick={() => handleMoveAdvisor(idx, "up")}
+                                  title="Move Up"
+                                  className="p-1.5 rounded-[6px] text-gray-400 hover:text-gray-700 hover:bg-gray-100 disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                                >
+                                  <ArrowUp className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={idx === advisors.length - 1}
+                                  onClick={() => handleMoveAdvisor(idx, "down")}
+                                  title="Move Down"
+                                  className="p-1.5 rounded-[6px] text-gray-400 hover:text-gray-700 hover:bg-gray-100 disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                                >
+                                  <ArrowDown className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingAdvisor(adv);
+                                    setAdvisorNameInput(adv.name);
+                                    setAdvisorRoleInput(adv.role || "");
+                                    setShowAddAdvisorModal(true);
+                                  }}
+                                  title="Edit Adviser"
+                                  className="p-1.5 rounded-[6px] text-[#07315B] hover:bg-[#EEF4FF] cursor-pointer"
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={advisors.length <= 1}
+                                  onClick={() => handleDeleteAdvisor(adv.id)}
+                                  title="Delete Adviser"
+                                  className="p-1.5 rounded-[6px] text-red-500 hover:bg-red-50 disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* ========================================================================= */}
+          {/* TAB 5: DROP DOWN MANAGEMENT                                               */}
+          {/* ========================================================================= */}
+          {activeTab === "dropdowns" && (
+            <>
+              <div className="mt-[21px] py-[10px] flex flex-col lg:flex-row lg:items-center justify-between gap-4 max-w-[1380px]">
+                <div className="max-w-[850px]">
+                  <h2 className="font-['Poppins',sans-serif] font-semibold text-[#1a1c1e] text-[18px] leading-[33px] tracking-[-0.64px]">
+                    System Settings – Drop Down Management
+                  </h2>
+                  <p className="font-['Poppins',sans-serif] font-medium text-[#7A8699] text-[14.5px] leading-[24px]">
+                    Manage selectable options for property states, property types, investment purposes, and lenders. Changes saved here populate across the platform.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-[20px] max-w-[1380px] grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+                {/* Section 1: States */}
+                <div className="bg-white border border-[#EBEBEB] rounded-[12px] p-5 shadow-2xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between pb-3 border-b border-[#F0F1F3] mb-4">
+                      <div>
+                        <h3 className="font-['Poppins',sans-serif] font-semibold text-[#07315B] text-[16px]">
+                          States / Territories
+                        </h3>
+                        <p className="text-[12px] text-[#8C9BA8] font-normal">
+                          {dropdownSettings.states.length} options configured
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleResetStates}
+                        title="Reset States to Default"
+                        className="p-1.5 text-gray-400 hover:text-[#07315B] rounded-[6px] hover:bg-gray-100 transition-colors cursor-pointer"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="space-y-2 max-h-[340px] overflow-y-auto pr-1">
+                      {dropdownSettings.states.map((st) => (
+                        <div
+                          key={st}
+                          className="flex items-center justify-between py-2 px-3 bg-[#F9FAFB] rounded-[8px] border border-[#E5E7EB] text-[13.5px] font-medium text-[#1A1C1E]"
+                        >
+                          <span>{st}</span>
+                          <button
+                            type="button"
+                            disabled={dropdownSettings.states.length <= 1}
+                            onClick={() => handleRemoveState(st)}
+                            className="text-gray-400 hover:text-red-500 p-1 rounded-md transition-colors disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                            title={`Remove ${st}`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleAddState} className="mt-4 pt-3 border-t border-[#F0F1F3] flex gap-2">
+                    <input
+                      type="text"
+                      value={newStateInput}
+                      onChange={(e) => setNewStateInput(e.target.value)}
+                      placeholder="e.g. QLD"
+                      maxLength={6}
+                      className="flex-1 h-[40px] px-3 bg-[#F9F9F9] border border-[#DEDEDE] rounded-[8px] text-[13.5px] text-[#1A1C1E] focus:outline-none focus:border-[#0E2841]"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!newStateInput.trim()}
+                      className="px-4 h-[40px] bg-[#0E2841] hover:bg-[#163859] disabled:opacity-40 text-white font-medium text-[13px] rounded-[8px] transition-colors cursor-pointer shrink-0"
+                    >
+                      + Add
+                    </button>
+                  </form>
+                </div>
+
+                {/* Section 2: Property Types */}
+                <div className="bg-white border border-[#EBEBEB] rounded-[12px] p-5 shadow-2xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between pb-3 border-b border-[#F0F1F3] mb-4">
+                      <div>
+                        <h3 className="font-['Poppins',sans-serif] font-semibold text-[#07315B] text-[16px]">
+                          Property Types
+                        </h3>
+                        <p className="text-[12px] text-[#8C9BA8] font-normal">
+                          {dropdownSettings.propertyTypes.length} options configured
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleResetTypes}
+                        title="Reset Types to Default"
+                        className="p-1.5 text-gray-400 hover:text-[#07315B] rounded-[6px] hover:bg-gray-100 transition-colors cursor-pointer"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="space-y-2 max-h-[340px] overflow-y-auto pr-1">
+                      {dropdownSettings.propertyTypes.map((t) => (
+                        <div
+                          key={t}
+                          className="flex items-center justify-between py-2 px-3 bg-[#F9FAFB] rounded-[8px] border border-[#E5E7EB] text-[13.5px] font-medium text-[#1A1C1E]"
+                        >
+                          <span>{t}</span>
+                          <button
+                            type="button"
+                            disabled={dropdownSettings.propertyTypes.length <= 1}
+                            onClick={() => handleRemoveType(t)}
+                            className="text-gray-400 hover:text-red-500 p-1 rounded-md transition-colors disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                            title={`Remove ${t}`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleAddType} className="mt-4 pt-3 border-t border-[#F0F1F3] flex gap-2">
+                    <input
+                      type="text"
+                      value={newTypeInput}
+                      onChange={(e) => setNewTypeInput(e.target.value)}
+                      placeholder="e.g. Villa"
+                      className="flex-1 h-[40px] px-3 bg-[#F9F9F9] border border-[#DEDEDE] rounded-[8px] text-[13.5px] text-[#1A1C1E] focus:outline-none focus:border-[#0E2841]"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!newTypeInput.trim()}
+                      className="px-4 h-[40px] bg-[#0E2841] hover:bg-[#163859] disabled:opacity-40 text-white font-medium text-[13px] rounded-[8px] transition-colors cursor-pointer shrink-0"
+                    >
+                      + Add
+                    </button>
+                  </form>
+                </div>
+
+                {/* Section 3: Property Purposes */}
+                <div className="bg-white border border-[#EBEBEB] rounded-[12px] p-5 shadow-2xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between pb-3 border-b border-[#F0F1F3] mb-4">
+                      <div>
+                        <h3 className="font-['Poppins',sans-serif] font-semibold text-[#07315B] text-[16px]">
+                          Property Purposes
+                        </h3>
+                        <p className="text-[12px] text-[#8C9BA8] font-normal">
+                          {dropdownSettings.propertyPurposes.length} options configured
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleResetPurposes}
+                        title="Reset Purposes to Default"
+                        className="p-1.5 text-gray-400 hover:text-[#07315B] rounded-[6px] hover:bg-gray-100 transition-colors cursor-pointer"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="space-y-2 max-h-[340px] overflow-y-auto pr-1">
+                      {dropdownSettings.propertyPurposes.map((p) => (
+                        <div
+                          key={p}
+                          className="flex items-center justify-between py-2 px-3 bg-[#F9FAFB] rounded-[8px] border border-[#E5E7EB] text-[13.5px] font-medium text-[#1A1C1E]"
+                        >
+                          <span>{p}</span>
+                          <button
+                            type="button"
+                            disabled={dropdownSettings.propertyPurposes.length <= 1}
+                            onClick={() => handleRemovePurpose(p)}
+                            className="text-gray-400 hover:text-red-500 p-1 rounded-md transition-colors disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                            title={`Remove ${p}`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleAddPurpose} className="mt-4 pt-3 border-t border-[#F0F1F3] flex gap-2">
+                    <input
+                      type="text"
+                      value={newPurposeInput}
+                      onChange={(e) => setNewPurposeInput(e.target.value)}
+                      placeholder="e.g. Commercial Lease"
+                      className="flex-1 h-[40px] px-3 bg-[#F9F9F9] border border-[#DEDEDE] rounded-[8px] text-[13.5px] text-[#1A1C1E] focus:outline-none focus:border-[#0E2841]"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!newPurposeInput.trim()}
+                      className="px-4 h-[40px] bg-[#0E2841] hover:bg-[#163859] disabled:opacity-40 text-white font-medium text-[13px] rounded-[8px] transition-colors cursor-pointer shrink-0"
+                    >
+                      + Add
+                    </button>
+                  </form>
+                </div>
+
+                {/* Section 4: Lenders */}
+                <div className="bg-white border border-[#EBEBEB] rounded-[12px] p-5 shadow-2xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between pb-3 border-b border-[#F0F1F3] mb-4">
+                      <div>
+                        <h3 className="font-['Poppins',sans-serif] font-semibold text-[#07315B] text-[16px]">
+                          Lenders
+                        </h3>
+                        <p className="text-[12px] text-[#8C9BA8] font-normal">
+                          {(dropdownSettings.lenders || DEFAULT_DROPDOWN_SETTINGS.lenders || []).length} options configured
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleResetLenders}
+                        title="Reset Lenders to Default"
+                        className="p-1.5 text-gray-400 hover:text-[#07315B] rounded-[6px] hover:bg-gray-100 transition-colors cursor-pointer"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="space-y-2 max-h-[340px] overflow-y-auto pr-1">
+                      {(dropdownSettings.lenders || DEFAULT_DROPDOWN_SETTINGS.lenders || []).map((l) => (
+                        <div
+                          key={l}
+                          className="flex items-center justify-between py-2 px-3 bg-[#F9FAFB] rounded-[8px] border border-[#E5E7EB] text-[13.5px] font-medium text-[#1A1C1E]"
+                        >
+                          <span>{l}</span>
+                          <button
+                            type="button"
+                            disabled={(dropdownSettings.lenders || DEFAULT_DROPDOWN_SETTINGS.lenders || []).length <= 1}
+                            onClick={() => handleRemoveLender(l)}
+                            className="text-gray-400 hover:text-red-500 p-1 rounded-md transition-colors disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                            title={`Remove ${l}`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleAddLender} className="mt-4 pt-3 border-t border-[#F0F1F3] flex gap-2">
+                    <input
+                      type="text"
+                      value={newLenderInput}
+                      onChange={(e) => setNewLenderInput(e.target.value)}
+                      placeholder="e.g. Macquarie Bank"
+                      className="flex-1 h-[40px] px-3 bg-[#F9F9F9] border border-[#DEDEDE] rounded-[8px] text-[13.5px] text-[#1A1C1E] focus:outline-none focus:border-[#0E2841]"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!newLenderInput.trim()}
+                      className="px-4 h-[40px] bg-[#0E2841] hover:bg-[#163859] disabled:opacity-40 text-white font-medium text-[13px] rounded-[8px] transition-colors cursor-pointer shrink-0"
+                    >
+                      + Add
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </>
+          )}
         </main>
       </div>
 
@@ -1028,7 +1702,7 @@ export default function SettingsPage() {
       {/* ========================================================================= */}
       {showAddBenchmarkModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-2xs">
-          <div className="relative w-full max-w-[588px] bg-white rounded-[20px] shadow-2xl px-[22.5px] pt-[36px] pb-[40px]">
+          <div className="relative w-full max-w-[588px] sm:w-[588px] bg-white rounded-[20px] shadow-2xl px-[22.5px] pt-[36px] pb-[40px]">
             <CircleCrossCloseButton
               onClick={() => setShowAddBenchmarkModal(false)}
             />
@@ -1164,7 +1838,7 @@ export default function SettingsPage() {
       {/* ========================================================================= */}
       {activeHistoryBenchmark && !showAddFyModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-2xs">
-          <div className="relative w-full max-w-[588px] bg-white rounded-[20px] shadow-2xl px-[20px] pt-[36px] pb-[36px]">
+          <div className="relative w-full max-w-[588px] sm:w-[588px] bg-white rounded-[20px] shadow-2xl px-[20px] pt-[36px] pb-[36px]">
             <CircleCrossCloseButton
               onClick={() => setActiveHistoryBenchmarkId(null)}
             />
@@ -1252,7 +1926,7 @@ export default function SettingsPage() {
       {/* ========================================================================= */}
       {showAddFyModal && activeHistoryBenchmark && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-2xs">
-          <div className="relative w-full max-w-[588px] bg-white rounded-[20px] shadow-2xl px-[22.5px] pt-[36px] pb-[38px]">
+          <div className="relative w-full max-w-[588px] sm:w-[588px] bg-white rounded-[20px] shadow-2xl px-[22.5px] pt-[36px] pb-[38px]">
             <CircleCrossCloseButton
               onClick={() => setShowAddFyModal(false)}
             />
@@ -1309,7 +1983,7 @@ export default function SettingsPage() {
       {/* ========================================================================= */}
       {showAddMetricModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-2xs">
-          <div className="relative w-full max-w-[588px] bg-white rounded-[20px] shadow-2xl px-[22.5px] pt-[36px] pb-[40px]">
+          <div className="relative w-full max-w-[588px] sm:w-[588px] bg-white rounded-[20px] shadow-2xl px-[22.5px] pt-[36px] pb-[40px]">
             <CircleCrossCloseButton
               onClick={() => {
                 setEditingMetricId(null);
@@ -1399,6 +2073,79 @@ export default function SettingsPage() {
                   className="w-[335px] max-w-full h-[50px] bg-[#0e2841] hover:bg-[#163859] text-white font-['Poppins',sans-serif] font-semibold text-[13.5px] rounded-[8px] flex items-center justify-center transition-colors cursor-pointer"
                 >
                   Save Metric
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 5: ADD / EDIT ADVISER                                               */}
+      {/* ========================================================================= */}
+      {showAddAdvisorModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-2xs">
+          <div className="relative w-full max-w-[588px] sm:w-[588px] bg-white rounded-[20px] shadow-2xl px-[24px] pt-[32px] pb-[36px] animate-in fade-in zoom-in-95 duration-150">
+            <CircleCrossCloseButton
+              onClick={() => {
+                setShowAddAdvisorModal(false);
+                setEditingAdvisor(null);
+              }}
+            />
+
+            <div className="text-center mb-6">
+              <h2 className="font-['Poppins',sans-serif] font-bold text-[#0e2841] text-[20px] mb-1">
+                {editingAdvisor ? "Edit Adviser" : "Add New Adviser"}
+              </h2>
+              <p className="font-['Poppins',sans-serif] text-[13.5px] text-[#7A8699]">
+                Configure adviser profile details. The first adviser in Settings is automatically selected by default on the Add New Household screen.
+              </p>
+            </div>
+
+            <form onSubmit={handleSaveAdvisor} className="space-y-4">
+              <div>
+                <label className="block font-['Poppins',sans-serif] font-medium text-[#1a1c1e] text-[14px] mb-2">
+                  Adviser Full Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={advisorNameInput}
+                  onChange={(e) => setAdvisorNameInput(e.target.value)}
+                  placeholder="e.g. Sarah Jenkins"
+                  className="w-full h-[48px] px-3.5 bg-[#F9F9F9] border border-[#DEDEDE] rounded-[10px] font-['Poppins',sans-serif] text-[14px] text-[#1a1c1e] placeholder-[#BCBCBC] focus:outline-none focus:border-[#0e2841]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-['Poppins',sans-serif] font-medium text-[#1a1c1e] text-[14px] mb-2">
+                  Designation / Role Title
+                </label>
+                <input
+                  type="text"
+                  value={advisorRoleInput}
+                  onChange={(e) => setAdvisorRoleInput(e.target.value)}
+                  placeholder="e.g. Senior Property CFO, Property Strategist"
+                  className="w-full h-[48px] px-3.5 bg-[#F9F9F9] border border-[#DEDEDE] rounded-[10px] font-['Poppins',sans-serif] text-[14px] text-[#1a1c1e] placeholder-[#BCBCBC] focus:outline-none focus:border-[#0e2841]"
+                />
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddAdvisorModal(false);
+                    setEditingAdvisor(null);
+                  }}
+                  className="px-5 h-[44px] rounded-[8px] font-['Poppins',sans-serif] font-medium text-[13.5px] text-[#4A5568] hover:bg-[#F2F4F7] transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 h-[44px] bg-[#0e2841] hover:bg-[#163859] text-white font-['Poppins',sans-serif] font-semibold text-[13.5px] rounded-[8px] transition-colors cursor-pointer"
+                >
+                  {editingAdvisor ? "Update Adviser" : "Add Adviser"}
                 </button>
               </div>
             </form>

@@ -92,6 +92,11 @@ export class ClientsService {
     let fixedExpiryLender = 'None in window';
     let ioExpiryAmount = 0;
     let ioExpiryCount = 0;
+    let settlementDateAmount = 0;
+    let settlementDateCount = 0;
+    let settlementDateNearest = '';
+
+    const allLoans: any[] = [];
 
     for (const h of households) {
       const latestReview = h.reviews[0];
@@ -139,6 +144,50 @@ export class ClientsService {
             ioExpiryAmount += balance;
             ioExpiryCount++;
           }
+
+          const settlementDate =
+            loan.maturityDate && loan.maturityDate !== '----'
+              ? loan.maturityDate
+              : prop.purchaseDateStr || '24/10/2026';
+
+          if (settlementDate && settlementDate !== '----') {
+            settlementDateAmount += balance;
+            settlementDateCount++;
+            if (!settlementDateNearest) {
+              settlementDateNearest = settlementDate;
+            }
+          }
+
+          allLoans.push({
+            id: loan.id,
+            householdId: h.id,
+            householdName: h.householdName,
+            propertyId: prop.id,
+            propertyName: prop.name || prop.address || 'Property Asset',
+            propertyAddress: prop.address || prop.name || '----',
+            lender: loan.lender,
+            loanReference: loan.loanReference || loan.accountName || 'N/A',
+            accountName: loan.accountName || loan.loanReference || '',
+            isTchLoan: loan.isTchLoan,
+            purpose: loan.purpose || 'Investment',
+            repaymentType: loan.repaymentType || 'Interest only',
+            rateType: loan.rateType || 'Variable',
+            loanType: loan.loanType || (loan.repaymentType?.toLowerCase().includes('interest') ? 'IO' : 'P&I'),
+            ioExpiry: loan.ioExpiry || '----',
+            fixedExpiry: loan.fixedExpiry || '----',
+            maturityDate: loan.maturityDate || '----',
+            settlementDate,
+            security1: loan.security1 || prop.address || '----',
+            security2: loan.security2 || '----',
+            security3: loan.security3 || '----',
+            loanBalance: balance,
+            offsetBalance: snap ? Number(snap.offsetBalance) : 0,
+            interestRate: snap ? Number(snap.interestRate) : 0.0594,
+            marketRate: snap ? Number(snap.marketRate) : 0.0605,
+            loanLimit: snap ? Number(snap.loanLimit) : balance,
+            annualRepayments: snap ? Number(snap.annualRepayments) : 0,
+            interestPaid: snap ? Number(snap.interestPaid) : 0,
+          });
         }
       }
     }
@@ -166,7 +215,11 @@ export class ClientsService {
         fixedExpiryLender,
         ioExpiryAmount,
         ioExpiryCount,
+        settlementDateAmount,
+        settlementDateCount,
+        settlementDateNearest: settlementDateNearest || '24/10/2026',
       },
+      loans: allLoans,
     };
   }
 
@@ -190,8 +243,8 @@ export class ClientsService {
         creditCardLimit: dto.creditCardLimit ?? 0,
         otherLiabilities: dto.otherLiabilities ?? 0,
         monthlyPayments: dto.monthlyPayments ?? 0,
-        borrowingCapacity: dto.borrowingCapacity ?? 800000,
-        cashSavings: dto.cashSavings ?? 47000,
+        borrowingCapacity: dto.borrowingCapacity ?? 0,
+        cashSavings: dto.cashSavings ?? 0,
       },
     });
 
@@ -559,7 +612,7 @@ export class ClientsService {
             strataFees: 780,
             otherExpenses: 840,
             depreciationNonCash: 6500,
-            status: 'Completed',
+            status: 'Not Started',
           },
           update: {
             valuation: point === SnapshotPoint.EOFY ? purchasePrice : currentValuation,
@@ -584,7 +637,7 @@ export class ClientsService {
       dto.type || dto.purposeDisplay
         ? normalizePropertyType(dto.type || dto.purposeDisplay)
         : undefined;
-    return this.prisma.property.update({
+    const updated = await this.prisma.property.update({
       where: { id: propertyId },
       data: {
         entityId: dto.entityId !== undefined ? dto.entityId || null : undefined,
@@ -618,6 +671,18 @@ export class ClientsService {
         loans: { include: { snapshots: true } },
       },
     });
+
+    if (dto.currentValuation !== undefined || dto.weeklyRent !== undefined) {
+      await this.prisma.propertyFinancialSnapshot.updateMany({
+        where: { propertyId },
+        data: {
+          ...(dto.currentValuation !== undefined ? { valuation: dto.currentValuation } : {}),
+          ...(dto.weeklyRent !== undefined ? { weeklyRent: dto.weeklyRent } : {}),
+        },
+      });
+    }
+
+    return updated;
   }
 
   async deleteProperty(adviserId: string, householdId: string, propertyId: string) {
@@ -729,7 +794,7 @@ export class ClientsService {
             annualRepayments: Math.round(balance * rateDecimal),
             interestPaid: Math.round(Math.max(0, balance - offset) * rateDecimal),
             loanLimit: balance,
-            status: 'Completed',
+            status: 'Not Started',
           },
           update: {
             loanBalance: balance,
@@ -748,7 +813,7 @@ export class ClientsService {
 
   async updateLoan(adviserId: string, householdId: string, loanId: string, dto: UpdateLoanDto) {
     await this.getHouseholdById(adviserId, householdId);
-    return this.prisma.loan.update({
+    const updated = await this.prisma.loan.update({
       where: { id: loanId },
       data: {
         lender: dto.lender,
@@ -771,6 +836,26 @@ export class ClientsService {
       },
       include: { snapshots: true },
     });
+
+    if (
+      dto.loanBalance !== undefined ||
+      dto.offsetBalance !== undefined ||
+      dto.interestRate !== undefined
+    ) {
+      const snapUpdateData: any = {};
+      if (dto.loanBalance !== undefined) snapUpdateData.loanBalance = Number(dto.loanBalance);
+      if (dto.offsetBalance !== undefined) snapUpdateData.offsetBalance = Number(dto.offsetBalance);
+      if (dto.interestRate !== undefined) {
+        const rawRate = Number(dto.interestRate);
+        snapUpdateData.interestRate = rawRate > 1 ? rawRate / 100 : rawRate;
+      }
+      await this.prisma.loanFinancialSnapshot.updateMany({
+        where: { loanId },
+        data: snapUpdateData,
+      });
+    }
+
+    return updated;
   }
 
   async deleteLoan(adviserId: string, householdId: string, loanId: string) {

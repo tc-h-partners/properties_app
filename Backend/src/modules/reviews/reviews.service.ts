@@ -94,17 +94,42 @@ export class ReviewsService {
       );
     }
 
-    return this.prisma.annualReview.create({
+    const review = await this.prisma.annualReview.create({
       data: {
         householdId,
         financialYear: dto.financialYear,
         reviewDate: new Date(),
         reviewDateStr: new Date().toISOString().split('T')[0],
-        executiveSummary: dto.executiveSummary,
+        executiveSummary:
+          dto.executiveSummary ||
+          `Annual financial and strategic review for FY${dto.financialYear}.`,
+        verdictText: `The ${household.householdName} property portfolio review for FY${dto.financialYear} is currently in setup.`,
+        objectiveText:
+          'Achieve $120,000 p.a. in net passive cash flow from unencumbered residential property assets while maintaining LVR below 50%.',
+        bottomLineText:
+          'Complete entity, property, and loan setup to generate portfolio performance insights.',
         finDataStatus: WorkflowStatus.IN_PROGRESS,
         tchReviewStatus: WorkflowStatus.NOT_STARTED,
       },
     });
+
+    await this.prisma.futureOutlookScenario.create({
+      data: {
+        annualReviewId: review.id,
+        forecastYears: 20,
+        propertyGrowthRate: 0.04,
+        rentalGrowthRate: 0.035,
+        inflationRate: 0.025,
+        superReturnRate: 0.07,
+        extraMonthlyHomeLoanRepayment: 0,
+        downsizeEnabled: false,
+        downsizeYearOffset: 10,
+        downsizeNetProceedsToSuper: 800000,
+        targetRetirementIncomeAfterTax: 120000,
+      },
+    });
+
+    return review;
   }
 
   async savePropertySnapshots(
@@ -153,7 +178,7 @@ export class ReviewsService {
           strataFees: item.strataFees || 0,
           otherExpenses: item.otherExpenses || 0,
           depreciationNonCash: item.depreciationNonCash || 0,
-          status: item.status || 'Completed',
+          status: item.status || 'Not Started',
           detailsJson: item.detailsJson || undefined,
         },
         update: {
@@ -236,7 +261,7 @@ export class ReviewsService {
           annualRepayments: item.annualRepayments || 0,
           interestPaid: item.interestPaid || 0,
           loanLimit: item.loanLimit || 0,
-          status: item.status || 'Completed',
+          status: item.status || 'Not Started',
         },
         update: {
           loanBalance: item.loanBalance,

@@ -47,19 +47,32 @@ export default function SearchCard() {
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
             placeholder="Search...."
-            className="w-full bg-transparent font-['Poppins',sans-serif] font-semibold text-[#1E1E1E] text-[20px] sm:text-[22px] placeholder-[#1E1E1E] underline decoration-[#1E1E1E]/40 underline-offset-4 focus:outline-none focus:no-underline"
+            className="w-full bg-transparent font-['Poppins',sans-serif] font-semibold text-[#1E1E1E] text-[22px] leading-[100%] tracking-[0%] capitalize underline decoration-solid decoration-[#1E1E1E] [text-underline-offset:16%] [text-decoration-thickness:8.5%] placeholder:text-[#1E1E1E] placeholder:font-['Poppins',sans-serif] placeholder:font-semibold placeholder:text-[22px] placeholder:leading-[100%] placeholder:capitalize placeholder:underline placeholder:decoration-solid placeholder:decoration-[#1E1E1E] placeholder:[text-underline-offset:16%] placeholder:[text-decoration-thickness:8.5%] focus:outline-none"
+            style={{
+              fontFamily: "Poppins, sans-serif",
+              fontWeight: 600,
+              fontSize: "22px",
+              lineHeight: "100%",
+              letterSpacing: "0%",
+              textTransform: "capitalize",
+              textDecoration: "underline",
+              textDecorationStyle: "solid",
+              textUnderlineOffset: "16%",
+              textDecorationThickness: "8.5%",
+              textDecorationColor: "#1E1E1E",
+            }}
           />
         </div>
       </div>
 
       {/* Right: Watermark Icon */}
-      <div className="absolute right-[20px] top-[12px] opacity-20 pointer-events-none select-none">
+      <div className="absolute right-[20px] top-[12px] w-[83px] h-[83px] pointer-events-none select-none">
         <Image
           src="/images/dashboard/search-watermark.svg"
           alt=""
           width={83}
           height={83}
-          className="object-contain"
+          className="w-[83px] h-[83px] object-contain"
         />
       </div>
     </form>

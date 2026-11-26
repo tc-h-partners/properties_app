@@ -143,12 +143,12 @@ export default function HouseholdPage() {
     name: string;
     adviser: string;
     objectives: string;
-    reviewYear: string;
+    reviewYear?: string;
   }) => {
     const created = await createHouseholdApi({
       householdName: newH.name.trim(),
       adviserAssigned: newH.adviser,
-      initialReviewYear: newH.reviewYear,
+      initialReviewYear: newH.reviewYear || "FY2026",
       objectives: newH.objectives,
     });
     const row = mapDbHouseholdToRow(created);

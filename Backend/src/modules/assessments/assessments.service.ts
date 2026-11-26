@@ -97,17 +97,37 @@ export class AssessmentsService {
 
     // LOCKED RULE: Adviser fields (★) are strictly locked unless tchReviewStatus === IN_PROGRESS
     if (review.tchReviewStatus !== WorkflowStatus.IN_PROGRESS) {
-      throw new ForbiddenException(
-        `Assessment criteria cannot be modified when TC&H review status is '${review.tchReviewStatus}'. It must be 'IN_PROGRESS'.`,
-      );
+      if (review.tchReviewStatus === WorkflowStatus.NOT_STARTED) {
+        // Auto-start TC&H review if adviser begins editing assessment criteria
+        await this.prisma.annualReview.update({
+          where: { id: reviewId },
+          data: { tchReviewStatus: WorkflowStatus.IN_PROGRESS },
+        });
+      } else {
+        throw new ForbiddenException(
+          `Assessment criteria cannot be modified when TC&H review status is '${review.tchReviewStatus}'. It must be 'IN_PROGRESS'.`,
+        );
+      }
     }
 
     const criterion = await this.prisma.assessmentCriterion.findUnique({
       where: { id: criterionId },
+      include: { annualReview: true },
     });
 
-    if (!criterion || criterion.annualReviewId !== reviewId) {
-      throw new NotFoundException('Assessment criterion record not found for this review');
+    if (!criterion) {
+      throw new NotFoundException('Assessment criterion record not found');
+    }
+
+    if (criterion.annualReviewId !== reviewId) {
+      if (criterion.annualReview?.householdId === review.householdId) {
+        await this.prisma.assessmentCriterion.update({
+          where: { id: criterionId },
+          data: { annualReviewId: reviewId },
+        });
+      } else {
+        throw new NotFoundException('Assessment criterion record not found for this review');
+      }
     }
 
     return this.prisma.assessmentCriterion.update({

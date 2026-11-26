@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useMemo } from "react";
 import {
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Pencil,
   Clock,
   Route,
@@ -11,27 +13,62 @@ import {
   Home,
   Building2,
   PiggyBank,
+  Trash2,
+  Filter,
+  Check,
+  CheckCircle2,
 } from "lucide-react";
 import {
   createInsightApi,
+  updateInsightApi,
+  deleteInsightApi,
   updateReviewApi,
   saveFutureOutlookApi,
 } from "@/lib/api";
 
 export interface ReviewInsightItem {
   id: string;
+  reviewId?: string;
   fy: string;
   screen: string;
   property: string;
-  maintenanceInsight: string;
-  metric: string;
+  maintenanceInsight?: string;
+  metric?: string;
   heading: string;
   insight: string;
   recommendation: string;
   priority: "High" | "Medium" | "Low";
-  owner: string;
-  action: string;
-  notes: string;
+  owner?: string;
+  action?: string;
+  notes?: string;
+}
+
+export interface ExecutiveSummaryData {
+  totalReturnVal?: string;
+  totalReturnSub?: string;
+  metricCards?: Array<{
+    title: string;
+    val: string;
+    comp: string;
+  }>;
+  opportunities?: Array<{
+    title: string;
+    desc: string;
+    amount: string;
+  }>;
+  risks?: Array<{
+    title: string;
+    desc: string;
+  }>;
+  trackGoal?: string;
+  trackCurrentPathVal?: string;
+  trackActionsVal?: string;
+  trackNarrative?: string;
+  initiatives?: Array<{
+    title: string;
+    desc: string;
+  }>;
+  propertyStrategicRoles?: Record<string, string>;
 }
 
 interface ReviewWorkspaceReportProps {
@@ -42,6 +79,7 @@ interface ReviewWorkspaceReportProps {
   householdName?: string;
   reviewYear?: string;
   reviewStatus?: "Completed" | "In Progress";
+  readOnly?: boolean;
   onBack: () => void;
   initialTab?:
     | "executive-summary"
@@ -183,13 +221,331 @@ const BENCHMARK_BARS = [
   },
 ];
 
+const METRIC_CHART_CONFIGS: Record<
+  string,
+  {
+    waveTitle: string;
+    waveSubtitle: string;
+    benchmarkTitle: string;
+    points: typeof NET_YIELD_POINTS;
+    bars: typeof BENCHMARK_BARS;
+  }
+> = {
+  "Property Value": {
+    waveTitle: "Valuation History & Trend",
+    waveSubtitle:
+      "Annual capital valuation and appreciation across financial years",
+    benchmarkTitle: "Capital Growth Benchmark",
+    points: [
+      { id: 0, cx: 9.4, cy: 92.2, fy: "FY 2021", value: "$620k", trend: "up", underlineLeft: 10, labelIndex: 0 },
+      { id: 1, cx: 85.8, cy: 78.5, fy: "FY 2022", value: "$680k", trend: "up", underlineLeft: 86, labelIndex: 1 },
+      { id: 2, cx: 163.8, cy: 68.7, fy: "FY 2023", value: "$720k", trend: "up", underlineLeft: 163, labelIndex: 2 },
+      { id: 3, cx: 240.8, cy: 50.9, fy: "FY 2024", value: "$780k", trend: "up", underlineLeft: 239, labelIndex: 3 },
+      { id: 4, cx: 266.8, cy: 38.0, fy: "FY 2024", value: "$800k", trend: "up", underlineLeft: 268.6, labelIndex: 3 },
+      { id: 5, cx: 317.8, cy: 26.7, fy: "FY 2025", value: "$840k", trend: "up", underlineLeft: 315, labelIndex: 4 },
+      { id: 6, cx: 396.1, cy: 15.4, fy: "FY 2026", value: "$890k", trend: "up", underlineLeft: 392, labelIndex: 5 },
+      { id: 7, cx: 473.2, cy: 10.0, fy: "FY 2022", value: "$920k", trend: "up", underlineLeft: 468, labelIndex: 6 },
+    ],
+    bars: [
+      { id: "b1", value: "7.2%", height: 125, line1: "subject", line2: "property", spacer: false, fadedValue: false, diff: "Subject Property (+1.8%)" },
+      { id: "b2", value: "5.4%", height: 95, line1: "residential", line2: "benchmark", spacer: false, fadedValue: false, diff: "Metro Benchmark (-1.8%)" },
+      { id: "b3", value: "5.5%", height: 96, line1: "ASX 200", line2: "index", spacer: true, fadedValue: false, diff: "Equities (-1.7%)" },
+      { id: "b4", value: "3.8%", height: 68, line1: "CPI", line2: "inflation", spacer: false, fadedValue: true, diff: "Inflation (-3.4%)" },
+    ],
+  },
+  "Total Loans": {
+    waveTitle: "Debt Balance & Amortization Trend",
+    waveSubtitle:
+      "Outstanding loan principal and debt amortization across financial years",
+    benchmarkTitle: "Borrowing Rate Comparison",
+    points: [
+      { id: 0, cx: 9.4, cy: 18.0, fy: "FY 2021", value: "$720k", trend: "down", underlineLeft: 10, labelIndex: 0 },
+      { id: 1, cx: 85.8, cy: 28.0, fy: "FY 2022", value: "$705k", trend: "down", underlineLeft: 86, labelIndex: 1 },
+      { id: 2, cx: 163.8, cy: 39.0, fy: "FY 2023", value: "$690k", trend: "down", underlineLeft: 163, labelIndex: 2 },
+      { id: 3, cx: 240.8, cy: 52.0, fy: "FY 2024", value: "$670k", trend: "down", underlineLeft: 239, labelIndex: 3 },
+      { id: 4, cx: 266.8, cy: 64.7, fy: "FY 2024", value: "$650k", trend: "down", underlineLeft: 268.6, labelIndex: 3 },
+      { id: 5, cx: 317.8, cy: 75.0, fy: "FY 2025", value: "$625k", trend: "down", underlineLeft: 315, labelIndex: 4 },
+      { id: 6, cx: 396.1, cy: 88.0, fy: "FY 2026", value: "$595k", trend: "down", underlineLeft: 392, labelIndex: 5 },
+      { id: 7, cx: 473.2, cy: 98.0, fy: "FY 2022", value: "$560k", trend: "down", underlineLeft: 468, labelIndex: 6 },
+    ],
+    bars: [
+      { id: "b1", value: "6.24%", height: 112, line1: "current", line2: "loan rate", spacer: false, fadedValue: false, diff: "Current Interest Rate" },
+      { id: "b2", value: "6.50%", height: 118, line1: "standard", line2: "variable", spacer: false, fadedValue: false, diff: "Standard Variable (+0.26%)" },
+      { id: "b3", value: "5.85%", height: 102, line1: "prime", line2: "market", spacer: false, fadedValue: false, diff: "Prime Refinance (-0.39%)" },
+      { id: "b4", value: "4.35%", height: 75, line1: "RBA cash", line2: "rate", spacer: false, fadedValue: true, diff: "Cash Rate (-1.89%)" },
+    ],
+  },
+  "Total Equity": {
+    waveTitle: "Net Equity Accumulation Trend",
+    waveSubtitle:
+      "Compounded equity and borrowing buffer across financial years",
+    benchmarkTitle: "Equity Return on Equity (ROE)",
+    points: [
+      { id: 0, cx: 9.4, cy: 98.0, fy: "FY 2021", value: "$40k", trend: "up", underlineLeft: 10, labelIndex: 0 },
+      { id: 1, cx: 85.8, cy: 85.0, fy: "FY 2022", value: "$65k", trend: "up", underlineLeft: 86, labelIndex: 1 },
+      { id: 2, cx: 163.8, cy: 70.0, fy: "FY 2023", value: "$95k", trend: "up", underlineLeft: 163, labelIndex: 2 },
+      { id: 3, cx: 240.8, cy: 55.0, fy: "FY 2024", value: "$125k", trend: "up", underlineLeft: 239, labelIndex: 3 },
+      { id: 4, cx: 266.8, cy: 40.0, fy: "FY 2024", value: "$150k", trend: "up", underlineLeft: 268.6, labelIndex: 3 },
+      { id: 5, cx: 317.8, cy: 28.0, fy: "FY 2025", value: "$190k", trend: "up", underlineLeft: 315, labelIndex: 4 },
+      { id: 6, cx: 396.1, cy: 16.0, fy: "FY 2026", value: "$245k", trend: "up", underlineLeft: 392, labelIndex: 5 },
+      { id: 7, cx: 473.2, cy: 10.0, fy: "FY 2022", value: "$290k", trend: "up", underlineLeft: 468, labelIndex: 6 },
+    ],
+    bars: [
+      { id: "b1", value: "8.4%", height: 136, line1: "equity", line2: "ROE", spacer: false, fadedValue: false, diff: "Equity ROE (+1.6%)" },
+      { id: "b2", value: "6.8%", height: 112, line1: "portfolio", line2: "average", spacer: false, fadedValue: false, diff: "Portfolio Average (-1.6%)" },
+      { id: "b3", value: "7.5%", height: 122, line1: "super", line2: "benchmark", spacer: false, fadedValue: false, diff: "Balanced Super (-0.9%)" },
+      { id: "b4", value: "4.8%", height: 80, line1: "term", line2: "deposit", spacer: false, fadedValue: true, diff: "Term Deposit (-3.6%)" },
+    ],
+  },
+  "Total Property Return": {
+    waveTitle: "Net Yield History & Trend",
+    waveSubtitle:
+      "Annual net operating yield after all property outgoings across financial years",
+    benchmarkTitle: "Benchmark comparison",
+    points: NET_YIELD_POINTS,
+    bars: BENCHMARK_BARS,
+  },
+  "LVR (Loan-to-Value Ratio)": {
+    waveTitle: "LVR Trajectory & De-risking Trend",
+    waveSubtitle:
+      "Loan-to-value ratio improvement across financial years",
+    benchmarkTitle: "LVR Lending Safety Benchmarks",
+    points: [
+      { id: 0, cx: 9.4, cy: 22.0, fy: "FY 2021", value: "92.0%", trend: "down", underlineLeft: 10, labelIndex: 0 },
+      { id: 1, cx: 85.8, cy: 32.0, fy: "FY 2022", value: "89.5%", trend: "down", underlineLeft: 86, labelIndex: 1 },
+      { id: 2, cx: 163.8, cy: 45.0, fy: "FY 2023", value: "86.0%", trend: "down", underlineLeft: 163, labelIndex: 2 },
+      { id: 3, cx: 240.8, cy: 56.0, fy: "FY 2024", value: "83.5%", trend: "down", underlineLeft: 239, labelIndex: 3 },
+      { id: 4, cx: 266.8, cy: 64.7, fy: "FY 2024", value: "81.25%", trend: "down", underlineLeft: 268.6, labelIndex: 3 },
+      { id: 5, cx: 317.8, cy: 76.0, fy: "FY 2025", value: "77.0%", trend: "down", underlineLeft: 315, labelIndex: 4 },
+      { id: 6, cx: 396.1, cy: 90.0, fy: "FY 2026", value: "71.5%", trend: "down", underlineLeft: 392, labelIndex: 5 },
+      { id: 7, cx: 473.2, cy: 98.0, fy: "FY 2022", value: "66.0%", trend: "down", underlineLeft: 468, labelIndex: 6 },
+    ],
+    bars: [
+      { id: "b1", value: "81.2%", height: 135, line1: "subject", line2: "LVR", spacer: false, fadedValue: false, diff: "Current Gearing Level" },
+      { id: "b2", value: "80.0%", height: 130, line1: "no-LMI", line2: "cap", spacer: false, fadedValue: false, diff: "LMI Waiver Threshold (-1.2%)" },
+      { id: "b3", value: "70.0%", height: 114, line1: "target", line2: "safe tier", spacer: false, fadedValue: false, diff: "Target Safe Tier (-11.2%)" },
+      { id: "b4", value: "60.0%", height: 96, line1: "conservative", line2: "LVR", spacer: false, fadedValue: true, diff: "Conservative Tier (-21.2%)" },
+    ],
+  },
+};
+
+const DEFAULT_METRIC_INSIGHTS: Record<string, ReviewInsightItem[]> = {
+  "Property Value": [
+    {
+      id: "df-val-1",
+      fy: "2024",
+      screen: "Property Analysis",
+      property: "17 Learmonth Street",
+      metric: "Valuation",
+      heading: "Property Valuation Review",
+      insight:
+        "The property's current valuation should be reviewed against its previous valuation.",
+      recommendation:
+        "Verify the latest valuation and record the review date and source to unlock usable equity.",
+      priority: "High",
+    },
+    {
+      id: "df-val-2",
+      fy: "2024",
+      screen: "Property Analysis",
+      property: "17 Learmonth Street",
+      metric: "Capital Growth",
+      heading: "Capital Growth Performance",
+      insight:
+        "Compound capital appreciation has tracked at 5.2% p.a., slightly outperforming the metro benchmark.",
+      recommendation:
+        "Maintain buy-and-hold stance while reviewing local zoning uplift potentials.",
+      priority: "Medium",
+    },
+    {
+      id: "df-val-3",
+      fy: "2024",
+      screen: "Property Analysis",
+      property: "17 Learmonth Street",
+      metric: "Valuation",
+      heading: "Building Depreciation & Write-Down",
+      insight:
+        "Existing depreciation schedule is nearing end of plant and equipment deduction lifespan.",
+      recommendation:
+        "Commission updated tax depreciation quantity surveyor report to maximise tax write-offs.",
+      priority: "Low",
+    },
+  ],
+  "Total Loans": [
+    {
+      id: "df-loan-1",
+      fy: "2024",
+      screen: "Property Analysis",
+      property: "17 Learmonth Street",
+      metric: "Total Loans",
+      heading: "Loan Pricing & Interest Rate Review",
+      insight:
+        "Current lending rate of 6.24% p.a. is 39 bps higher than prime tier refinance offers in market.",
+      recommendation:
+        "Request lender pricing retention concession or prepare refinance application to save $2,500/yr.",
+      priority: "High",
+    },
+    {
+      id: "df-loan-2",
+      fy: "2024",
+      screen: "Property Analysis",
+      property: "17 Learmonth Street",
+      metric: "Debt Management",
+      heading: "Interest-Only Expiry Buffer",
+      insight:
+        "Interest-only period transitions to principal & interest in Nov 2027, increasing monthly repayments.",
+      recommendation:
+        "Model cash-flow impact and apply to roll IO period for another 5 years 6 months prior.",
+      priority: "Medium",
+    },
+    {
+      id: "df-loan-3",
+      fy: "2024",
+      screen: "Property Analysis",
+      property: "17 Learmonth Street",
+      metric: "Total Loans",
+      heading: "Offset Account Cash Optimization",
+      insight:
+        "Cash reserves in external savings are generating taxable interest rather than non-taxable debt offset.",
+      recommendation:
+        "Direct all surplus liquidity into 100% mortgage offset account to accelerate interest reduction.",
+      priority: "Low",
+    },
+  ],
+  "Total Equity": [
+    {
+      id: "df-eq-1",
+      fy: "2024",
+      screen: "Property Analysis",
+      property: "17 Learmonth Street",
+      metric: "Equity",
+      heading: "Usable Equity Extraction",
+      insight:
+        "Accumulated net equity of $150,000 gives capacity for an equity release facility.",
+      recommendation:
+        "Establish standby revolving line of credit or split loan for portfolio liquidity reserves.",
+      priority: "High",
+    },
+    {
+      id: "df-eq-2",
+      fy: "2024",
+      screen: "Property Analysis",
+      property: "17 Learmonth Street",
+      metric: "Equity",
+      heading: "Cross-Collateralisation De-linking",
+      insight:
+        "Property loans remain tied to single lender security bundle, limiting independent refinancing flexibility.",
+      recommendation:
+        "Uncross securities at next refinance to isolate capital risk between family home and investments.",
+      priority: "Medium",
+    },
+    {
+      id: "df-eq-3",
+      fy: "2024",
+      screen: "Property Analysis",
+      property: "17 Learmonth Street",
+      metric: "Equity",
+      heading: "Equity Return on Investment (ROE)",
+      insight:
+        "Return on invested equity is currently 8.4%, supporting strong compounding leverage.",
+      recommendation:
+        "Continue compound wealth accrual without prematurely selling assets in high growth phase.",
+      priority: "Low",
+    },
+  ],
+  "Total Property Return": [
+    {
+      id: "df-ret-1",
+      fy: "2024",
+      screen: "Property Analysis",
+      property: "17 Learmonth Street",
+      metric: "Rental Income",
+      heading: "Rental Income Review",
+      insight:
+        "Current rental income may differ from the local market rent benchmark.",
+      recommendation:
+        "Review the current rent against the relevant market benchmark.",
+      priority: "High",
+    },
+    {
+      id: "df-ret-2",
+      fy: "2024",
+      screen: "Property Analysis",
+      property: "17 Learmonth Street",
+      metric: "Valuation",
+      heading: "Property Valuation Review",
+      insight:
+        "The property's current valuation should be reviewed against its previous valuation.",
+      recommendation:
+        "Verify the latest valuation and record the review date and source.",
+      priority: "High",
+    },
+    {
+      id: "df-ret-3",
+      fy: "2024",
+      screen: "Property Analysis",
+      property: "17 Learmonth Street",
+      metric: "Operating Expenses",
+      heading: "Reduce Operating Expenses",
+      insight:
+        "Property operating expenses should be reviewed against available records and relevant benchmarks.",
+      recommendation:
+        "Review insurance premiums, property management fees and maintenance costs for potential savings.",
+      priority: "Medium",
+    },
+  ],
+  "LVR (Loan-to-Value Ratio)": [
+    {
+      id: "df-lvr-1",
+      fy: "2024",
+      screen: "Property Analysis",
+      property: "17 Learmonth Street",
+      metric: "LVR",
+      heading: "LMI Elimination Threshold",
+      insight:
+        "LVR of 81.25% is within 1.25% of the 80% threshold where Lenders Mortgage Insurance is eliminated.",
+      recommendation:
+        "Make small lump sum principal reduction of $10,000 to drop LVR under 80% and unlock lower tier rates.",
+      priority: "High",
+    },
+    {
+      id: "df-lvr-2",
+      fy: "2024",
+      screen: "Property Analysis",
+      property: "17 Learmonth Street",
+      metric: "LVR",
+      heading: "Portfolio Risk Exposure Review",
+      insight:
+        "Combined household gearing is stabilizing as asset appreciation outpaces debt expansion.",
+      recommendation:
+        "Target medium-term debt reduction to reach comfortable sub-65% LVR by FY2028.",
+      priority: "Medium",
+    },
+    {
+      id: "df-lvr-3",
+      fy: "2024",
+      screen: "Property Analysis",
+      property: "17 Learmonth Street",
+      metric: "LVR",
+      heading: "Valuation Uplift Re-assessment",
+      insight:
+        "A current bank valuation re-assessment may naturally compress LVR below 80% without cash injection.",
+      recommendation:
+        "Order automated valuation model (AVM) or desktop bank valuation through broker.",
+      priority: "Low",
+    },
+  ],
+};
+
 export default function ReviewWorkspaceReport({
   householdId = "",
   reviewId = "",
   dbHousehold,
   onDataChanged,
-  householdName = "Harrison Family",
+  householdName = "Harrison Household",
   reviewYear = "2026",
+  reviewStatus = "In Progress",
+  readOnly = false,
   onBack,
   initialTab = "executive-summary",
 }: ReviewWorkspaceReportProps) {
@@ -237,6 +593,17 @@ interface ReviewPropertyCard {
   rawLoans: number;
   rawEquity: number;
   isOwnerOccupied: boolean;
+  rawWkRent?: number;
+  rawGrossRent?: number;
+  rawExpenses?: number;
+  rawDebtService?: number;
+  rawNetCashFlow?: number;
+  rawNetYield?: number;
+  rawPurchasePrice?: number;
+  rawGrowthPct?: number;
+  yieldPct?: number;
+  propertyCategory?: string;
+  loans?: any[];
 }
 
   // Dynamically map properties from dbHousehold
@@ -310,7 +677,22 @@ interface ReviewPropertyCard {
           ? (((val - purchasePriceNum) / purchasePriceNum) * 100) / 5
           : 5.4;
       const wkRent = Number(pSnap?.weeklyRent ?? p.weeklyRent ?? 0);
-      const yieldPct = val > 0 ? ((wkRent * 52) / val) * 100 : 0;
+      const grossRent = wkRent * 52;
+      const expenses =
+        Number(pSnap?.councilRates ?? 0) +
+        Number(pSnap?.waterRates ?? 0) +
+        Number(pSnap?.insurance ?? 0) +
+        Number(pSnap?.repairsMaintenance ?? 0) +
+        Number(pSnap?.strataFees ?? 0) +
+        Number(pSnap?.landTax ?? 0) +
+        Number(pSnap?.propertyManagementFees ?? 0) +
+        Number(pSnap?.otherExpenses ?? 0);
+      const finalExpenses =
+        expenses > 0 ? expenses : Math.round(grossRent * 0.18);
+      const pDebtService = Math.round(loansTotal * 0.0594);
+      const pNetCashFlow = grossRent - finalExpenses - pDebtService;
+      const pNetYield = val > 0 ? ((grossRent - finalExpenses) / val) * 100 : 0;
+      const yieldPct = val > 0 ? (grossRent / val) * 100 : 0;
       const totalReturnNum = Math.max(0, growthPct + yieldPct);
 
       const owners: string[] = [];
@@ -349,6 +731,17 @@ interface ReviewPropertyCard {
         rawValue: val,
         rawLoans: loansTotal,
         rawEquity: equity,
+        rawWkRent: wkRent,
+        rawGrossRent: grossRent,
+        rawExpenses: finalExpenses,
+        rawDebtService: pDebtService,
+        rawNetCashFlow: pNetCashFlow,
+        rawNetYield: pNetYield,
+        rawPurchasePrice: purchasePriceNum,
+        rawGrowthPct: growthPct,
+        yieldPct: yieldPct,
+        propertyCategory: p.propertyCategory || "House",
+        loans: p.loans || [],
         isOwnerOccupied: isOO,
       };
     });
@@ -370,6 +763,123 @@ interface ReviewPropertyCard {
   const [bottomLineText, setBottomLineText] = useState(
     "Your portfolio is performing well, and with three focused actions, can deliver your retirement income goal...."
   );
+
+  const defaultExecData: ExecutiveSummaryData = useMemo(
+    () => ({
+      totalReturnVal: "6.8%",
+      totalReturnSub: `Total Return (FY${reviewYear || 2026})`,
+      metricCards: [
+        {
+          title: "Cash Return on Equity",
+          val: "-2.9%",
+          comp: `12.4% vs FY${Number(reviewYear || 2026) - 1}`,
+        },
+        {
+          title: "After-Tax Cash Flow",
+          val: "-$69,074",
+          comp: `12.4% vs FY${Number(reviewYear || 2026) - 1}`,
+        },
+        {
+          title: "Cash Cover",
+          val: "18.4 Months",
+          comp: "Buffer: $130,000",
+        },
+        {
+          title: "Average Interest Rate",
+          val: "5.97%",
+          comp: `12.4% vs FY${Number(reviewYear || 2026) - 1}`,
+        },
+      ],
+      opportunities: [
+        {
+          title: "01. Refinance higher-rate loans",
+          desc: "Four loans are above market rates by ~0.7%.",
+          amount: "$15,100 p.a.",
+        },
+        {
+          title: "02. Reduce property management costs",
+          desc: "Ocean Drive costs ~28% above comparable properties.",
+          amount: "$2,400 p.a.",
+        },
+        {
+          title: "03. Review and reset rents",
+          desc: "Park Avenue rent has not been reviewed in 26 months.",
+          amount: "$2,080 p.a.",
+        },
+      ],
+      risks: [
+        {
+          title: "Interest-rate exposure",
+          desc: "45% of loans are variable, increasing sensitivity to rate rises.",
+        },
+        {
+          title: "Property performance risk",
+          desc: "One property is underperforming and its strategic role should be reviewed.",
+        },
+        {
+          title: "Income concentration",
+          desc: "All income is from residential property, with limited diversification across assets.",
+        },
+      ],
+      trackGoal: "$120,000 p.a.",
+      trackCurrentPathVal: "$112,000",
+      trackActionsVal: "$132,000",
+      trackNarrative:
+        "With the identified actions, your portfolio could provide around $132,000 p.a. in 20 years, above your $120,000 target.",
+      initiatives: [
+        {
+          title: "1. Optimise portfolio cash flow",
+          desc: "– refinance, insurance and property costs.",
+        },
+        {
+          title: "2. Assess the Park Avenue strategy",
+          desc: "– hold, improve or redeploy the capital.",
+        },
+        {
+          title: "3. Confirm the debt reduction plan",
+          desc: "– ensure it keeps you on track for $120,000 p.a.",
+        },
+      ],
+      propertyStrategicRoles: {},
+    }),
+    [reviewYear]
+  );
+
+  const [execData, setExecData] =
+    useState<ExecutiveSummaryData>(defaultExecData);
+  const [isEditingAllExec, setIsEditingAllExec] = useState(false);
+  const [isEditingMetrics, setIsEditingMetrics] = useState(false);
+  const [isEditingOpps, setIsEditingOpps] = useState(false);
+  const [isEditingRisks, setIsEditingRisks] = useState(false);
+  const [isEditingTrack, setIsEditingTrack] = useState(false);
+  const [isEditingInitiatives, setIsEditingInitiatives] = useState(false);
+  const canEdit = !readOnly;
+
+  // Review status interactive state
+  const [reviewStatusState, setReviewStatusState] = useState<
+    "Completed" | "In Progress"
+  >(reviewStatus === "Completed" ? "Completed" : "In Progress");
+  const [isStatusMenuOpen, setIsStatusMenuOpen] = useState(false);
+
+  const updateExecData = (patch: Partial<ExecutiveSummaryData>) => {
+    setExecData((prev) => {
+      const next = { ...prev, ...patch };
+      persistReviewField({ executiveSummary: JSON.stringify(next) });
+      return next;
+    });
+  };
+
+  const handleSetStatus = async (newStatus: "Completed" | "In Progress") => {
+    setReviewStatusState(newStatus);
+    setIsStatusMenuOpen(false);
+    await persistReviewField({
+      tchReviewStatus: newStatus === "Completed" ? "COMPLETED" : "IN_PROGRESS",
+    });
+  };
+
+  // Interactive Metric Selection & Bottom Insights Carousel for Report Screens
+  const [selectedMetric, setSelectedMetric] = useState<string>("Total Property Return");
+  const [carouselIndex, setCarouselIndex] = useState<number>(0);
 
   // Tab 2: Portfolio Overview sub-tab
   const [portfolioSubTab, setPortfolioSubTab] = useState<
@@ -412,10 +922,18 @@ interface ReviewPropertyCard {
   const [priorityFilter, setPriorityFilter] = useState<
     "All" | "High" | "Medium" | "Low"
   >("All");
+  const [propertyFilter, setPropertyFilter] = useState<string>("All");
+  const [yearFilter, setYearFilter] = useState<string>("All");
+  const [isPropertyHeaderMenuOpen, setIsPropertyHeaderMenuOpen] = useState(false);
 
-  // Add Insight Modal states
+  // Add & Review Insight Modal states
   const [isAddInsightOpen, setIsAddInsightOpen] = useState(false);
-  const [newInsightProperty, setNewInsightProperty] = useState("");
+  const [currentInsightIndex, setCurrentInsightIndex] = useState(0);
+  const [editingInsightId, setEditingInsightId] = useState<string | null>(null);
+  const [insightSaveMsg, setInsightSaveMsg] = useState("");
+  const [isSubmittingInsight, setIsSubmittingInsight] = useState(false);
+  const [newInsightFy, setNewInsightFy] = useState<string>(String(reviewYear || 2026));
+  const [newInsightProperty, setNewInsightProperty] = useState("Portfolio-Wide");
   const [newInsightMetric, setNewInsightMetric] = useState("Rental Income");
   const [newInsightHeading, setNewInsightHeading] = useState("");
   const [newInsightObservation, setNewInsightObservation] = useState("");
@@ -426,12 +944,6 @@ interface ReviewPropertyCard {
   const [newInsightOwner, setNewInsightOwner] = useState("Adviser");
   const [newInsightAction, setNewInsightAction] = useState("");
   const [newInsightNotes, setNewInsightNotes] = useState("");
-
-  useEffect(() => {
-    if (propertiesList.length > 0 && !newInsightProperty) {
-      setNewInsightProperty(propertiesList[0].address);
-    }
-  }, [propertiesList, newInsightProperty]);
 
   // Sync Executive Summary & Insights from DB whenever activeReview or dbHousehold changes
   useEffect(() => {
@@ -449,6 +961,23 @@ interface ReviewPropertyCard {
       if (activeReview.futureOutlook?.forecastYears) {
         setForecastHorizon(Number(activeReview.futureOutlook.forecastYears));
       }
+      if (activeReview.tchReviewStatus === "COMPLETED") {
+        setReviewStatusState("Completed");
+      } else {
+        setReviewStatusState("In Progress");
+      }
+      if (activeReview.executiveSummary) {
+        try {
+          const parsed = JSON.parse(activeReview.executiveSummary);
+          if (parsed && typeof parsed === "object") {
+            setExecData((prev) => ({ ...prev, ...parsed }));
+          }
+        } catch {
+          // ignore
+        }
+      }
+    } else if (reviewStatus) {
+      setReviewStatusState(reviewStatus);
     }
 
     // Collect insights across reviews from DB
@@ -461,6 +990,7 @@ interface ReviewPropertyCard {
             pRaw === "HIGH" ? "High" : pRaw === "LOW" ? "Low" : "Medium";
           loadedInsights.push({
             id: c.id,
+            reviewId: r.id,
             fy: String(r.financialYear),
             screen: c.screen || "Property Analysis",
             property: c.propertyName || "Portfolio-Wide",
@@ -507,9 +1037,254 @@ interface ReviewPropertyCard {
   const currentProperty =
     propertiesList[selectedPropertyIndex] || propertiesList[0];
 
+  // Helper to determine the contextual default property & metric based on screen & subview
+  const getContextualDefaults = () => {
+    let defaultProp = "Portfolio-Wide";
+    let defaultMet = "Rental Income";
+
+    if (activeTab === "property-analysis") {
+      defaultProp =
+        currentProperty?.address ||
+        (propertiesList[0]?.address ?? "Portfolio-Wide");
+      if (propertySubView === "cash-management") {
+        defaultMet =
+          cashSubTab === "operational-efficiency"
+            ? "Operating Expenses"
+            : "Rental Income";
+      } else if (propertySubView === "capital-management") {
+        defaultMet =
+          capitalSubTab === "debt-management"
+            ? "Debt & Refinancing"
+            : "Capital Growth";
+      } else {
+        defaultMet = "Valuation";
+      }
+    } else if (activeTab === "portfolio-overview") {
+      defaultProp = "Portfolio-Wide";
+      if (portfolioSubTab === "Property") {
+        defaultMet = "Rental Income";
+      } else if (portfolioSubTab === "Equity") {
+        defaultMet = "Debt & Refinancing";
+      } else if (portfolioSubTab === "Cash") {
+        defaultMet = "Operating Expenses";
+      } else {
+        defaultMet = "Valuation";
+      }
+    } else if (activeTab === "future-outlook") {
+      defaultProp = "Portfolio-Wide";
+      defaultMet = "Capital Growth";
+    } else {
+      defaultProp = "Portfolio-Wide";
+      defaultMet = "Valuation";
+    }
+
+    return { defaultProp, defaultMet };
+  };
+
+  const availableYears = useMemo(() => {
+    const years = new Set<string>(["2024", "2025", "2026"]);
+    if (reviewYear) years.add(String(reviewYear));
+    if (Array.isArray(dbHousehold?.reviews)) {
+      dbHousehold.reviews.forEach((r: any) => {
+        if (r.financialYear) years.add(String(r.financialYear));
+      });
+    }
+    insights.forEach((i) => {
+      if (i.fy) years.add(String(i.fy));
+    });
+    return Array.from(years).sort((a, b) => b.localeCompare(a));
+  }, [dbHousehold, reviewYear, insights]);
+
+  const availableProperties = useMemo(() => {
+    const props = new Set<string>();
+    props.add("Portfolio-Wide");
+    propertiesList.forEach((p) => {
+      if (p.id !== "empty-prop" && p.address) {
+        props.add(p.address);
+      }
+    });
+    insights.forEach((i) => {
+      if (i.property && i.property !== "-") {
+        props.add(i.property);
+      }
+    });
+    return Array.from(props);
+  }, [propertiesList, insights]);
+
+  const filteredInsights = useMemo(() => {
+    return insights.filter((item) => {
+      if (priorityFilter !== "All" && item.priority !== priorityFilter)
+        return false;
+      if (propertyFilter !== "All" && item.property !== propertyFilter)
+        return false;
+      if (yearFilter !== "All" && String(item.fy) !== String(yearFilter))
+        return false;
+      return true;
+    });
+  }, [insights, priorityFilter, propertyFilter, yearFilter]);
+
+  const priorityCounts = useMemo(() => {
+    const baseList = insights.filter((item) => {
+      if (propertyFilter !== "All" && item.property !== propertyFilter)
+        return false;
+      if (yearFilter !== "All" && String(item.fy) !== String(yearFilter))
+        return false;
+      return true;
+    });
+    return {
+      all: baseList.length,
+      high: baseList.filter((i) => i.priority === "High").length,
+      medium: baseList.filter((i) => i.priority === "Medium").length,
+      low: baseList.filter((i) => i.priority === "Low").length,
+    };
+  }, [insights, propertyFilter, yearFilter]);
+
+  const activeInsightList = filteredInsights;
+
+  // Open modal in creation mode with context-based defaults
+  const openAddInsightModal = (
+    explicitProp?: string,
+    explicitMet?: string,
+    explicitFy?: string
+  ) => {
+    if (!canEdit) return;
+    const { defaultProp, defaultMet } = getContextualDefaults();
+    const prop =
+      explicitProp ||
+      (propertyFilter !== "All" ? propertyFilter : defaultProp);
+    const met = explicitMet || defaultMet;
+    const fy =
+      explicitFy ||
+      (yearFilter !== "All" ? yearFilter : String(reviewYear || 2026));
+
+    setEditingInsightId(null);
+    setCurrentInsightIndex(filteredInsights.length);
+    setNewInsightFy(fy);
+    setNewInsightProperty(prop);
+    setNewInsightMetric(met);
+    setNewInsightHeading("");
+    setNewInsightObservation("");
+    setNewInsightRecommendation("");
+    setNewInsightPriority(
+      priorityFilter !== "All" ? priorityFilter : "High"
+    );
+    setNewInsightOwner("Adviser");
+    setNewInsightAction("");
+    setNewInsightNotes("");
+    setInsightSaveMsg("");
+    setIsAddInsightOpen(true);
+  };
+
+  const loadInsightFromItem = (item: ReviewInsightItem, idx: number) => {
+    setCurrentInsightIndex(idx);
+    setEditingInsightId(item.id);
+    setNewInsightFy(item.fy || String(reviewYear || 2026));
+    setNewInsightProperty(item.property || "Portfolio-Wide");
+    setNewInsightMetric(item.metric || "Rental Income");
+    setNewInsightHeading(item.heading || "");
+    setNewInsightObservation(item.insight === "-" ? "" : item.insight);
+    setNewInsightRecommendation(
+      item.recommendation === "-" ? "" : item.recommendation
+    );
+    setNewInsightPriority(item.priority || "High");
+    setNewInsightOwner(item.owner || "Adviser");
+    setNewInsightAction(item.action === "Review" ? "" : (item.action || ""));
+    setNewInsightNotes(item.notes === "-" ? "" : (item.notes || ""));
+    setInsightSaveMsg("");
+  };
+
+  // Populate form with an existing insight when scrolling/navigating
+  const loadInsightAtIndex = (
+    idx: number,
+    list: ReviewInsightItem[] = activeInsightList
+  ) => {
+    if (idx < 0 || idx >= list.length) return;
+    loadInsightFromItem(list[idx], idx);
+  };
+
+  const handleSelectRow = (item: ReviewInsightItem) => {
+    if (!canEdit) return;
+    const idx = filteredInsights.findIndex((i) => i.id === item.id);
+    loadInsightFromItem(item, idx !== -1 ? idx : 0);
+    setIsAddInsightOpen(true);
+  };
+
+  const isNewInsightMode = !editingInsightId;
+  const hasPrevInsight =
+    filteredInsights.length > 0 &&
+    (isNewInsightMode || currentInsightIndex > 0);
+  const hasNextInsight =
+    filteredInsights.length > 0 &&
+    Boolean(editingInsightId) &&
+    currentInsightIndex < filteredInsights.length - 1;
+
+  const handlePrevInsight = () => {
+    if (isNewInsightMode) {
+      if (filteredInsights.length > 0) {
+        const lastIdx = filteredInsights.length - 1;
+        loadInsightFromItem(filteredInsights[lastIdx], lastIdx);
+      }
+      return;
+    }
+    if (currentInsightIndex > 0 && filteredInsights.length > 0) {
+      const prevIdx = currentInsightIndex - 1;
+      loadInsightFromItem(filteredInsights[prevIdx], prevIdx);
+    }
+  };
+
+  const handleNextInsight = () => {
+    if (filteredInsights.length === 0) return;
+    if (currentInsightIndex < filteredInsights.length - 1) {
+      const nextIdx = currentInsightIndex + 1;
+      loadInsightFromItem(filteredInsights[nextIdx], nextIdx);
+    } else if (currentInsightIndex === filteredInsights.length - 1) {
+      openAddInsightModal();
+    }
+  };
+
+  const handleDeleteCurrentInsight = async () => {
+    if (!canEdit) return;
+    if (!editingInsightId) return;
+    if (!window.confirm("Are you sure you want to delete this insight?")) return;
+    try {
+      const existingItem = insights.find((i) => i.id === editingInsightId);
+      const targetReviewId = existingItem?.reviewId || effectiveReviewId;
+      await deleteInsightApi(targetReviewId, editingInsightId);
+      const remaining = insights.filter((i) => i.id !== editingInsightId);
+      setInsights(remaining);
+      await onDataChanged?.();
+
+      const nextFiltered = remaining.filter((item) => {
+        if (priorityFilter !== "All" && item.priority !== priorityFilter)
+          return false;
+        if (propertyFilter !== "All" && item.property !== propertyFilter)
+          return false;
+        if (yearFilter !== "All" && String(item.fy) !== String(yearFilter))
+          return false;
+        return true;
+      });
+
+      if (nextFiltered.length > 0) {
+        const nextIdx = Math.min(currentInsightIndex, nextFiltered.length - 1);
+        loadInsightFromItem(nextFiltered[nextIdx], nextIdx);
+      } else {
+        openAddInsightModal();
+      }
+    } catch (err) {
+      console.error("Failed to delete insight:", err);
+    }
+  };
+
   const handleAddInsightSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newInsightHeading.trim()) return;
+    if (!canEdit) return;
+    if (!newInsightHeading.trim()) {
+      setInsightSaveMsg("Please enter a heading for the insight.");
+      return;
+    }
+    setIsSubmittingInsight(true);
+    setInsightSaveMsg("");
+
     const screenName =
       activeTab === "property-analysis"
         ? propertySubView === "cash-management"
@@ -518,39 +1293,150 @@ interface ReviewPropertyCard {
           ? "Capital Management"
           : "Property Analysis"
         : activeTab === "portfolio-overview"
-        ? "Portfolio Overview"
+        ? portfolioSubTab === "Summary"
+          ? "Portfolio Overview"
+          : `Portfolio Overview - ${portfolioSubTab}`
         : activeTab === "future-outlook"
         ? "Future Outlook"
         : "Executive Summary";
 
-    if (effectiveReviewId) {
-      await createInsightApi(effectiveReviewId, {
-        criterionTitle: newInsightHeading.trim(),
-        screen: screenName,
-        propertyName: newInsightProperty || currentProperty.address,
-        maintenanceInsight:
-          newInsightObservation.slice(0, 36) || "Adviser review",
-        metric: newInsightMetric,
-        owner: newInsightOwner,
-        action: newInsightAction.trim() || "Review",
-        insight:
-          newInsightObservation.trim() ||
-          "Adviser observation recorded during annual review.",
-        recommendation:
-          newInsightRecommendation.trim() ||
-          "Review and action during current financial year.",
-        priority: newInsightPriority.toUpperCase(),
-        adviserNotes: newInsightNotes.trim() || `Added in FY${reviewYear} review`,
-      });
-      await onDataChanged?.();
-    }
+    try {
+      if (editingInsightId) {
+        const existingItem = insights.find((i) => i.id === editingInsightId);
+        // Find review by the selected FY if user changed year, or fall back to the existing review of the criterion
+        const matchedReviewByFy = dbHousehold?.reviews?.find(
+          (r: any) => String(r.financialYear) === String(newInsightFy)
+        );
+        const matchedExistingReview = dbHousehold?.reviews?.find(
+          (r: any) => r.id === existingItem?.reviewId
+        );
+        const targetReview = matchedReviewByFy || matchedExistingReview || activeReview;
+        const targetReviewId = targetReview?.id || existingItem?.reviewId || effectiveReviewId;
 
-    setNewInsightHeading("");
-    setNewInsightObservation("");
-    setNewInsightRecommendation("");
-    setNewInsightAction("");
-    setNewInsightNotes("");
-    setIsAddInsightOpen(false);
+        // Ensure review is in IN_PROGRESS so it is not locked by the backend rule
+        if (targetReview?.tchReviewStatus && targetReview.tchReviewStatus !== "IN_PROGRESS") {
+          try {
+            await updateReviewApi(targetReviewId, { tchReviewStatus: "IN_PROGRESS" });
+          } catch (statusErr) {
+            console.warn("Could not set review status to IN_PROGRESS:", statusErr);
+          }
+        }
+
+        await updateInsightApi(targetReviewId, editingInsightId, {
+          criterionTitle: newInsightHeading.trim(),
+          screen: screenName,
+          propertyName:
+            newInsightProperty || currentProperty?.address || "Portfolio-Wide",
+          maintenanceInsight:
+            newInsightObservation.slice(0, 36) || "Adviser review",
+          metric: newInsightMetric,
+          owner: newInsightOwner,
+          action: newInsightAction.trim() || "Review",
+          insight:
+            newInsightObservation.trim() ||
+            "Adviser observation recorded during annual review.",
+          recommendation:
+            newInsightRecommendation.trim() ||
+            "Review and action during current financial year.",
+          priority: newInsightPriority.toUpperCase(),
+          adviserNotes:
+            newInsightNotes.trim() ||
+            `Updated in FY${newInsightFy || reviewYear} review`,
+        });
+
+        setInsights((prev) =>
+          prev.map((i) =>
+            i.id === editingInsightId
+              ? {
+                  ...i,
+                  fy: newInsightFy,
+                  reviewId: targetReviewId,
+                  property: newInsightProperty,
+                  metric: newInsightMetric,
+                  heading: newInsightHeading.trim(),
+                  insight: newInsightObservation.trim() || "-",
+                  recommendation: newInsightRecommendation.trim() || "-",
+                  priority: newInsightPriority,
+                  owner: newInsightOwner,
+                  action: newInsightAction.trim() || "Review",
+                  notes: newInsightNotes.trim() || "-",
+                }
+              : i
+          )
+        );
+
+        await onDataChanged?.();
+        setInsightSaveMsg("Insight updated successfully!");
+        setTimeout(() => setInsightSaveMsg(""), 2500);
+      } else {
+        const targetReview =
+          dbHousehold?.reviews?.find(
+            (r: any) => String(r.financialYear) === String(newInsightFy)
+          ) || activeReview;
+        const targetReviewId = targetReview?.id || effectiveReviewId;
+
+        // Ensure review is in IN_PROGRESS if needed
+        if (targetReview?.tchReviewStatus && targetReview.tchReviewStatus === "COMPLETED") {
+          try {
+            await updateReviewApi(targetReviewId, { tchReviewStatus: "IN_PROGRESS" });
+          } catch (statusErr) {
+            console.warn("Could not set review status to IN_PROGRESS:", statusErr);
+          }
+        }
+
+        const res = await createInsightApi(targetReviewId, {
+          criterionTitle: newInsightHeading.trim(),
+          screen: screenName,
+          propertyName:
+            newInsightProperty || currentProperty?.address || "Portfolio-Wide",
+          maintenanceInsight:
+            newInsightObservation.slice(0, 36) || "Adviser review",
+          metric: newInsightMetric,
+          owner: newInsightOwner,
+          action: newInsightAction.trim() || "Review",
+          insight:
+            newInsightObservation.trim() ||
+            "Adviser observation recorded during annual review.",
+          recommendation:
+            newInsightRecommendation.trim() ||
+            "Review and action during current financial year.",
+          priority: newInsightPriority.toUpperCase(),
+          adviserNotes:
+            newInsightNotes.trim() ||
+            `Added in FY${newInsightFy || reviewYear} review`,
+        });
+
+        if (res && res.id) {
+          const newItem: ReviewInsightItem = {
+            id: res.id,
+            reviewId: targetReviewId,
+            fy: String(targetReview?.financialYear || newInsightFy || reviewYear),
+            screen: screenName,
+            property: newInsightProperty || "Portfolio-Wide",
+            maintenanceInsight:
+              newInsightObservation.slice(0, 36) || "Adviser review",
+            metric: newInsightMetric,
+            heading: newInsightHeading.trim(),
+            insight: newInsightObservation.trim() || "-",
+            recommendation: newInsightRecommendation.trim() || "-",
+            priority: newInsightPriority,
+            owner: newInsightOwner,
+            action: newInsightAction.trim() || "Review",
+            notes: newInsightNotes.trim() || "-",
+          };
+          setInsights((prev) => [newItem, ...prev]);
+        }
+
+        await onDataChanged?.();
+        setIsAddInsightOpen(false);
+      }
+    } catch (err: any) {
+      console.error("Failed to save insight:", err);
+      setInsightSaveMsg(err?.message || "Failed to save insight. Please try again.");
+      setTimeout(() => setInsightSaveMsg(""), 3500);
+    } finally {
+      setIsSubmittingInsight(false);
+    }
   };
 
   const targetYear = 2026 + forecastHorizon;
@@ -569,6 +1455,49 @@ interface ReviewPropertyCard {
     const ooVal = ooProps.reduce((s, p) => s + (p.rawValue || 0), 0);
     const ooLoans = ooProps.reduce((s, p) => s + (p.rawLoans || 0), 0);
     const ooEquity = Math.max(0, ooVal - ooLoans);
+
+    const totalVal = invVal + ooVal;
+    const totalLoans = invLoans + ooLoans;
+    const totalEquity = Math.max(0, totalVal - totalLoans);
+    const totalLvr = totalVal > 0 ? (totalLoans / totalVal) * 100 : 0;
+
+    const usableEquity80 = Math.max(0, invVal * 0.8 - invLoans);
+
+    const totalWeeklyRent = invProps.reduce(
+      (s, p) => s + (p.rawWkRent || 0),
+      0
+    );
+    const totalAnnualRent = invProps.reduce(
+      (s, p) => s + (p.rawGrossRent || 0),
+      0
+    );
+    const totalAnnualExpenses = invProps.reduce(
+      (s, p) => s + (p.rawExpenses || 0),
+      0
+    );
+    const totalDebtService = invProps.reduce(
+      (s, p) => s + (p.rawDebtService || 0),
+      0
+    );
+    const preTaxCashFlow =
+      totalAnnualRent - totalAnnualExpenses - totalDebtService;
+    const portfolioGrossYield =
+      invVal > 0 ? (totalAnnualRent / invVal) * 100 : 4.61;
+    const portfolioNetYield =
+      invVal > 0
+        ? (Math.max(0, totalAnnualRent - totalAnnualExpenses) / invVal) * 100
+        : 3.1;
+    const avgValuation =
+      validProps.length > 0 ? Math.round(totalVal / validProps.length) : 0;
+    const totalPurchasePrice = validProps.reduce(
+      (s, p) => s + (Number(String(p.purchasePrice || "0").replace(/[^0-9]/g, "")) || 0),
+      0
+    );
+    const totalLoansCount =
+      validProps.reduce(
+        (s, p) => s + ((p.loans && p.loans.length) || 0),
+        0
+      ) || (invLoans > 0 ? 1 : 0);
 
     const superBal = Array.isArray(dbHousehold?.entities)
       ? dbHousehold.entities.reduce(
@@ -594,7 +1523,9 @@ interface ReviewPropertyCard {
       invVal > 0 ? Math.round(projectedInvEquity * 0.02488) : 118632;
 
     return {
+      validProps,
       invProps,
+      ooProps,
       invVal,
       invLoans,
       invEquity,
@@ -602,6 +1533,21 @@ interface ReviewPropertyCard {
       ooVal,
       ooLoans,
       ooEquity,
+      totalVal,
+      totalLoans,
+      totalEquity,
+      totalLvr,
+      usableEquity80,
+      totalWeeklyRent,
+      totalAnnualRent,
+      totalAnnualExpenses,
+      totalDebtService,
+      preTaxCashFlow,
+      portfolioGrossYield,
+      portfolioNetYield,
+      avgValuation,
+      totalPurchasePrice,
+      totalLoansCount,
       superBal,
       projectedHomeVal,
       projectedInvEquity,
@@ -761,35 +1707,39 @@ interface ReviewPropertyCard {
     incomeGoal,
   ]);
 
-  const filteredInsights =
-    priorityFilter === "All"
-      ? insights
-      : insights.filter((item) => item.priority === priorityFilter);
-
-  // Reusable Metric Card exactly matching Figma 1044:9390 (bg-[#f6f9fb] rounded-[12px] px-[20px] py-[15px])
+  // Reusable Metric Card exactly matching Figma 1044:9390 (bg-[#f6f9fb] rounded-[10px] px-[14px] py-[10px])
   const renderMetricCard = (
     label: string,
     value: string,
     sub: string,
-    iconSrc: string
+    iconSrc: string,
+    onClick?: () => void,
+    isSelected?: boolean
   ) => (
     <div
       key={label}
-      className="bg-[#f6f9fb] flex flex-col gap-[10px] items-start px-[20px] py-[15px] rounded-[12px] w-full"
+      onClick={onClick}
+      className={`flex flex-col gap-[6px] items-start px-[14px] py-[10px] rounded-[10px] w-full transition-all duration-150 ${
+        onClick ? "cursor-pointer hover:border-[#0e2841]/50" : ""
+      } ${
+        isSelected
+          ? "bg-[#EEF4F9] border-2 border-[#0e2841] shadow-xs"
+          : "bg-[#f6f9fb] border border-transparent"
+      }`}
     >
-      <div className="flex gap-[18px] items-center w-full">
-        <div className="bg-white border-[#dce4e8] border-[0.27px] border-solid drop-shadow-[0px_4px_2px_rgba(0,0,0,0.05)] flex items-center justify-center p-[5px] rounded-full shrink-0 size-[50px]">
-          <img src={iconSrc} alt="" className="size-[24px] object-contain" />
+      <div className="flex gap-[12px] items-center w-full">
+        <div className="bg-white border-[#dce4e8] border-[0.27px] border-solid drop-shadow-[0px_3px_1.5px_rgba(0,0,0,0.04)] flex items-center justify-center p-[4px] rounded-full shrink-0 size-[40px]">
+          <img src={iconSrc} alt="" className="size-[20px] object-contain" />
         </div>
         <div className="flex flex-col min-w-0 flex-1">
-          <p className="font-['Poppins',sans-serif] font-medium text-[#1a1c1e] text-[15px] sm:text-[16px] leading-snug truncate">
+          <p className="font-['Poppins',sans-serif] font-medium text-[#1a1c1e] text-[12.5px] leading-snug truncate">
             {label}
           </p>
-          <p className="font-['Poppins',sans-serif] font-extrabold text-[#0e2841] text-[14px] leading-normal mt-[6px]">
+          <p className="font-['Poppins',sans-serif] font-extrabold text-[#0e2841] text-[14px] leading-normal mt-[2px]">
             {value}
           </p>
-          <div className="w-[159px] max-w-full h-[1px] bg-[#dce4e8] my-[8px]" />
-          <p className="font-['Poppins',sans-serif] font-normal text-[#1a1c1e] text-[13px] sm:text-[14px] leading-normal truncate">
+          <div className="w-full max-w-[130px] h-[1px] bg-[#dce4e8] my-[4px]" />
+          <p className="font-['Poppins',sans-serif] font-normal text-[#64748B] text-[11.5px] leading-normal truncate">
             {sub}
           </p>
         </div>
@@ -797,11 +1747,16 @@ interface ReviewPropertyCard {
     </div>
   );
 
-  // Exact Figma Wave Chart (from 1044:9552 using downloaded Figma SVGs) — Interactive on Hover
-  const renderNetYieldChart = (title = "Net Yield History & Trend") => {
+  // Exact Figma Wave Chart (from 1044:9552 using downloaded Figma SVGs) — Interactive on Hover & Metric reactive
+  const renderNetYieldChart = (overrideTitle?: string) => {
+    const config = METRIC_CHART_CONFIGS[selectedMetric];
+    const title = overrideTitle || config?.waveTitle || "Net Yield History & Trend";
+    const sub = config?.waveSubtitle || "Annual net operating yield after all property outgoings across financial years";
+    const points = config?.points || NET_YIELD_POINTS;
+
     const activeIdx =
       hoveredYieldPointIndex !== null ? hoveredYieldPointIndex : 4;
-    const activePoint = NET_YIELD_POINTS[activeIdx] || NET_YIELD_POINTS[4];
+    const activePoint = points[activeIdx] || points[4] || points[0];
 
     const dotContainerX = 21.82 + activePoint.cx;
     const dotContainerY = 6.47 + activePoint.cy;
@@ -818,7 +1773,7 @@ interface ReviewPropertyCard {
       const relX = e.clientX - rect.left;
       let closestIdx = 0;
       let minDist = Infinity;
-      NET_YIELD_POINTS.forEach((pt, idx) => {
+      points.forEach((pt, idx) => {
         const ptX = 21.82 + pt.cx;
         const dist = Math.abs(relX - ptX);
         if (dist < minDist) {
@@ -830,38 +1785,37 @@ interface ReviewPropertyCard {
     };
 
     return (
-      <div className="bg-white flex flex-col gap-[13.6px] h-[267px] items-start overflow-hidden pl-[24px] pr-[20.44px] py-[20.44px] rounded-[8.176px] shadow-[0px_7.495px_12.264px_0px_rgba(0,0,0,0.04)] w-full">
+      <div className="bg-white flex flex-col gap-[6px] h-[185px] items-start overflow-hidden px-[18px] py-[10px] rounded-[10px] shadow-[0px_4px_12px_rgba(0,0,0,0.03)] w-full">
         <div className="flex items-center justify-between w-full">
-          <div className="flex flex-col gap-[4px] items-start">
-            <p className="font-['Poppins',sans-serif] font-semibold leading-[1.4] text-[#0e2841] text-[10.5px] tracking-[-0.19px]">
+          <div className="flex flex-col gap-[2px] items-start">
+            <p className="font-['Poppins',sans-serif] font-semibold leading-[1.3] text-[#0e2841] text-[11px] tracking-[-0.19px]">
               {title}
             </p>
-            <p className="font-['Poppins',sans-serif] font-medium leading-[1.4] text-[#bcbcbc] text-[9.54px] tracking-[-0.19px]">
-              Annual net operating yield after all property outgoings across
-              financial years
+            <p className="font-['Poppins',sans-serif] font-medium leading-[1.3] text-[#8C9BA8] text-[9.5px] tracking-[-0.19px]">
+              {sub}
             </p>
           </div>
-          <div className="bg-white border-[#07315b] border-[0.821px] border-solid flex gap-[3.3px] items-center pl-[9.85px] pr-[6.57px] py-[6.57px] rounded-[6.569px] shadow-[0px_0.821px_1.642px_0px_rgba(10,13,20,0.03)] shrink-0 cursor-pointer">
-            <span className="font-['Poppins',sans-serif] font-medium leading-[16.4px] text-[#0e2841] text-[11.5px] tracking-[-0.07px]">
+          <div className="bg-white border-[#07315b] border-[0.821px] border-solid flex gap-[3px] items-center pl-[8px] pr-[5px] py-[4px] rounded-[6px] shadow-2xs shrink-0 cursor-pointer">
+            <span className="font-['Poppins',sans-serif] font-medium text-[#0e2841] text-[10.5px]">
               5 Years
             </span>
             <img
               src="/images/review/282b5.svg"
               alt=""
-              className="size-[16.42px]"
+              className="size-[14px]"
             />
           </div>
         </div>
 
-        {/* Wave + Grid Area using exact Figma coordinates (514x178) */}
+        {/* Wave + Grid Area using exact coordinates */}
         <div className="w-full overflow-x-auto">
           <div
             onMouseMove={handleWaveMouseMove}
             onMouseLeave={() => setHoveredYieldPointIndex(null)}
-            className="relative flex flex-col gap-[8.08px] items-start w-[514px] h-[182px] cursor-crosshair"
+            className="relative flex flex-col gap-[6px] items-start w-[514px] h-[135px] cursor-crosshair"
           >
             <div className="flex gap-[9.7px] items-start">
-              <div className="flex flex-col font-semibold gap-[18px] items-start leading-normal text-[#6b6b6b] text-[9.7px] tracking-[-0.194px] whitespace-nowrap select-none">
+              <div className="flex flex-col font-semibold gap-[10px] items-start leading-normal text-[#6b6b6b] text-[9px] tracking-[-0.194px] whitespace-nowrap select-none">
                 <span>10%</span>
                 <span>8%</span>
                 <span>6%</span>
@@ -869,16 +1823,16 @@ interface ReviewPropertyCard {
                 <span>2%</span>
                 <span>0%</span>
               </div>
-              <div className="h-[156.923px] relative shrink-0 w-[462.795px]">
+              <div className="h-[110px] relative shrink-0 w-[462.795px]">
                 <img
                   src="/images/review/80cb1.svg"
                   alt=""
-                  className="absolute block inset-0 max-w-none size-full"
+                  className="absolute block inset-0 max-w-none size-full opacity-80"
                 />
               </div>
             </div>
 
-            <div className="absolute h-[142.364px] left-[25.86px] top-[3.23px] w-[482.474px] pointer-events-none">
+            <div className="absolute h-[105px] left-[25.86px] top-[2px] w-[482.474px] pointer-events-none">
               <img
                 src="/images/review/9416d.svg"
                 alt=""
@@ -890,21 +1844,21 @@ interface ReviewPropertyCard {
             {hoveredYieldPointIndex !== null && (
               <div
                 style={{ left: `${dotContainerX}px` }}
-                className="absolute top-[6px] h-[148px] w-[1px] border-l border-dashed border-[#07315B]/40 pointer-events-none transition-all duration-150"
+                className="absolute top-[4px] h-[110px] w-[1px] border-l border-dashed border-[#07315B]/40 pointer-events-none transition-all duration-150"
               />
             )}
 
-            {/* Interactive SVG Dots along the wave matching b87d7.svg */}
-            <div className="absolute h-[108.39px] left-[21.82px] top-[6.47px] w-[492.172px]">
+            {/* Interactive SVG Dots along the wave */}
+            <div className="absolute h-[90px] left-[21.82px] top-[4px] w-[492.172px]">
               <svg
                 width="492.172"
-                height="108.39"
+                height="90"
                 viewBox="0 0 492.172 108.39"
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
                 className="overflow-visible block size-full"
               >
-                {NET_YIELD_POINTS.map((pt, idx) => {
+                {points.map((pt, idx) => {
                   const isActive = idx === activeIdx;
                   const isHovered = idx === hoveredYieldPointIndex;
                   return (
@@ -913,14 +1867,12 @@ interface ReviewPropertyCard {
                       onMouseEnter={() => setHoveredYieldPointIndex(idx)}
                       className="cursor-pointer"
                     >
-                      {/* Invisible larger hit target for easy hover */}
                       <circle
                         cx={pt.cx}
                         cy={pt.cy}
                         r={16}
                         fill="transparent"
                       />
-                      {/* Subtle outer halo when actively hovered */}
                       {isHovered && (
                         <circle
                           cx={pt.cx}
@@ -947,7 +1899,7 @@ interface ReviewPropertyCard {
             </div>
 
             {/* X-Axis Labels + Active Underline */}
-            <div className="absolute bottom-[4px] flex gap-[37.97px] items-start left-[19.4px] text-[#6b6b6b] text-[9.7px] font-semibold tracking-[-0.194px] whitespace-nowrap">
+            <div className="absolute bottom-[2px] flex gap-[37.97px] items-start left-[19.4px] text-[#6b6b6b] text-[9px] font-semibold tracking-[-0.194px] whitespace-nowrap">
               {[
                 "FY 2021",
                 "FY 2022",
@@ -973,7 +1925,7 @@ interface ReviewPropertyCard {
               })}
               <div
                 style={{ left: `${activePoint.underlineLeft}px` }}
-                className="absolute h-0 top-[16px] w-[13.74px] transition-all duration-150"
+                className="absolute h-0 top-[14px] w-[13.74px] transition-all duration-150"
               >
                 <img
                   src="/images/review/ceac1.svg"
@@ -989,7 +1941,7 @@ interface ReviewPropertyCard {
                 left: `${tooltipLeft}px`,
                 top: `${tooltipTop}px`,
               }}
-              className="absolute h-[38.652px] w-[88px] pointer-events-none transition-all duration-150 z-10"
+              className="absolute h-[34px] w-[84px] pointer-events-none transition-all duration-150 z-10"
             >
               <img
                 src="/images/review/85fe1.svg"
@@ -1000,23 +1952,23 @@ interface ReviewPropertyCard {
               />
               <div
                 style={{
-                  top: isTooltipFlippedBelow ? "15.86px" : "8.21px",
+                  top: isTooltipFlippedBelow ? "13px" : "7px",
                 }}
-                className="absolute bg-white flex h-[14.56px] items-center justify-center left-[12.5px] rounded-full w-[14.55px]"
+                className="absolute bg-white flex h-[13px] items-center justify-center left-[11px] rounded-full w-[13px]"
               >
                 <img
                   src="/images/review/0d7f6.svg"
                   alt=""
-                  className={`size-[8.085px] transition-transform duration-150 ${
+                  className={`size-[7px] transition-transform duration-150 ${
                     activePoint.trend === "down" ? "rotate-40" : "-rotate-40"
                   }`}
                 />
               </div>
               <p
                 style={{
-                  top: isTooltipFlippedBelow ? "14.24px" : "6.59px",
+                  top: isTooltipFlippedBelow ? "11px" : "5px",
                 }}
-                className="absolute font-semibold leading-[1.4] left-[31.9px] text-[11.319px] text-white tracking-[-0.2264px] whitespace-nowrap"
+                className="absolute font-semibold leading-[1.4] left-[28px] text-[10.5px] text-white tracking-[-0.2px] whitespace-nowrap"
               >
                 P: {activePoint.value}
               </p>
@@ -1027,99 +1979,291 @@ interface ReviewPropertyCard {
     );
   };
 
-  // Exact Figma 4-Bar Chart (from 1044:9607 using solid #0e2841 bars and 2-line labels below) — Interactive on Hover
-  const renderBenchmarkBarChart = (title = "Benchmark comparison") => (
-    <div className="bg-white flex flex-col gap-[8px] h-[267px] items-start justify-center px-[30px] py-[14px] rounded-[12px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)] w-full">
-      <div className="flex items-center justify-between w-full">
-        <div className="flex gap-[10px] h-[27px] items-center">
-          <div className="bg-white drop-shadow-[0px_4px_2px_rgba(0,0,0,0.05)] flex items-start p-[5px] rounded-full">
-            <img
-              src="/images/review/ce848.svg"
-              alt=""
-              className="w-[16px] h-[15.5px]"
-            />
+  // Exact Figma 4-Bar Chart — Interactive on Hover & Metric reactive
+  const renderBenchmarkBarChart = (overrideTitle?: string) => {
+    const config = METRIC_CHART_CONFIGS[selectedMetric];
+    const title = overrideTitle || config?.benchmarkTitle || "Benchmark comparison";
+    const bars = config?.bars || BENCHMARK_BARS;
+
+    return (
+      <div className="bg-white flex flex-col gap-[6px] h-[185px] items-start justify-between px-[20px] py-[10px] rounded-[10px] shadow-[0px_4px_12px_rgba(0,0,0,0.03)] w-full">
+        <div className="flex items-center justify-between w-full">
+          <div className="flex gap-[8px] h-[22px] items-center">
+            <div className="bg-white drop-shadow-[0px_2px_1px_rgba(0,0,0,0.04)] flex items-start p-[4px] rounded-full">
+              <img
+                src="/images/review/ce848.svg"
+                alt=""
+                className="w-[14px] h-[13.5px]"
+              />
+            </div>
+            <p className="font-['Poppins',sans-serif] font-semibold leading-[1.3] text-[#0e2841] text-[13px] tracking-[-0.24px]">
+              {title}
+            </p>
           </div>
-          <p className="font-['Poppins',sans-serif] font-semibold leading-[1.4] text-[#0e2841] text-[14px] tracking-[-0.28px]">
-            {title}
-          </p>
-        </div>
-      </div>
-
-      <div className="flex gap-[24px] h-[210px] items-center justify-between w-full">
-        {/* Y-Axis */}
-        <div className="flex flex-col font-semibold gap-[14px] h-[192px] items-start leading-normal text-[#1a1c1e] text-[12px] tracking-[-0.24px] whitespace-nowrap select-none">
-          <span>10%</span>
-          <span>8%</span>
-          <span>6%</span>
-          <span>4%</span>
-          <span>2%</span>
-          <span>0</span>
         </div>
 
-        {/* 4 Dark Navy Bars — Interactive on Hover */}
-        <div
-          onMouseLeave={() => setHoveredBenchmarkBarId(null)}
-          className="flex items-end justify-between flex-1 max-w-[467px] pr-2"
-        >
-          {BENCHMARK_BARS.map((bar) => {
-            const isHovered = hoveredBenchmarkBarId === bar.id;
-            const isDimmed =
-              hoveredBenchmarkBarId !== null &&
-              hoveredBenchmarkBarId !== bar.id;
-            return (
-              <div
-                key={bar.id}
-                onMouseEnter={() => setHoveredBenchmarkBarId(bar.id)}
-                className="relative flex flex-col gap-[9px] items-center cursor-pointer group"
-              >
-                {/* Floating Hover Tooltip */}
-                {isHovered && (
-                  <div className="absolute -top-[34px] left-1/2 -translate-x-1/2 bg-[#0e2841] text-white text-[10.5px] font-semibold px-2.5 py-1 rounded-[6px] shadow-md whitespace-nowrap z-20 pointer-events-none animate-in fade-in duration-150">
-                    <span>
-                      {bar.value} · {bar.diff}
+        <div className="flex gap-[20px] h-[135px] items-center justify-between w-full">
+          {/* Y-Axis */}
+          <div className="flex flex-col font-semibold gap-[8px] h-[120px] items-start leading-normal text-[#1a1c1e] text-[10.5px] tracking-[-0.2px] whitespace-nowrap select-none">
+            <span>10%</span>
+            <span>8%</span>
+            <span>6%</span>
+            <span>4%</span>
+            <span>2%</span>
+            <span>0</span>
+          </div>
+
+          {/* 4 Dark Navy Bars — Interactive on Hover */}
+          <div
+            onMouseLeave={() => setHoveredBenchmarkBarId(null)}
+            className="flex items-end justify-between flex-1 max-w-[467px] pr-2"
+          >
+            {bars.map((bar) => {
+              const isHovered = hoveredBenchmarkBarId === bar.id;
+              const isDimmed =
+                hoveredBenchmarkBarId !== null &&
+                hoveredBenchmarkBarId !== bar.id;
+              const scaledHeight = Math.max(28, Math.round(bar.height * 0.72));
+              return (
+                <div
+                  key={bar.id}
+                  onMouseEnter={() => setHoveredBenchmarkBarId(bar.id)}
+                  className="relative flex flex-col gap-[6px] items-center cursor-pointer group"
+                >
+                  {/* Floating Hover Tooltip */}
+                  {isHovered && (
+                    <div className="absolute -top-[30px] left-1/2 -translate-x-1/2 bg-[#0e2841] text-white text-[10px] font-semibold px-2 py-0.5 rounded-[5px] shadow-md whitespace-nowrap z-20 pointer-events-none animate-in fade-in duration-150">
+                      <span>
+                        {bar.value} · {bar.diff}
+                      </span>
+                      <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[4px] border-t-[#0e2841]" />
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-[6px] items-center justify-center">
+                    <span
+                      className={`font-semibold text-[11px] tracking-[-0.2px] transition-colors duration-150 ${
+                        isHovered
+                          ? "text-[#0e2841] font-bold scale-105"
+                          : bar.fadedValue
+                          ? "text-[#6b6b6b] opacity-70"
+                          : "text-[#6b6b6b]"
+                      }`}
+                    >
+                      {bar.value}
                     </span>
-                    <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[5px] border-t-[#0e2841]" />
+                    <div
+                      style={{ height: `${scaledHeight}px` }}
+                      className={`w-[42px] transition-all duration-150 rounded-t-[2px] ${
+                        isHovered
+                          ? "bg-[#1255ad] shadow-[0px_4px_10px_rgba(18,85,173,0.3)] -translate-y-0.5"
+                          : isDimmed
+                          ? "bg-[#0e2841]/55"
+                          : "bg-[#0e2841]"
+                      }`}
+                    />
                   </div>
-                )}
-
-                <div className="flex flex-col gap-[10px] items-center justify-center">
-                  <span
-                    className={`font-semibold text-[12px] tracking-[-0.24px] transition-colors duration-150 ${
-                      isHovered
-                        ? "text-[#0e2841] font-bold scale-105"
-                        : bar.fadedValue
-                        ? "text-[#6b6b6b] opacity-70"
-                        : "text-[#6b6b6b]"
+                  <div
+                    className={`font-semibold text-[10.5px] text-center tracking-[-0.2px] leading-tight transition-colors duration-150 ${
+                      isHovered ? "text-[#0e2841]" : "text-[#a0a0a0]"
                     }`}
                   >
-                    {bar.value}
-                  </span>
-                  <div
-                    style={{ height: `${bar.height}px` }}
-                    className={`w-[45px] transition-all duration-150 ${
-                      isHovered
-                        ? "bg-[#1255ad] shadow-[0px_6px_14px_rgba(18,85,173,0.3)] -translate-y-0.5"
-                        : isDimmed
-                        ? "bg-[#0e2841]/55"
-                        : "bg-[#0e2841]"
-                    }`}
-                  />
+                    <p>{bar.line1}</p>
+                    <p className={bar.spacer ? "invisible" : ""}>{bar.line2}</p>
+                  </div>
                 </div>
-                <div
-                  className={`font-semibold text-[12px] text-center tracking-[-0.24px] leading-tight transition-colors duration-150 ${
-                    isHovered ? "text-[#0e2841]" : "text-[#a0a0a0]"
-                  }`}
-                >
-                  <p>{bar.line1}</p>
-                  <p className={bar.spacer ? "invisible" : ""}>{bar.line2}</p>
-                </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
+
+  // Helper to fetch insights matching the selected metric
+  const getInsightsForMetric = (metricKey: string, propertyAddress?: string) => {
+    const propToken = (propertyAddress || "").split(" ")[0].toLowerCase();
+    const matching = insights.filter((item) => {
+      const m = (item.metric || "").toLowerCase();
+      const h = (item.heading || "").toLowerCase();
+      const k = metricKey.toLowerCase();
+      const itemProp = (item.property || "").toLowerCase();
+      const propMatch =
+        !propToken ||
+        itemProp === "portfolio-wide" ||
+        itemProp.includes(propToken);
+      if (!propMatch) return false;
+
+      if (k.includes("value") || k.includes("valuation") || k.includes("growth")) {
+        return m.includes("valuation") || m.includes("value") || m.includes("growth") || h.includes("valuation");
+      }
+      if (k.includes("loan") || k.includes("debt")) {
+        return m.includes("loan") || m.includes("debt") || m.includes("rate") || h.includes("loan") || h.includes("debt");
+      }
+      if (k.includes("equity")) {
+        return m.includes("equity") || h.includes("equity");
+      }
+      if (k.includes("return") || k.includes("yield") || k.includes("rent")) {
+        return m.includes("rent") || m.includes("yield") || m.includes("return") || h.includes("rent") || h.includes("yield");
+      }
+      if (k.includes("lvr")) {
+        return m.includes("lvr") || m.includes("loan") || h.includes("lvr");
+      }
+      return m.includes(k) || h.includes(k);
+    });
+
+    if (matching.length > 0) return matching;
+
+    const defaults =
+      DEFAULT_METRIC_INSIGHTS[metricKey] ||
+      DEFAULT_METRIC_INSIGHTS["Total Property Return"];
+    if (propertyAddress) {
+      return defaults.map((d) => ({ ...d, property: propertyAddress }));
+    }
+    return defaults;
+  };
+
+  // Dedicated scrollable Insights & Recommendations Carousel matching user annotation
+  const renderInsightsCarousel = (
+    metricKey: string,
+    propertyName?: string
+  ) => {
+    const list = getInsightsForMetric(metricKey, propertyName);
+    const totalCount = list.length;
+    const card1 = list[carouselIndex] || list[0];
+    const card2 = totalCount > 1 ? list[carouselIndex + 1] : null;
+
+    return (
+      <div className="bg-white rounded-[10px] p-2.5 sm:p-3 border border-[#E2E8F0] shadow-[0px_4px_12px_rgba(0,0,0,0.03)] mt-1.5">
+        <div className="flex items-center justify-between mb-1.5 px-1">
+          <div className="flex items-center gap-2">
+            <span className="font-['Poppins',sans-serif] font-bold text-[#0e2841] text-[13px]">
+              Insights &amp; Recommendations
+            </span>
+            <span className="text-[11px] font-medium bg-[#f0f4f8] text-[#0e2841] px-2.5 py-0.5 rounded-full border border-[#dce4e8]">
+              Metric: {metricKey}
+            </span>
+          </div>
+          <span className="text-[11px] text-[#8C9BA8] font-medium">
+            Showing {Math.min(totalCount, 2)} of {totalCount} insights
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2 sm:gap-2.5">
+          {/* Left Arrow Button */}
+          <button
+            type="button"
+            onClick={() => setCarouselIndex((prev) => Math.max(0, prev - 1))}
+            disabled={carouselIndex === 0}
+            className="size-[30px] rounded-full bg-white border border-[#CBD5E1] shadow-2xs flex items-center justify-center text-[#0e2841] hover:bg-[#F1F5F9] disabled:opacity-20 disabled:cursor-not-allowed shrink-0 transition-colors cursor-pointer"
+            title="Previous Insights"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+
+          {/* Cards Container */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 flex-1 min-w-0">
+            {card1 && (
+              <div className="flex flex-col min-w-0">
+                <div className="bg-[#F8FAFC] rounded-[8px] p-2.5 sm:p-3 border border-[#E2E8F0] flex flex-col justify-between min-h-[72px] hover:border-[#0e2841]/40 transition-colors">
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <h4 className="font-['Poppins',sans-serif] font-bold text-[#0e2841] text-[12.5px] leading-tight truncate">
+                        {card1.heading}
+                      </h4>
+                      <span
+                        className={`text-[9.5px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${
+                          card1.priority === "High"
+                            ? "bg-red-50 text-red-600 border border-red-200"
+                            : card1.priority === "Low"
+                            ? "bg-blue-50 text-blue-600 border border-blue-200"
+                            : "bg-amber-50 text-amber-700 border border-amber-200"
+                        }`}
+                      >
+                        {card1.priority} Priority
+                      </span>
+                    </div>
+                    <p className="text-[11.5px] leading-[16px] text-[#475569] line-clamp-2">
+                      <span className="font-semibold text-[#1a1c1e]">
+                        Observation:
+                      </span>{" "}
+                      {card1.insight}
+                    </p>
+                    <p className="text-[11.5px] leading-[16px] text-[#0e2841] font-medium mt-0.5 line-clamp-2">
+                      <span className="font-semibold text-[#1a1c1e]">
+                        Recommendation:
+                      </span>{" "}
+                      {card1.recommendation}
+                    </p>
+                  </div>
+                </div>
+                <p className="text-[11px] font-medium text-[#8C9BA8] text-center mt-1">
+                  {carouselIndex + 1} of {totalCount}
+                </p>
+              </div>
+            )}
+
+            {card2 ? (
+              <div className="flex flex-col min-w-0">
+                <div className="bg-[#F8FAFC] rounded-[8px] p-2.5 sm:p-3 border border-[#E2E8F0] flex flex-col justify-between min-h-[72px] hover:border-[#0e2841]/40 transition-colors">
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <h4 className="font-['Poppins',sans-serif] font-bold text-[#0e2841] text-[12.5px] leading-tight truncate">
+                        {card2.heading}
+                      </h4>
+                      <span
+                        className={`text-[9.5px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${
+                          card2.priority === "High"
+                            ? "bg-red-50 text-red-600 border border-red-200"
+                            : card2.priority === "Low"
+                            ? "bg-blue-50 text-blue-600 border border-blue-200"
+                            : "bg-amber-50 text-amber-700 border border-amber-200"
+                        }`}
+                      >
+                        {card2.priority} Priority
+                      </span>
+                    </div>
+                    <p className="text-[11.5px] leading-[16px] text-[#475569] line-clamp-2">
+                      <span className="font-semibold text-[#1a1c1e]">
+                        Observation:
+                      </span>{" "}
+                      {card2.insight}
+                    </p>
+                    <p className="text-[11.5px] leading-[16px] text-[#0e2841] font-medium mt-0.5 line-clamp-2">
+                      <span className="font-semibold text-[#1a1c1e]">
+                        Recommendation:
+                      </span>{" "}
+                      {card2.recommendation}
+                    </p>
+                  </div>
+                </div>
+                <p className="text-[11px] font-medium text-[#8C9BA8] text-center mt-1">
+                  {carouselIndex + 2} of {totalCount}
+                </p>
+              </div>
+            ) : totalCount > 1 ? (
+              <div className="hidden md:block" />
+            ) : null}
+          </div>
+
+          {/* Right Arrow Button */}
+          <button
+            type="button"
+            onClick={() =>
+              setCarouselIndex((prev) =>
+                Math.min(totalCount - 2, prev + 1)
+              )
+            }
+            disabled={carouselIndex >= totalCount - 2 || totalCount <= 2}
+            className="size-[30px] rounded-full bg-white border border-[#CBD5E1] shadow-2xs flex items-center justify-center text-[#0e2841] hover:bg-[#F1F5F9] disabled:opacity-20 disabled:cursor-not-allowed shrink-0 transition-colors cursor-pointer"
+            title="Next Insights"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   // Compact Property Bar for Cash Management & Capital Management (1028:5305 / 1028:5290)
   const renderCompactPropertyBar = () => (
@@ -1142,8 +2286,102 @@ interface ReviewPropertyCard {
     </div>
   );
 
+  const renderStatusBadge = () => {
+    const isCompleted = reviewStatusState === "Completed";
+    if (readOnly) {
+      return (
+        <div
+          className={`border-[0.5px] border-solid flex h-[32px] items-center px-[14px] rounded-[68px] shadow-[0px_4px_7.3px_0px_rgba(0,0,0,0.06)] shrink-0 gap-[8px] select-none ${
+            isCompleted
+              ? "bg-[#EBF7EE] border-[#18794E] text-[#18794E]"
+              : "bg-[rgba(246,231,179,0.39)] border-[#d79730] text-[#d79730]"
+          }`}
+        >
+          {isCompleted ? (
+            <CheckCircle2 className="size-[16px] text-[#18794E]" />
+          ) : (
+            <img
+              src="/images/review/18912.svg"
+              alt=""
+              className="size-[16px]"
+            />
+          )}
+          <span className="font-['Poppins',sans-serif] font-medium text-[12px] whitespace-nowrap">
+            Status: {isCompleted ? "Completed" : "Review In Progress"}
+          </span>
+        </div>
+      );
+    }
+    return (
+      <div className="relative inline-block">
+        <button
+          type="button"
+          onClick={() => setIsStatusMenuOpen(!isStatusMenuOpen)}
+          className={`border-[0.5px] border-solid flex h-[32px] items-center justify-between px-[14px] rounded-[68px] shadow-[0px_4px_7.3px_0px_rgba(0,0,0,0.11)] shrink-0 min-w-[215px] gap-[8px] cursor-pointer transition-all ${
+            isCompleted
+              ? "bg-[#EBF7EE] border-[#18794E] text-[#18794E] hover:bg-[#dcf3e2]"
+              : "bg-[rgba(246,231,179,0.39)] border-[#d79730] text-[#d79730] hover:bg-[rgba(246,231,179,0.55)]"
+          }`}
+          title="Click to set status as Completed or Review In Progress"
+        >
+          <div className="flex items-center gap-[8px]">
+            {isCompleted ? (
+              <CheckCircle2 className="size-[16px] text-[#18794E]" />
+            ) : (
+              <img
+                src="/images/review/18912.svg"
+                alt=""
+                className="size-[16px]"
+              />
+            )}
+            <span className="font-['Poppins',sans-serif] font-medium text-[12px] whitespace-nowrap">
+              Status: {isCompleted ? "Completed" : "Review In Progress"}
+            </span>
+          </div>
+          <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+        </button>
+
+        {isStatusMenuOpen && (
+          <div className="absolute right-0 mt-1.5 w-[220px] bg-white rounded-[10px] shadow-lg border border-[#E2E8F0] p-1.5 z-50 animate-in fade-in zoom-in-95">
+            <button
+              type="button"
+              onClick={() => handleSetStatus("In Progress")}
+              className={`w-full flex items-center justify-between px-3 py-2 text-[12.5px] rounded-[6px] font-medium transition-colors cursor-pointer ${
+                !isCompleted
+                  ? "bg-[rgba(246,231,179,0.35)] text-[#d79730]"
+                  : "text-[#475569] hover:bg-[#F8FAFC]"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[#d79730]" />
+                <span>Review In Progress</span>
+              </div>
+              {!isCompleted && <Check className="w-3.5 h-3.5 text-[#d79730]" />}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSetStatus("Completed")}
+              className={`w-full flex items-center justify-between px-3 py-2 text-[12.5px] rounded-[6px] font-medium transition-colors cursor-pointer mt-1 ${
+                isCompleted
+                  ? "bg-[#EBF7EE] text-[#18794E]"
+                  : "text-[#475569] hover:bg-[#F8FAFC]"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[#18794E]" />
+                <span>Completed</span>
+              </div>
+              {isCompleted && <Check className="w-3.5 h-3.5 text-[#18794E]" />}
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
-    <div className="space-y-6 pb-12 font-['Poppins',sans-serif]">
+    <div className="space-y-2.5 pb-4 font-['Poppins',sans-serif]">
       {/* ================================================================= */}
       {/* TOP HEADER & MAIN TABS (or Sub-screen Header for Cash/Capital)    */}
       {/* ================================================================= */}
@@ -1154,12 +2392,12 @@ interface ReviewPropertyCard {
           <button
             type="button"
             onClick={() => setPropertySubView("overview")}
-            className="inline-flex items-center gap-[6px] text-[#434750] hover:text-[#0e2841] text-[15px] font-medium cursor-pointer mb-2"
+            className="inline-flex items-center gap-[6px] text-[#434750] hover:text-[#0e2841] text-[14px] font-medium cursor-pointer mb-1"
           >
             <img
               src="/images/review/42c8e.svg"
               alt=""
-              className="size-[20px]"
+              className="size-[16px]"
             />
             <span>
               {propertySubView === "cash-management"
@@ -1168,69 +2406,50 @@ interface ReviewPropertyCard {
             </span>
           </button>
 
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-1">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-0.5">
             <div>
-              <h1 className="font-['Poppins',sans-serif] font-semibold text-[#0e2841] text-[24px] tracking-[-0.64px] leading-[33px]">
+              <h1 className="font-['Poppins',sans-serif] font-semibold text-[#0e2841] text-[20px] sm:text-[22px] tracking-[-0.5px] leading-tight">
                 {propertySubView === "cash-management"
                   ? "Cash Flow & Operational Efficiency"
                   : "Capital & Debt Management:"}
               </h1>
-              <p className="text-[13.5px] text-[#6b6b6b] mt-0.5">
+              <p className="text-[12.5px] text-[#6b6b6b] mt-0.5">
                 {propertySubView === "cash-management"
                   ? "Rental yields, operating cash flows, tax shields and holding cost breakdown."
                   : "Equity compound returns, mortgage leverage, rate hedging,"}
               </p>
             </div>
 
-            <div className="bg-[rgba(246,231,179,0.39)] border-[#d79730] border-[0.5px] border-solid flex h-[30px] items-center justify-center px-[15px] rounded-[68px] shadow-[0px_4px_7.3px_0px_rgba(0,0,0,0.11)] shrink-0 w-[215px] gap-[10px]">
-              <img
-                src="/images/review/18912.svg"
-                alt=""
-                className="size-[16px]"
-              />
-              <span className="font-['Poppins',sans-serif] font-medium text-[#d79730] text-[12px] whitespace-nowrap">
-                Status: Review In Progress
-              </span>
-            </div>
+            {renderStatusBadge()}
           </div>
         </div>
       ) : (
         <div>
-          {/* Top Link: < Back to Review Workspace (1044:9331) */}
+          {/* Top Link: < Back to Review Workspace / Reports (1044:9331) */}
           <button
             type="button"
             onClick={onBack}
-            className="flex gap-[4px] items-center cursor-pointer text-[#434750] hover:text-[#0e2841] text-[16px] leading-[24px] font-['Poppins',sans-serif] font-normal transition-colors"
+            className="flex gap-[4px] items-center cursor-pointer text-[#434750] hover:text-[#0e2841] text-[13px] leading-[18px] font-['Poppins',sans-serif] font-normal transition-colors"
           >
             <img
               src="/images/review/42c8e.svg"
               alt=""
-              className="size-[20px]"
+              className="size-[15px]"
             />
-            <span>Back to Review Workspace</span>
+            <span>{readOnly ? "Back to Reports" : "Back to Review Workspace"}</span>
           </button>
 
           {/* Title & Status Pill Row (1044:9335) — directly on page without card border */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 min-h-[72px] py-2">
-            <h1 className="font-['Poppins',sans-serif] font-semibold text-[#0e2841] text-[22px] sm:text-[24px] leading-[33px] tracking-[-0.64px]">
-              The Property Investor CFO Annual Report - {householdName}{" "}
-              {reviewYear}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-h-[46px] py-0.5">
+            <h1 className="font-['Poppins',sans-serif] font-semibold text-[#0e2841] text-[19px] sm:text-[21px] leading-snug tracking-[-0.4px]">
+              The Property Investor CFO Annual Report – {householdName || "Harrison Household"} FY{reviewYear}
             </h1>
 
-            <div className="bg-[rgba(246,231,179,0.39)] border-[#d79730] border-[0.5px] border-solid flex h-[30px] items-center justify-center px-[15px] rounded-[68px] shadow-[0px_4px_7.3px_0px_rgba(0,0,0,0.11)] shrink-0 w-[215px] gap-[10px]">
-              <img
-                src="/images/review/18912.svg"
-                alt=""
-                className="size-[16px]"
-              />
-              <span className="font-['Poppins',sans-serif] font-medium text-[#d79730] text-[12px] whitespace-nowrap">
-                Status: Review In Progress
-              </span>
-            </div>
+            {renderStatusBadge()}
           </div>
 
           {/* 5 Main Views Tabs (1044:9348) — Solid navy active tab on #f2f1f2 background */}
-          <div className="mt-2 bg-[#f2f1f2] inline-flex flex-wrap gap-[6px] min-h-[53px] items-center p-[6px] rounded-[8px]">
+          <div className="mt-1 bg-[#f2f1f2] inline-flex flex-wrap gap-[4px] h-[38px] items-center p-[3px] rounded-[8px]">
             {[
               { id: "executive-summary", label: "Executive Summary" },
               { id: "portfolio-overview", label: "Portfolio Overview" },
@@ -1238,7 +2457,7 @@ interface ReviewPropertyCard {
               { id: "future-outlook", label: "Interactive Future Outlook" },
               {
                 id: "insights",
-                label: `Portfolio Management Insights (${insights.length || 3})`,
+                label: `Portfolio Management Insights (${insights.length})`,
               },
             ].map((tab) => {
               const isActive = activeTab === tab.id;
@@ -1252,10 +2471,10 @@ interface ReviewPropertyCard {
                       setPropertySubView("overview");
                     }
                   }}
-                  className={`py-[8px] text-[13.5px] tracking-[-0.28px] leading-[1.4] transition-all cursor-pointer whitespace-nowrap rounded-[4px] font-['Poppins',sans-serif] ${
+                  className={`h-[32px] px-[14px] text-[12.5px] tracking-[-0.2px] transition-all cursor-pointer ${
                     isActive
-                      ? "bg-[#0E2841] text-white px-[18px] font-medium shadow-xs"
-                      : "bg-transparent px-[14px] font-medium text-[#7C8894] hover:text-[#0E2841]"
+                      ? "bg-[#0e2841] text-white font-semibold rounded-[6px] shadow-2xs"
+                      : "bg-transparent text-[#64748B] hover:text-[#0e2841] font-medium"
                   }`}
                 >
                   {tab.label}
@@ -1271,6 +2490,49 @@ interface ReviewPropertyCard {
       {/* ================================================================= */}
       {activeTab === "executive-summary" && (
         <div className="space-y-6 pt-1">
+          {/* Top Control Bar: Edit All Screen Text Toggle */}
+          {canEdit && (
+            <div className="flex items-center justify-between">
+              <span className="text-[13px] text-[#64748B]">
+                Review &amp; customize the executive analysis for FY{reviewYear}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !isEditingAllExec;
+                  setIsEditingAllExec(next);
+                  if (!next) {
+                    persistReviewField({
+                      verdictText,
+                      objectiveText,
+                      portfolioCommentary,
+                      propertyCommentary,
+                      bottomLineText,
+                      executiveSummary: JSON.stringify(execData),
+                    });
+                  }
+                }}
+                className={`h-[34px] px-3.5 rounded-[8px] text-[12.5px] font-medium flex items-center gap-1.5 transition-colors cursor-pointer ${
+                  isEditingAllExec
+                    ? "bg-[#18794E] text-white hover:bg-[#13613e] shadow-xs"
+                    : "bg-white border border-[#CBD5E1] text-[#0e2841] hover:bg-[#F1F5F9] shadow-2xs"
+                }`}
+              >
+                {isEditingAllExec ? (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>Done Editing Screen Text</span>
+                  </>
+                ) : (
+                  <>
+                    <Pencil className="w-3.5 h-3.5" />
+                    <span>Edit All Screen Text</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
           {/* Card 1: Portfolio Performance & Strategic Roles (813:10033) */}
           <div className="bg-white rounded-[12px] p-[22px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)]">
             <h2 className="text-[18px] font-bold text-[#0e2841] tracking-[-0.36px] mb-4">
@@ -1284,16 +2546,18 @@ interface ReviewPropertyCard {
                   <h3 className="text-[16px] font-semibold text-[#0e2841]">
                     CEO / Lead Adviser Verdict
                   </h3>
-                  <button
-                    type="button"
-                    onClick={() => setIsEditingVerdict(!isEditingVerdict)}
-                    className="p-1 text-[#6b6b6b] hover:text-[#0e2841] transition-colors cursor-pointer"
-                    title="Edit Verdict"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingVerdict(!isEditingVerdict)}
+                      className="p-1 text-[#6b6b6b] hover:text-[#0e2841] transition-colors cursor-pointer"
+                      title="Edit Verdict"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
-                {isEditingVerdict ? (
+                {canEdit && (isEditingVerdict || isEditingAllExec) ? (
                   <textarea
                     rows={4}
                     value={verdictText}
@@ -1302,10 +2566,17 @@ interface ReviewPropertyCard {
                       setIsEditingVerdict(false);
                       persistReviewField({ verdictText });
                     }}
-                    className="w-full bg-white border border-[#dce4e8] rounded-[8px] p-3 text-[13.5px] leading-[22px] text-[#1a1c1e] focus:outline-none focus:border-[#0e2841]"
+                    className="w-full bg-white border border-[#0e2841] rounded-[8px] p-3 text-[13.5px] leading-[22px] text-[#1a1c1e] focus:outline-none"
+                    placeholder="Enter CEO / Lead Adviser verdict..."
                   />
                 ) : (
-                  <p className="text-[13.5px] leading-[22px] text-[#434750]">
+                  <p
+                    onClick={() => canEdit && setIsEditingVerdict(true)}
+                    className={`text-[13.5px] leading-[22px] text-[#434750] p-1 -m-1 rounded transition-colors ${
+                      canEdit ? "cursor-pointer hover:bg-black/[0.02]" : ""
+                    }`}
+                    title={canEdit ? "Click to edit verdict" : undefined}
+                  >
                     {verdictText}
                   </p>
                 )}
@@ -1317,16 +2588,18 @@ interface ReviewPropertyCard {
                   <h3 className="text-[16px] font-semibold text-[#0e2841]">
                     Your Objective
                   </h3>
-                  <button
-                    type="button"
-                    onClick={() => setIsEditingObjective(!isEditingObjective)}
-                    className="p-1 text-[#6b6b6b] hover:text-[#0e2841] transition-colors cursor-pointer"
-                    title="Edit Objective"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingObjective(!isEditingObjective)}
+                      className="p-1 text-[#6b6b6b] hover:text-[#0e2841] transition-colors cursor-pointer"
+                      title="Edit Objective"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
-                {isEditingObjective ? (
+                {canEdit && (isEditingObjective || isEditingAllExec) ? (
                   <textarea
                     rows={4}
                     value={objectiveText}
@@ -1335,10 +2608,17 @@ interface ReviewPropertyCard {
                       setIsEditingObjective(false);
                       persistReviewField({ objectiveText });
                     }}
-                    className="w-full bg-white border border-[#dce4e8] rounded-[8px] p-3 text-[13.5px] leading-[22px] text-[#1a1c1e] focus:outline-none focus:border-[#0e2841]"
+                    className="w-full bg-white border border-[#0e2841] rounded-[8px] p-3 text-[13.5px] leading-[22px] text-[#1a1c1e] focus:outline-none"
+                    placeholder="Enter objective..."
                   />
                 ) : (
-                  <p className="text-[13.5px] leading-[22px] text-[#434750]">
+                  <p
+                    onClick={() => canEdit && setIsEditingObjective(true)}
+                    className={`text-[13.5px] leading-[22px] text-[#434750] p-1 -m-1 rounded transition-colors ${
+                      canEdit ? "cursor-pointer hover:bg-black/[0.02]" : ""
+                    }`}
+                    title={canEdit ? "Click to edit objective" : undefined}
+                  >
                     {objectiveText}
                   </p>
                 )}
@@ -1355,15 +2635,68 @@ interface ReviewPropertyCard {
           <div className="bg-white rounded-[12px] p-[22px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)] space-y-6">
             <div className="flex flex-col lg:flex-row items-center justify-between gap-8">
               <div className="w-full lg:w-[320px] flex flex-col justify-center pl-2">
-                <span className="text-[14px] font-medium text-[#6b6b6b]">
-                  Portfolio Return Benchmarks
-                </span>
-                <span className="text-[40px] font-bold text-[#0e2841] leading-tight mt-1">
-                  6.8%
-                </span>
-                <span className="text-[13px] text-[#6b6b6b] mt-0.5">
-                  Total Return (FY2026)
-                </span>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[14px] font-medium text-[#6b6b6b]">
+                    Portfolio Return Benchmarks
+                  </span>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingMetrics(!isEditingMetrics)}
+                      className="p-1 text-[#6b6b6b] hover:text-[#0e2841] transition-colors cursor-pointer"
+                      title="Edit Return & Metrics"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+                {canEdit && (isEditingMetrics || isEditingAllExec) ? (
+                  <div className="space-y-2 mt-1">
+                    <div>
+                      <label className="text-[11px] text-[#6b6b6b] block">
+                        Total Return Rate
+                      </label>
+                      <input
+                        type="text"
+                        value={execData.totalReturnVal || "6.8%"}
+                        onChange={(e) =>
+                          updateExecData({ totalReturnVal: e.target.value })
+                        }
+                        className="text-[24px] font-bold text-[#0e2841] w-full px-2.5 py-1 bg-white border border-[#0e2841] rounded-[6px]"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-[#6b6b6b] block">
+                        Subtitle
+                      </label>
+                      <input
+                        type="text"
+                        value={
+                          execData.totalReturnSub ||
+                          `Total Return (FY${reviewYear || 2026})`
+                        }
+                        onChange={(e) =>
+                          updateExecData({ totalReturnSub: e.target.value })
+                        }
+                        className="text-[12px] text-[#6b6b6b] w-full px-2 py-1 bg-white border border-[#CBD5E1] rounded-[6px]"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <span
+                      onClick={() => setIsEditingMetrics(true)}
+                      className="text-[40px] font-bold text-[#0e2841] leading-tight mt-1 cursor-pointer hover:underline"
+                      title="Click to edit total return"
+                    >
+                      {execData.totalReturnVal || "6.8%"}
+                    </span>
+                    <span className="text-[13px] text-[#6b6b6b] mt-0.5">
+                      {execData.totalReturnSub ||
+                        `Total Return (FY${reviewYear || 2026})`}
+                    </span>
+                  </>
+                )}
               </div>
 
               <div className="hidden lg:block w-[1px] h-[141px] bg-[#dce4e8]" />
@@ -1389,7 +2722,7 @@ interface ReviewPropertyCard {
                       width: "75%",
                       color: "bg-[#0e2841]",
                       val: "15,937",
-                      pct: "6.8% p.a.",
+                      pct: `${execData.totalReturnVal || "6.8%"} p.a.`,
                     },
                     {
                       label: "Similar Properties",
@@ -1467,29 +2800,88 @@ interface ReviewPropertyCard {
 
             {/* 4 Metric Cards Row (813:10092) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-[14px]">
-              {renderMetricCard(
-                "Cash Return on Equity",
-                "-2.9%",
-                "12.4% vs FY2025",
-                "/images/review/90cea.svg"
-              )}
-              {renderMetricCard(
-                "After-Tax Cash Flow",
-                "-$69,074",
-                "12.4% vs FY2025",
-                "/images/review/38829.svg"
-              )}
-              {renderMetricCard(
-                "Cash Cover",
-                "18.4 Months",
-                "Buffer: $130,000",
-                "/images/review/89393.svg"
-              )}
-              {renderMetricCard(
-                "Average Interest Rate",
-                "5.97%",
-                "12.4% vs FY2025",
-                "/images/review/61b85.svg"
+              {(execData.metricCards || defaultExecData.metricCards!).map(
+                (card, idx) => {
+                  const icons = [
+                    "/images/review/90cea.svg",
+                    "/images/review/38829.svg",
+                    "/images/review/89393.svg",
+                    "/images/review/61b85.svg",
+                  ];
+                  const iconSrc = icons[idx % icons.length];
+                  if (canEdit && (isEditingMetrics || isEditingAllExec)) {
+                    return (
+                      <div
+                        key={idx}
+                        className="bg-[#f6f9fb] rounded-[12px] p-4 space-y-2 border border-[#CBD5E1]"
+                      >
+                        <div>
+                          <label className="text-[10.5px] font-semibold text-[#6b6b6b] block">
+                            Title
+                          </label>
+                          <input
+                            type="text"
+                            value={card.title}
+                            onChange={(e) => {
+                              const next = [
+                                ...(execData.metricCards ||
+                                  defaultExecData.metricCards!),
+                              ];
+                              next[idx] = {
+                                ...next[idx],
+                                title: e.target.value,
+                              };
+                              updateExecData({ metricCards: next });
+                            }}
+                            className="w-full text-[12px] font-medium text-[#1a1c1e] bg-white border border-[#CBD5E1] rounded px-2 py-1 focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10.5px] font-semibold text-[#6b6b6b] block">
+                            Value
+                          </label>
+                          <input
+                            type="text"
+                            value={card.val}
+                            onChange={(e) => {
+                              const next = [
+                                ...(execData.metricCards ||
+                                  defaultExecData.metricCards!),
+                              ];
+                              next[idx] = { ...next[idx], val: e.target.value };
+                              updateExecData({ metricCards: next });
+                            }}
+                            className="w-full text-[16px] font-bold text-[#0e2841] bg-white border border-[#CBD5E1] rounded px-2 py-1 focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10.5px] font-semibold text-[#6b6b6b] block">
+                            Comparison
+                          </label>
+                          <input
+                            type="text"
+                            value={card.comp}
+                            onChange={(e) => {
+                              const next = [
+                                ...(execData.metricCards ||
+                                  defaultExecData.metricCards!),
+                              ];
+                              next[idx] = { ...next[idx], comp: e.target.value };
+                              updateExecData({ metricCards: next });
+                            }}
+                            className="w-full text-[11px] text-[#6b6b6b] bg-white border border-[#CBD5E1] rounded px-2 py-1 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                    );
+                  }
+                  return renderMetricCard(
+                    card.title,
+                    card.val,
+                    card.comp,
+                    iconSrc
+                  );
+                }
               )}
             </div>
 
@@ -1499,93 +2891,113 @@ interface ReviewPropertyCard {
                 <span className="text-[16px] font-semibold text-[#0e2841]">
                   commentary
                 </span>
-                <Pencil className="w-3.5 h-3.5 text-[#6b6b6b]" />
+                {canEdit && <Pencil className="w-3.5 h-3.5 text-[#6b6b6b]" />}
               </div>
-              <div className="bg-white border border-[#dce4e8] rounded-[8px] h-[56px] px-4 flex items-center justify-between">
-                <input
-                  type="text"
-                  value={portfolioCommentary}
-                  onChange={(e) => setPortfolioCommentary(e.target.value)}
-                  placeholder="Add yours commentary here"
-                  className="w-full text-[13.5px] text-[#1a1c1e] placeholder:text-[#a0a0a0] focus:outline-none bg-transparent"
-                />
-                <ChevronDown className="w-4 h-4 text-[#6b6b6b] shrink-0" />
+              <div className="bg-white border border-[#dce4e8] rounded-[8px] min-h-[56px] px-4 flex items-center justify-between py-2">
+                {canEdit ? (
+                  <input
+                    type="text"
+                    value={portfolioCommentary}
+                    onChange={(e) => setPortfolioCommentary(e.target.value)}
+                    onBlur={() => persistReviewField({ portfolioCommentary })}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter")
+                        persistReviewField({ portfolioCommentary });
+                    }}
+                    placeholder="Add your commentary here"
+                    className="w-full text-[13.5px] text-[#1a1c1e] placeholder:text-[#a0a0a0] focus:outline-none bg-transparent"
+                  />
+                ) : (
+                  <span className="text-[13.5px] text-[#1a1c1e]">
+                    {portfolioCommentary || "No commentary recorded."}
+                  </span>
+                )}
+                {canEdit && <ChevronDown className="w-4 h-4 text-[#6b6b6b] shrink-0" />}
               </div>
             </div>
           </div>
 
           {/* Card 3: Property Performance & Strategic Role (813:10209) */}
           <div className="bg-white rounded-[12px] p-[22px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)] space-y-6">
-            <h3 className="text-[18px] font-bold text-[#0e2841] tracking-[-0.36px]">
-              Property Performance &amp; Strategic Role
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-[18px] font-bold text-[#0e2841] tracking-[-0.36px]">
+                Property Performance &amp; Strategic Role
+              </h3>
+              {canEdit && (
+                <span className="text-[12px] text-[#64748B]">
+                  {isEditingAllExec
+                    ? "Editing Strategic Roles below"
+                    : "Click role to edit"}
+                </span>
+              )}
+            </div>
 
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse min-w-[900px]">
                 <thead>
                   <tr className="border-b border-[#F0F1F3] text-[12.5px] font-medium text-[#8C9BA8]">
-                    <th className="py-3.5 px-3">
-                      <div className="flex items-center gap-1">
-                        <span>Property</span>
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </div>
-                    </th>
-                    <th className="py-3.5 px-3">
-                      <div className="flex items-center gap-1">
-                        <span>Current Value</span>
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </div>
-                    </th>
-                    <th className="py-3.5 px-3">
-                      <div className="flex items-center gap-1">
-                        <span>Net Yield</span>
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </div>
-                    </th>
-                    <th className="py-3.5 px-3">
-                      <div className="flex items-center gap-1">
-                        <span>Total Return</span>
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </div>
-                    </th>
-                    <th className="py-3.5 px-3">
-                      <div className="flex items-center gap-1">
-                        <span>After-Tax Cash Flow</span>
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </div>
-                    </th>
-                    <th className="py-3.5 px-3">
-                      <div className="flex items-center gap-1">
-                        <span>Strategic Role</span>
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </div>
-                    </th>
+                    <th className="py-3.5 px-3">Property</th>
+                    <th className="py-3.5 px-3">Current Value</th>
+                    <th className="py-3.5 px-3">Net Yield</th>
+                    <th className="py-3.5 px-3">Total Return</th>
+                    <th className="py-3.5 px-3">After-Tax Cash Flow</th>
+                    <th className="py-3.5 px-3">Strategic Role</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#F6F7F9] text-[13.5px] text-[#1A1C1E]">
-                  {propertiesList.map((prop) => (
-                    <tr
-                      key={prop.id}
-                      className="hover:bg-[#FBFBFC] transition-colors"
-                    >
-                      <td className="py-4 px-3 font-medium">{prop.address}</td>
-                      <td className="py-4 px-3">{prop.propertyValue}</td>
-                      <td className="py-4 px-3">
-                        {prop.isOwnerOccupied ? "N/A" : "3.8%"}
-                      </td>
-                      <td className="py-4 px-3 font-semibold text-[#15803D]">
-                        {prop.totalReturn}
-                      </td>
-                      <td className="py-4 px-3">
-                        {prop.isOwnerOccupied ? "N/A" : "-$12,400"}
-                      </td>
-                      <td className="py-4 px-3 font-medium text-[#0e2841]">
-                        {prop.isOwnerOccupied
-                          ? "Primary Residence"
-                          : "Core Growth & Yield"}
-                      </td>
-                    </tr>
-                  ))}
+                  {propertiesList.map((prop) => {
+                    const currentRole =
+                      execData.propertyStrategicRoles?.[prop.id] ??
+                      (prop.isOwnerOccupied
+                        ? "Primary Residence"
+                        : "Core Growth & Yield");
+                    return (
+                      <tr
+                        key={prop.id}
+                        className="hover:bg-[#FBFBFC] transition-colors"
+                      >
+                        <td className="py-4 px-3 font-medium">
+                          {prop.address}
+                        </td>
+                        <td className="py-4 px-3">{prop.propertyValue}</td>
+                        <td className="py-4 px-3">
+                          {prop.isOwnerOccupied ? "N/A" : "3.8%"}
+                        </td>
+                        <td className="py-4 px-3 font-semibold text-[#15803D]">
+                          {prop.totalReturn}
+                        </td>
+                        <td className="py-4 px-3">
+                          {prop.isOwnerOccupied ? "N/A" : "-$12,400"}
+                        </td>
+                        <td className="py-4 px-3 font-medium text-[#0e2841]">
+                          {canEdit && isEditingAllExec ? (
+                            <input
+                              type="text"
+                              value={currentRole}
+                              onChange={(e) => {
+                                const nextRoles = {
+                                  ...(execData.propertyStrategicRoles || {}),
+                                  [prop.id]: e.target.value,
+                                };
+                                updateExecData({
+                                  propertyStrategicRoles: nextRoles,
+                                });
+                              }}
+                              className="text-[12.5px] bg-white border border-[#0e2841] rounded px-2 py-1 w-full max-w-[200px] focus:outline-none"
+                            />
+                          ) : (
+                            <span
+                              onClick={() => canEdit && setIsEditingAllExec(true)}
+                              className={canEdit ? "cursor-pointer hover:underline" : ""}
+                              title={canEdit ? "Click to edit strategic role" : undefined}
+                            >
+                              {currentRole}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1596,17 +3008,28 @@ interface ReviewPropertyCard {
                 <span className="text-[16px] font-semibold text-[#0e2841]">
                   commentary
                 </span>
-                <Pencil className="w-3.5 h-3.5 text-[#6b6b6b]" />
+                {canEdit && <Pencil className="w-3.5 h-3.5 text-[#6b6b6b]" />}
               </div>
-              <div className="bg-white border border-[#dce4e8] rounded-[8px] h-[56px] px-4 flex items-center justify-between">
-                <input
-                  type="text"
-                  value={propertyCommentary}
-                  onChange={(e) => setPropertyCommentary(e.target.value)}
-                  placeholder="Add yours commentary here"
-                  className="w-full text-[13.5px] text-[#1a1c1e] placeholder:text-[#a0a0a0] focus:outline-none bg-transparent"
-                />
-                <ChevronDown className="w-4 h-4 text-[#6b6b6b] shrink-0" />
+              <div className="bg-white border border-[#dce4e8] rounded-[8px] min-h-[56px] px-4 flex items-center justify-between py-2">
+                {canEdit ? (
+                  <input
+                    type="text"
+                    value={propertyCommentary}
+                    onChange={(e) => setPropertyCommentary(e.target.value)}
+                    onBlur={() => persistReviewField({ propertyCommentary })}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter")
+                        persistReviewField({ propertyCommentary });
+                    }}
+                    placeholder="Add your commentary here"
+                    className="w-full text-[13.5px] text-[#1a1c1e] placeholder:text-[#a0a0a0] focus:outline-none bg-transparent"
+                  />
+                ) : (
+                  <span className="text-[13.5px] text-[#1a1c1e]">
+                    {propertyCommentary || "No commentary recorded."}
+                  </span>
+                )}
+                {canEdit && <ChevronDown className="w-4 h-4 text-[#6b6b6b] shrink-0" />}
               </div>
             </div>
           </div>
@@ -1621,37 +3044,93 @@ interface ReviewPropertyCard {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-[28px]">
               {/* Left: Three Biggest Portfolio Opportunities */}
               <div className="bg-[#f6f9fb] rounded-[12px] p-[20px]">
-                <h3 className="text-[17px] font-semibold text-[#0e2841] pb-4 border-b border-[#dce4e8]">
-                  Three Biggest Portfolio Opportunities
-                </h3>
+                <div className="flex items-center justify-between pb-4 border-b border-[#dce4e8]">
+                  <h3 className="text-[17px] font-semibold text-[#0e2841]">
+                    Three Biggest Portfolio Opportunities
+                  </h3>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingOpps(!isEditingOpps)}
+                      className="p-1 text-[#6b6b6b] hover:text-[#0e2841] transition-colors cursor-pointer"
+                      title="Edit Opportunities"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
                 <div className="divide-y divide-[#dce4e8]">
-                  {[
-                    {
-                      title: "01. Refinance higher-rate loans",
-                      desc: "Four loans are above market rates by ~0.7%.",
-                      amount: "$15,100 p.a.",
-                    },
-                    {
-                      title: "02. Reduce property management costs",
-                      desc: "Ocean Drive costs ~28% above comparable properties.",
-                      amount: "$2,400 p.a.",
-                    },
-                    {
-                      title: "03. Review and reset rents",
-                      desc: "Park Avenue rent has not been reviewed in 26 months.",
-                      amount: "$2,080 p.a.",
-                    },
-                  ].map((opp) => (
-                    <div key={opp.title} className="py-4 first:pt-4 last:pb-1">
-                      <p className="text-[14.5px] font-semibold text-[#0e2841]">
-                        {opp.title}
-                      </p>
-                      <p className="text-[12.5px] text-[#6b6b6b] mt-1">
-                        {opp.desc}
-                      </p>
-                      <p className="text-[14.5px] font-bold text-[#15803D] mt-1.5">
-                        {opp.amount}
-                      </p>
+                  {(
+                    execData.opportunities || defaultExecData.opportunities!
+                  ).map((opp, idx) => (
+                    <div key={idx} className="py-4 first:pt-4 last:pb-1">
+                      {canEdit && (isEditingOpps || isEditingAllExec) ? (
+                        <div className="space-y-1.5">
+                          <input
+                            type="text"
+                            value={opp.title}
+                            onChange={(e) => {
+                              const next = [
+                                ...(execData.opportunities ||
+                                  defaultExecData.opportunities!),
+                              ];
+                              next[idx] = {
+                                ...next[idx],
+                                title: e.target.value,
+                              };
+                              updateExecData({ opportunities: next });
+                            }}
+                            className="w-full text-[13.5px] font-semibold text-[#0e2841] bg-white border border-[#CBD5E1] rounded px-2 py-1"
+                            placeholder="Title"
+                          />
+                          <textarea
+                            rows={2}
+                            value={opp.desc}
+                            onChange={(e) => {
+                              const next = [
+                                ...(execData.opportunities ||
+                                  defaultExecData.opportunities!),
+                              ];
+                              next[idx] = {
+                                ...next[idx],
+                                desc: e.target.value,
+                              };
+                              updateExecData({ opportunities: next });
+                            }}
+                            className="w-full text-[12px] text-[#475569] bg-white border border-[#CBD5E1] rounded px-2 py-1"
+                            placeholder="Description"
+                          />
+                          <input
+                            type="text"
+                            value={opp.amount}
+                            onChange={(e) => {
+                              const next = [
+                                ...(execData.opportunities ||
+                                  defaultExecData.opportunities!),
+                              ];
+                              next[idx] = {
+                                ...next[idx],
+                                amount: e.target.value,
+                              };
+                              updateExecData({ opportunities: next });
+                            }}
+                            className="w-full text-[13.5px] font-bold text-[#15803D] bg-white border border-[#CBD5E1] rounded px-2 py-1"
+                            placeholder="Amount (e.g. $15,100 p.a.)"
+                          />
+                        </div>
+                      ) : (
+                        <>
+                          <p className="text-[14.5px] font-semibold text-[#0e2841]">
+                            {opp.title}
+                          </p>
+                          <p className="text-[12.5px] text-[#6b6b6b] mt-1">
+                            {opp.desc}
+                          </p>
+                          <p className="text-[14.5px] font-bold text-[#15803D] mt-1.5">
+                            {opp.amount}
+                          </p>
+                        </>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1659,41 +3138,83 @@ interface ReviewPropertyCard {
 
               {/* Right: Key Risks to Manage */}
               <div className="bg-[#f6f9fb] rounded-[12px] p-[20px]">
-                <h3 className="text-[17px] font-semibold text-[#0e2841] pb-4 border-b border-[#dce4e8]">
-                  Key Risks to Manage
-                </h3>
-                <div className="divide-y divide-[#dce4e8]">
-                  {[
-                    {
-                      title: "Interest-rate exposure",
-                      desc: "45% of loans are variable, increasing sensitivity to rate rises.",
-                    },
-                    {
-                      title: "Property performance risk",
-                      desc: "One property is underperforming and its strategic role should be reviewed.",
-                    },
-                    {
-                      title: "Income concentration",
-                      desc: "All income is from residential property, with limited diversification across assets.",
-                    },
-                  ].map((risk) => (
-                    <div
-                      key={risk.title}
-                      className="py-4 first:pt-4 last:pb-1 flex items-start gap-3.5"
+                <div className="flex items-center justify-between pb-4 border-b border-[#dce4e8]">
+                  <h3 className="text-[17px] font-semibold text-[#0e2841]">
+                    Key Risks to Manage
+                  </h3>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingRisks(!isEditingRisks)}
+                      className="p-1 text-[#6b6b6b] hover:text-[#0e2841] transition-colors cursor-pointer"
+                      title="Edit Risks"
                     >
-                      <div className="w-[40px] h-[40px] rounded-full bg-white border border-[#dce4e8] flex items-center justify-center shrink-0 shadow-2xs mt-0.5">
-                        <Clock className="w-5 h-5 text-[#0e2841]" />
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                <div className="divide-y divide-[#dce4e8]">
+                  {(execData.risks || defaultExecData.risks!).map(
+                    (risk, idx) => (
+                      <div
+                        key={idx}
+                        className="py-4 first:pt-4 last:pb-1 flex items-start gap-3.5"
+                      >
+                        <div className="w-[40px] h-[40px] rounded-full bg-white border border-[#dce4e8] flex items-center justify-center shrink-0 shadow-2xs mt-0.5">
+                          <Clock className="w-5 h-5 text-[#0e2841]" />
+                        </div>
+                        <div className="flex-1">
+                          {canEdit && (isEditingRisks || isEditingAllExec) ? (
+                            <div className="space-y-1.5">
+                              <input
+                                type="text"
+                                value={risk.title}
+                                onChange={(e) => {
+                                  const next = [
+                                    ...(execData.risks ||
+                                      defaultExecData.risks!),
+                                  ];
+                                  next[idx] = {
+                                    ...next[idx],
+                                    title: e.target.value,
+                                  };
+                                  updateExecData({ risks: next });
+                                }}
+                                className="w-full text-[13.5px] font-semibold text-[#0e2841] bg-white border border-[#CBD5E1] rounded px-2 py-1"
+                                placeholder="Risk Title"
+                              />
+                              <textarea
+                                rows={2}
+                                value={risk.desc}
+                                onChange={(e) => {
+                                  const next = [
+                                    ...(execData.risks ||
+                                      defaultExecData.risks!),
+                                  ];
+                                  next[idx] = {
+                                    ...next[idx],
+                                    desc: e.target.value,
+                                  };
+                                  updateExecData({ risks: next });
+                                }}
+                                className="w-full text-[12px] text-[#475569] bg-white border border-[#CBD5E1] rounded px-2 py-1"
+                                placeholder="Risk Description"
+                              />
+                            </div>
+                          ) : (
+                            <>
+                              <p className="text-[14.5px] font-semibold text-[#0e2841]">
+                                {risk.title}
+                              </p>
+                              <p className="text-[12.5px] text-[#6b6b6b] mt-1 leading-relaxed">
+                                {risk.desc}
+                              </p>
+                            </>
+                          )}
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-[14.5px] font-semibold text-[#0e2841]">
-                          {risk.title}
-                        </p>
-                        <p className="text-[12.5px] text-[#6b6b6b] mt-1 leading-relaxed">
-                          {risk.desc}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  )}
                 </div>
               </div>
             </div>
@@ -1711,10 +3232,34 @@ interface ReviewPropertyCard {
                     <h3 className="text-[17px] font-semibold text-[#0e2841]">
                       Are You on Track?
                     </h3>
+                    {canEdit && (
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingTrack(!isEditingTrack)}
+                        className="p-1 text-[#6b6b6b] hover:text-[#0e2841] transition-colors cursor-pointer"
+                        title="Edit Goals &amp; Narrative"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
-                  <div className="bg-[#0e2841] text-white h-[40px] px-[21px] rounded-[8px] text-[13.5px] font-medium flex items-center">
-                    Goal: $120,000 p.a.
-                  </div>
+                  {canEdit && (isEditingTrack || isEditingAllExec) ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-[12px] text-[#6b6b6b]">Goal:</span>
+                      <input
+                        type="text"
+                        value={execData.trackGoal || "$120,000 p.a."}
+                        onChange={(e) =>
+                          updateExecData({ trackGoal: e.target.value })
+                        }
+                        className="bg-white border border-[#0e2841] text-[#0e2841] h-[36px] px-3 rounded-[6px] text-[13px] font-medium"
+                      />
+                    </div>
+                  ) : (
+                    <div className="bg-[#0e2841] text-white h-[40px] px-[21px] rounded-[8px] text-[13.5px] font-medium flex items-center">
+                      Goal: {execData.trackGoal || "$120,000 p.a."}
+                    </div>
+                  )}
                 </div>
 
                 {/* Current path */}
@@ -1725,14 +3270,29 @@ interface ReviewPropertyCard {
                 >
                   {hoveredTrackPath === "current" && (
                     <div className="absolute top-1 left-[50%] -translate-x-1/2 bg-[#0e2841] text-white text-[11px] font-semibold px-3 py-1 rounded-[6px] shadow-md whitespace-nowrap z-20 pointer-events-none">
-                      93.3% of $120,000 goal (-$8,000 p.a. shortfall)
+                      93.3% of {execData.trackGoal || "$120,000 p.a."} goal
                     </div>
                   )}
                   <div className="flex items-center justify-between max-w-[509px] text-[13px] mb-2.5">
                     <span className="text-[#434750] font-medium">
                       Current path:
                     </span>
-                    <span className="font-bold text-[#0e2841]">$112,000</span>
+                    {canEdit && (isEditingTrack || isEditingAllExec) ? (
+                      <input
+                        type="text"
+                        value={execData.trackCurrentPathVal || "$112,000"}
+                        onChange={(e) =>
+                          updateExecData({
+                            trackCurrentPathVal: e.target.value,
+                          })
+                        }
+                        className="font-bold text-[#0e2841] text-[13px] bg-white border border-[#CBD5E1] rounded px-2 py-0.5 w-[110px]"
+                      />
+                    ) : (
+                      <span className="font-bold text-[#0e2841]">
+                        {execData.trackCurrentPathVal || "$112,000"}
+                      </span>
+                    )}
                   </div>
                   <div className="w-full h-[14px] bg-[#E5E7EB] rounded-full overflow-hidden">
                     <div
@@ -1753,14 +3313,29 @@ interface ReviewPropertyCard {
                 >
                   {hoveredTrackPath === "actions" && (
                     <div className="absolute top-1 left-[50%] -translate-x-1/2 bg-[#0e2841] text-white text-[11px] font-semibold px-3 py-1 rounded-[6px] shadow-md whitespace-nowrap z-20 pointer-events-none">
-                      110.0% of $120,000 goal (+$12,000 p.a. surplus)
+                      110.0% of {execData.trackGoal || "$120,000 p.a."} goal
                     </div>
                   )}
                   <div className="flex items-center justify-between max-w-[663px] text-[13px] mb-2.5">
                     <span className="text-[#434750] font-medium">
                       With key actions:
                     </span>
-                    <span className="font-bold text-[#15803D]">$132,000</span>
+                    {canEdit && (isEditingTrack || isEditingAllExec) ? (
+                      <input
+                        type="text"
+                        value={execData.trackActionsVal || "$132,000"}
+                        onChange={(e) =>
+                          updateExecData({
+                            trackActionsVal: e.target.value,
+                          })
+                        }
+                        className="font-bold text-[#15803D] text-[13px] bg-white border border-[#CBD5E1] rounded px-2 py-0.5 w-[110px]"
+                      />
+                    ) : (
+                      <span className="font-bold text-[#15803D]">
+                        {execData.trackActionsVal || "$132,000"}
+                      </span>
+                    )}
                   </div>
                   <div className="w-full h-[14px] bg-[#E5E7EB] rounded-full overflow-hidden">
                     <div
@@ -1784,51 +3359,99 @@ interface ReviewPropertyCard {
                     on Track?
                   </h4>
                 </div>
-                <p className="text-[13.5px] leading-[22px] text-[#434750] pt-4">
-                  With the identified actions, your portfolio could provide
-                  around $132,000 p.a. in 20 years, above your $120,000
-                  target.&quot;
-                </p>
+                {canEdit && (isEditingTrack || isEditingAllExec) ? (
+                  <textarea
+                    rows={4}
+                    value={
+                      execData.trackNarrative ||
+                      "With the identified actions, your portfolio could provide around $132,000 p.a. in 20 years, above your $120,000 target."
+                    }
+                    onChange={(e) =>
+                      updateExecData({ trackNarrative: e.target.value })
+                    }
+                    className="w-full text-[13px] leading-[20px] text-[#434750] bg-white border border-[#CBD5E1] rounded p-2.5 mt-3 focus:outline-none"
+                  />
+                ) : (
+                  <p className="text-[13.5px] leading-[22px] text-[#434750] pt-4">
+                    {execData.trackNarrative ||
+                      "With the identified actions, your portfolio could provide around $132,000 p.a. in 20 years, above your $120,000 target."}
+                  </p>
+                )}
               </div>
             </div>
           </div>
 
           {/* Card 6: Three Priority Initiatives (791:9276) */}
           <div className="bg-white rounded-[12px] p-[26px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)]">
-            <div className="flex items-center gap-2 mb-6">
-              <h3 className="text-[18px] font-bold text-[#0e2841]">
-                Three Priority Initiatives
-              </h3>
-              <Pencil className="w-4 h-4 text-[#6b6b6b]" />
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-2">
+                <h3 className="text-[18px] font-bold text-[#0e2841]">
+                  Three Priority Initiatives
+                </h3>
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingInitiatives(!isEditingInitiatives)}
+                    className="p-1 text-[#6b6b6b] hover:text-[#0e2841] transition-colors cursor-pointer"
+                    title="Edit Initiatives"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-[16px]">
-              {[
-                {
-                  title: "1. Optimise portfolio cash flow",
-                  desc: "– refinance, insurance and property costs.",
-                },
-                {
-                  title: "2. Assess the Park Avenue strategy",
-                  desc: "– hold, improve or redeploy the capital.",
-                },
-                {
-                  title: "3. Confirm the debt reduction plan",
-                  desc: "– ensure it keeps you on track for $120,000 p.a.",
-                },
-              ].map((item) => (
-                <div
-                  key={item.title}
-                  className="bg-[#f6f9fb] rounded-[10px] p-[20px]"
-                >
-                  <p className="text-[14.5px] font-semibold text-[#0e2841]">
-                    {item.title}
-                  </p>
-                  <p className="text-[13px] text-[#6b6b6b] mt-2 leading-relaxed">
-                    {item.desc}
-                  </p>
-                </div>
-              ))}
+              {(execData.initiatives || defaultExecData.initiatives!).map(
+                (item, idx) => (
+                  <div
+                    key={idx}
+                    className="bg-[#f6f9fb] rounded-[10px] p-[20px]"
+                  >
+                    {canEdit && (isEditingInitiatives || isEditingAllExec) ? (
+                      <div className="space-y-2">
+                        <input
+                          type="text"
+                          value={item.title}
+                          onChange={(e) => {
+                            const next = [
+                              ...(execData.initiatives ||
+                                defaultExecData.initiatives!),
+                            ];
+                            next[idx] = { ...next[idx], title: e.target.value };
+                            updateExecData({ initiatives: next });
+                          }}
+                          className="w-full text-[13.5px] font-semibold text-[#0e2841] bg-white border border-[#CBD5E1] rounded px-2 py-1"
+                          placeholder="Initiative Title"
+                        />
+                        <textarea
+                          rows={2}
+                          value={item.desc}
+                          onChange={(e) => {
+                            const next = [
+                              ...(execData.initiatives ||
+                                defaultExecData.initiatives!),
+                            ];
+                            next[idx] = { ...next[idx], desc: e.target.value };
+                            updateExecData({ initiatives: next });
+                          }}
+                          className="w-full text-[12px] text-[#6b6b6b] bg-white border border-[#CBD5E1] rounded px-2 py-1"
+                          placeholder="Initiative Description"
+                        />
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-[14.5px] font-semibold text-[#0e2841]">
+                          {item.title}
+                        </p>
+                        <p className="text-[13px] text-[#6b6b6b] mt-2 leading-relaxed">
+                          {item.desc}
+                        </p>
+                      </>
+                    )}
+                  </div>
+                )
+              )}
             </div>
           </div>
 
@@ -1837,15 +3460,27 @@ interface ReviewPropertyCard {
             <h3 className="text-[18px] font-bold text-[#0e2841] mb-4">
               THE BOTTOM LINE
             </h3>
-            <div className="bg-[#f6f9fb] border border-[#dce4e8] rounded-[8px] h-[61px] px-4 flex items-center justify-between">
-              <input
-                type="text"
-                value={bottomLineText}
-                onChange={(e) => setBottomLineText(e.target.value)}
-                className="w-full text-[13.5px] text-[#1a1c1e] focus:outline-none bg-transparent"
-              />
-              <ChevronDown className="w-4 h-4 text-[#6b6b6b] shrink-0" />
-            </div>
+            {canEdit ? (
+              <div className="bg-[#f6f9fb] border border-[#dce4e8] rounded-[8px] h-[61px] px-4 flex items-center justify-between">
+                <input
+                  type="text"
+                  value={bottomLineText}
+                  onChange={(e) => setBottomLineText(e.target.value)}
+                  onBlur={() => persistReviewField({ bottomLineText })}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") persistReviewField({ bottomLineText });
+                  }}
+                  className="w-full text-[13.5px] text-[#1a1c1e] focus:outline-none bg-transparent"
+                />
+                <ChevronDown className="w-4 h-4 text-[#6b6b6b] shrink-0" />
+              </div>
+            ) : (
+              <div className="bg-[#f6f9fb] border border-[#dce4e8] rounded-[8px] min-h-[61px] px-4 py-3 flex items-center">
+                <p className="text-[13.5px] text-[#1a1c1e] font-normal leading-relaxed">
+                  {bottomLineText}
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1879,110 +3514,640 @@ interface ReviewPropertyCard {
               )}
             </div>
 
-            <button
-              type="button"
-              onClick={() => setIsAddInsightOpen(true)}
-              className="bg-[#0e2841] hover:bg-[#163859] text-white h-[40px] w-[177px] rounded-[8px] text-[14px] font-medium flex items-center justify-center transition-colors cursor-pointer"
-            >
-              + Add Insight
-            </button>
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => openAddInsightModal()}
+                className="bg-[#0e2841] hover:bg-[#163859] text-white h-[40px] w-[177px] rounded-[8px] text-[14px] font-medium flex items-center justify-center transition-colors cursor-pointer"
+              >
+                + Add Insight
+              </button>
+            )}
           </div>
 
-          {/* Portfolio Summary (Balance Sheet) (1044:10771) */}
-          <div className="bg-white rounded-[12px] p-[20px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)]">
-            <h2 className="text-[16px] font-medium text-[#0e2841] tracking-[-0.32px] mb-3.5">
-              Portfolio Summary (Balance Sheet)
-            </h2>
+          {/* ========================================================================= */}
+          {/* SUB-TAB 1: Summary (Balance Sheet & Contribution)                        */}
+          {/* ========================================================================= */}
+          {portfolioSubTab === "Summary" && (
+            <div className="space-y-6">
+              {/* Portfolio Summary (Balance Sheet) (1044:10771) */}
+              <div className="bg-white rounded-[12px] p-[20px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)]">
+                <h2 className="text-[16px] font-medium text-[#0e2841] tracking-[-0.32px] mb-3.5">
+                  Portfolio Summary (Balance Sheet)
+                </h2>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-[14px]">
-              {renderMetricCard(
-                "Property Value",
-                fmtMoney(portfolioStats.invVal),
-                "Investment Portfolio",
-                "/images/review/90cea.svg"
-              )}
-              {renderMetricCard(
-                "Total Loans",
-                fmtMoney(portfolioStats.invLoans),
-                "Investment Debt",
-                "/images/review/89393.svg"
-              )}
-              {renderMetricCard(
-                "Total Equity",
-                fmtMoney(portfolioStats.invEquity),
-                "Net Investment Equity",
-                "/images/review/38829.svg"
-              )}
-              {renderMetricCard(
-                "LVR",
-                `${portfolioStats.invLvr.toFixed(2)}%`,
-                "Loan-to-Value Ratio",
-                "/images/review/30184.svg"
-              )}
-            </div>
-          </div>
-
-          {/* Bottom 2-Column Grid (1044:10618) */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-[24px]">
-            {renderNetYieldChart("Net Yield History & Trend")}
-
-            {/* Right: property contribution - Gross Field (1044:10674) */}
-            <div className="bg-white rounded-[12px] p-[20px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)] min-h-[267px]">
-              <div className="flex items-center justify-between mb-5">
-                <div className="flex items-center gap-[10px]">
-                  <div className="bg-white drop-shadow-[0px_4px_2px_rgba(0,0,0,0.05)] flex items-start p-[5px] rounded-full">
-                    <img
-                      src="/images/review/ce848.svg"
-                      alt=""
-                      className="w-[16px] h-[15.5px]"
-                    />
-                  </div>
-                  <h3 className="text-[14px] font-semibold text-[#0e2841] tracking-[-0.28px]">
-                    property contribution - Gross Field
-                  </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-[14px]">
+                  {renderMetricCard(
+                    "Property Value",
+                    fmtMoney(portfolioStats.invVal),
+                    "Investment Portfolio",
+                    "/images/review/90cea.svg",
+                    () => setSelectedMetric("Property Value"),
+                    selectedMetric === "Property Value"
+                  )}
+                  {renderMetricCard(
+                    "Total Loans",
+                    fmtMoney(portfolioStats.invLoans),
+                    "Investment Debt",
+                    "/images/review/89393.svg",
+                    () => setSelectedMetric("Total Loans"),
+                    selectedMetric === "Total Loans"
+                  )}
+                  {renderMetricCard(
+                    "Total Equity",
+                    fmtMoney(portfolioStats.invEquity),
+                    "Net Investment Equity",
+                    "/images/review/38829.svg",
+                    () => setSelectedMetric("Total Equity"),
+                    selectedMetric === "Total Equity"
+                  )}
+                  {renderMetricCard(
+                    "LVR",
+                    `${portfolioStats.invLvr.toFixed(2)}%`,
+                    "Loan-to-Value Ratio",
+                    "/images/review/30184.svg",
+                    () => setSelectedMetric("LVR (Loan-to-Value Ratio)"),
+                    selectedMetric.includes("LVR")
+                  )}
                 </div>
-                <span className="text-[13px] font-medium text-[#6b6b6b]">
-                  Highest first
-                </span>
               </div>
 
-              <div className="space-y-1">
-                <div className="grid grid-cols-12 items-center text-[13px] text-[#8C9BA8] font-medium pb-2.5 border-b border-[#F0F1F3] px-2">
-                  <div className="col-span-2 flex items-center gap-1">
-                    <span>#</span>
-                    <ChevronDown className="w-3 h-3" />
+              {/* Bottom 2-Column Grid (1044:10618) */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-[24px]">
+                {renderNetYieldChart("Net Yield History & Trend")}
+
+                {/* Right: property contribution - Gross Field (1044:10674) */}
+                <div className="bg-white rounded-[12px] p-[20px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)] min-h-[267px]">
+                  <div className="flex items-center justify-between mb-5">
+                    <div className="flex items-center gap-[10px]">
+                      <div className="bg-white drop-shadow-[0px_4px_2px_rgba(0,0,0,0.05)] flex items-start p-[5px] rounded-full">
+                        <img
+                          src="/images/review/ce848.svg"
+                          alt=""
+                          className="w-[16px] h-[15.5px]"
+                        />
+                      </div>
+                      <h3 className="text-[14px] font-semibold text-[#0e2841] tracking-[-0.28px]">
+                        property contribution - Gross Field
+                      </h3>
+                    </div>
+                    <span className="text-[13px] font-medium text-[#6b6b6b]">
+                      Highest first
+                    </span>
                   </div>
-                  <div className="col-span-7 flex items-center gap-1">
-                    <span>Property</span>
-                    <ChevronDown className="w-3 h-3" />
-                  </div>
-                  <div className="col-span-3 flex items-center justify-end gap-1">
-                    <span>Return</span>
-                    <ChevronDown className="w-3 h-3" />
+
+                  <div className="space-y-1">
+                    <div className="grid grid-cols-12 items-center text-[13px] text-[#8C9BA8] font-medium pb-2.5 border-b border-[#F0F1F3] px-2">
+                      <div className="col-span-2 flex items-center gap-1">
+                        <span>#</span>
+                        <ChevronDown className="w-3 h-3" />
+                      </div>
+                      <div className="col-span-7 flex items-center gap-1">
+                        <span>Property</span>
+                        <ChevronDown className="w-3 h-3" />
+                      </div>
+                      <div className="col-span-3 flex items-center justify-end gap-1">
+                        <span>Return</span>
+                        <ChevronDown className="w-3 h-3" />
+                      </div>
+                    </div>
+
+                    {portfolioStats.invProps.map((item, idx) => (
+                      <div
+                        key={item.id}
+                        className="grid grid-cols-12 items-center py-3 px-2 border-b border-[#F6F7F9] last:border-b-0 text-[13.5px]"
+                      >
+                        <div className="col-span-2">
+                          <span className="w-[24px] h-[24px] rounded-[4px] bg-[#f6f9fb] inline-flex items-center justify-center text-[12px] font-medium text-[#1a1c1e]">
+                            {idx + 1}
+                          </span>
+                        </div>
+                        <div className="col-span-7 text-[#1a1c1e] font-medium">
+                          {item.address}
+                        </div>
+                        <div className="col-span-3 text-right font-semibold text-[#22C55E]">
+                          {item.totalReturn}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
+              </div>
 
-                {portfolioStats.invProps.map((item, idx) => (
-                  <div
-                    key={item.id}
-                    className="grid grid-cols-12 items-center py-3 px-2 border-b border-[#F6F7F9] last:border-b-0 text-[13.5px]"
+              {/* Bottom Insights & Recommendations Carousel for Portfolio Summary */}
+              {renderInsightsCarousel(selectedMetric, "Portfolio-Wide")}
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* SUB-TAB 2: Property (Portfolio Property Valuation & Performance)          */}
+          {/* ========================================================================= */}
+          {portfolioSubTab === "Property" && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-[12px] p-[20px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)] space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h2 className="text-[16px] font-semibold text-[#0e2841] tracking-[-0.32px]">
+                      Portfolio Property Performance &amp; Valuation
+                    </h2>
+                    <p className="text-[12px] text-[#6b6b6b] mt-0.5">
+                      Aggregated property metrics, rental yields, and capital performance across all holdings
+                    </p>
+                  </div>
+                  <span className="text-[12.5px] font-medium text-[#0e2841] bg-[#f6f9fb] px-3 py-1 rounded-full border border-[#e2e8f0]">
+                    {portfolioStats.validProps.length} Properties in Portfolio
+                  </span>
+                </div>
+
+                {/* Row 1: 4 Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-[14px]">
+                  {renderMetricCard(
+                    "Gross Rental Yield",
+                    `${portfolioStats.portfolioGrossYield.toFixed(2)}%`,
+                    "Combined Investment Yield",
+                    "/images/review/90cea.svg"
+                  )}
+                  {renderMetricCard(
+                    "Total Weekly Rent",
+                    `${fmtMoney(portfolioStats.totalWeeklyRent)}/wk`,
+                    `${fmtMoney(portfolioStats.totalAnnualRent)} Annual Gross`,
+                    "/images/review/89393.svg"
+                  )}
+                  {renderMetricCard(
+                    "Average Property Value",
+                    fmtMoney(portfolioStats.avgValuation),
+                    `Across ${portfolioStats.validProps.length} Properties`,
+                    "/images/review/38829.svg"
+                  )}
+                  {renderMetricCard(
+                    "Capital Growth (CAGR)",
+                    "5.20%",
+                    "5-Yr Annualised Appreciation",
+                    "/images/review/61b85.svg"
+                  )}
+                </div>
+
+                {/* Row 2: 3 Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-[14px] pt-1">
+                  {renderMetricCard(
+                    "Portfolio Vacancy Rate",
+                    "1.8%",
+                    "Metro rental benchmark: 2.1%",
+                    "/images/review/90cea.svg"
+                  )}
+                  {renderMetricCard(
+                    "Total Portfolio Properties",
+                    `${portfolioStats.validProps.length}`,
+                    `${portfolioStats.invProps.length} Investment · ${portfolioStats.ooProps.length} Owner-Occupied`,
+                    "/images/review/89393.svg"
+                  )}
+                  {renderMetricCard(
+                    "Capital Appreciation",
+                    fmtMoney(
+                      Math.max(
+                        0,
+                        portfolioStats.totalVal - portfolioStats.totalPurchasePrice
+                      )
+                    ),
+                    `From ${fmtMoney(portfolioStats.totalPurchasePrice)} purchase cost`,
+                    "/images/review/30184.svg"
+                  )}
+                </div>
+              </div>
+
+              {/* Bottom 2-Column Grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-[24px]">
+                {renderNetYieldChart("Property Valuation Growth & Trend")}
+
+                {/* Right: Property Assets & Yield Contribution */}
+                <div className="bg-white rounded-[12px] p-[20px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)] min-h-[267px]">
+                  <div className="flex items-center justify-between mb-5">
+                    <div className="flex items-center gap-[10px]">
+                      <div className="bg-white drop-shadow-[0px_4px_2px_rgba(0,0,0,0.05)] flex items-start p-[5px] rounded-full">
+                        <img
+                          src="/images/review/ce848.svg"
+                          alt=""
+                          className="w-[16px] h-[15.5px]"
+                        />
+                      </div>
+                      <h3 className="text-[14px] font-semibold text-[#0e2841] tracking-[-0.28px]">
+                        Property Assets &amp; Yield Contribution
+                      </h3>
+                    </div>
+                    <span className="text-[13px] font-medium text-[#6b6b6b]">
+                      All Properties
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-[13px]">
+                      <thead>
+                        <tr className="border-b border-[#F0F1F3] text-[#8C9BA8] font-medium">
+                          <th className="pb-2.5 px-2">#</th>
+                          <th className="pb-2.5 px-2">Property Address</th>
+                          <th className="pb-2.5 px-2">Type</th>
+                          <th className="pb-2.5 px-2 text-right">Valuation</th>
+                          <th className="pb-2.5 px-2 text-right">Rent</th>
+                          <th className="pb-2.5 px-2 text-right">Gross Yield</th>
+                          <th className="pb-2.5 px-2 text-right">Share</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {portfolioStats.validProps.map((p, idx) => {
+                          const sharePct =
+                            portfolioStats.totalVal > 0
+                              ? (p.rawValue / portfolioStats.totalVal) * 100
+                              : 0;
+                          return (
+                            <tr
+                              key={p.id}
+                              className="border-b border-[#F6F7F9] last:border-b-0 hover:bg-[#FAFAFB]"
+                            >
+                              <td className="py-3 px-2 font-medium text-[#1a1c1e]">
+                                {idx + 1}
+                              </td>
+                              <td
+                                className="py-3 px-2 font-medium text-[#1a1c1e] max-w-[170px] truncate"
+                                title={p.address}
+                              >
+                                {p.address}
+                              </td>
+                              <td className="py-3 px-2 text-[#6B7280]">
+                                {p.isOwnerOccupied ? "Owner Occupied" : "Investment"}
+                              </td>
+                              <td className="py-3 px-2 text-right font-medium text-[#1a1c1e]">
+                                {fmtMoney(p.rawValue)}
+                              </td>
+                              <td className="py-3 px-2 text-right text-[#1a1c1e]">
+                                {p.isOwnerOccupied
+                                  ? "----"
+                                  : `${fmtMoney(p.rawWkRent)}/wk`}
+                              </td>
+                              <td className="py-3 px-2 text-right font-semibold text-[#18794E]">
+                                {p.isOwnerOccupied
+                                  ? "----"
+                                  : `${(p.yieldPct || 0).toFixed(2)}%`}
+                              </td>
+                              <td className="py-3 px-2 text-right font-medium text-[#0e2841]">
+                                {sharePct.toFixed(1)}%
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom Insights Carousel for Portfolio Property Performance */}
+              {renderInsightsCarousel(selectedMetric, "Portfolio-Wide")}
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* SUB-TAB 3: Equity (Portfolio Equity Position & Debt Structure)            */}
+          {/* ========================================================================= */}
+          {portfolioSubTab === "Equity" && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-[12px] p-[20px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)] space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h2 className="text-[16px] font-semibold text-[#0e2841] tracking-[-0.32px]">
+                      Portfolio Equity Position &amp; Debt Structure
+                    </h2>
+                    <p className="text-[12px] text-[#6b6b6b] mt-0.5">
+                      Net asset equity, loan facilities, leverage distribution, and borrowable equity reserves
+                    </p>
+                  </div>
+                  <span className="text-[12.5px] font-medium text-[#18794E] bg-[#18794E]/10 px-3 py-1 rounded-full border border-[#18794E]/20">
+                    LVR: {portfolioStats.invLvr.toFixed(2)}% (Target: &lt; 80%)
+                  </span>
+                </div>
+
+                {/* Row 1: 4 Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-[14px]">
+                  {renderMetricCard(
+                    "Total Net Equity",
+                    fmtMoney(portfolioStats.invEquity),
+                    `Total Debt: ${fmtMoney(portfolioStats.invLoans)}`,
+                    "/images/review/38829.svg"
+                  )}
+                  {renderMetricCard(
+                    "Portfolio LVR",
+                    `${portfolioStats.invLvr.toFixed(2)}%`,
+                    "Loan-to-Value Ratio",
+                    "/images/review/30184.svg"
+                  )}
+                  {renderMetricCard(
+                    "Usable Equity (80% LVR)",
+                    fmtMoney(portfolioStats.usableEquity80),
+                    "Borrowable Acquisition Buffer",
+                    "/images/review/90cea.svg"
+                  )}
+                  {renderMetricCard(
+                    "Pre-Tax ROE",
+                    "7.45%",
+                    "Return on Invested Equity",
+                    "/images/review/61b85.svg"
+                  )}
+                </div>
+
+                {/* Row 2: 3 Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-[14px] pt-1">
+                  {renderMetricCard(
+                    "Total Mortgage Debt",
+                    fmtMoney(portfolioStats.invLoans),
+                    `${portfolioStats.totalLoansCount} Active Facilities`,
+                    "/images/review/89393.svg"
+                  )}
+                  {renderMetricCard(
+                    "Superannuation & Reserves",
+                    fmtMoney(portfolioStats.superBal),
+                    "Household Super Liquidity",
+                    "/images/review/90cea.svg"
+                  )}
+                  {renderMetricCard(
+                    "Net Equity Ratio",
+                    `${(100 - portfolioStats.invLvr).toFixed(1)}%`,
+                    "Unencumbered Asset Coverage",
+                    "/images/review/30184.svg"
+                  )}
+                </div>
+              </div>
+
+              {/* Bottom 2-Column Grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-[24px]">
+                {renderNetYieldChart("Debt Amortization & Equity Build-Up")}
+
+                {/* Right: Equity & Debt Breakdown Table */}
+                <div className="bg-white rounded-[12px] p-[20px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)] min-h-[267px]">
+                  <div className="flex items-center justify-between mb-5">
+                    <div className="flex items-center gap-[10px]">
+                      <div className="bg-white drop-shadow-[0px_4px_2px_rgba(0,0,0,0.05)] flex items-start p-[5px] rounded-full">
+                        <img
+                          src="/images/review/ce848.svg"
+                          alt=""
+                          className="w-[16px] h-[15.5px]"
+                        />
+                      </div>
+                      <h3 className="text-[14px] font-semibold text-[#0e2841] tracking-[-0.28px]">
+                        Equity &amp; Debt Breakdown by Property
+                      </h3>
+                    </div>
+                    <span className="text-[13px] font-medium text-[#6b6b6b]">
+                      Debt vs Equity
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-[13px]">
+                      <thead>
+                        <tr className="border-b border-[#F0F1F3] text-[#8C9BA8] font-medium">
+                          <th className="pb-2.5 px-2">#</th>
+                          <th className="pb-2.5 px-2">Property</th>
+                          <th className="pb-2.5 px-2 text-right">Valuation</th>
+                          <th className="pb-2.5 px-2 text-right">Loan Balance</th>
+                          <th className="pb-2.5 px-2 text-right">Net Equity</th>
+                          <th className="pb-2.5 px-2 text-right">LVR</th>
+                          <th className="pb-2.5 px-2 text-right">Usable (80%)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {portfolioStats.validProps.map((p, idx) => {
+                          const pUsable = Math.max(0, p.rawValue * 0.8 - p.rawLoans);
+                          const pLvr =
+                            p.rawValue > 0 ? (p.rawLoans / p.rawValue) * 100 : 0;
+                          return (
+                            <tr
+                              key={p.id}
+                              className="border-b border-[#F6F7F9] last:border-b-0 hover:bg-[#FAFAFB]"
+                            >
+                              <td className="py-3 px-2 font-medium text-[#1a1c1e]">
+                                {idx + 1}
+                              </td>
+                              <td
+                                className="py-3 px-2 font-medium text-[#1a1c1e] max-w-[170px] truncate"
+                                title={p.address}
+                              >
+                                {p.address}
+                              </td>
+                              <td className="py-3 px-2 text-right text-[#1a1c1e]">
+                                {fmtMoney(p.rawValue)}
+                              </td>
+                              <td className="py-3 px-2 text-right text-[#E11D48] font-medium">
+                                {fmtMoney(p.rawLoans)}
+                              </td>
+                              <td className="py-3 px-2 text-right text-[#0e2841] font-semibold">
+                                {fmtMoney(p.rawEquity)}
+                              </td>
+                              <td className="py-3 px-2 text-right font-medium text-[#1a1c1e]">
+                                {pLvr.toFixed(1)}%
+                              </td>
+                              <td className="py-3 px-2 text-right font-semibold text-[#18794E]">
+                                {fmtMoney(pUsable)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom Insights Carousel for Portfolio Equity */}
+              {renderInsightsCarousel(selectedMetric, "Portfolio-Wide")}
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* SUB-TAB 4: Cash (Portfolio Cash Flow & Operating Efficiency)               */}
+          {/* ========================================================================= */}
+          {portfolioSubTab === "Cash" && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-[12px] p-[20px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)] space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h2 className="text-[16px] font-semibold text-[#0e2841] tracking-[-0.32px]">
+                      Portfolio Cash Flow &amp; Operating Efficiency
+                    </h2>
+                    <p className="text-[12px] text-[#6b6b6b] mt-0.5">
+                      Gross rental revenue, outgoings, debt servicing, and net holding position
+                    </p>
+                  </div>
+                  <span
+                    className={`text-[12.5px] font-medium px-3 py-1 rounded-full border ${
+                      portfolioStats.preTaxCashFlow >= 0
+                        ? "text-[#18794E] bg-[#18794E]/10 border-[#18794E]/20"
+                        : "text-[#C66900] bg-[#C66900]/10 border-[#C66900]/20"
+                    }`}
                   >
-                    <div className="col-span-2">
-                      <span className="w-[24px] h-[24px] rounded-[4px] bg-[#f6f9fb] inline-flex items-center justify-center text-[12px] font-medium text-[#1a1c1e]">
-                        {idx + 1}
-                      </span>
-                    </div>
-                    <div className="col-span-7 text-[#1a1c1e] font-medium">
-                      {item.address}
-                    </div>
-                    <div className="col-span-3 text-right font-semibold text-[#22C55E]">
-                      {item.totalReturn}
-                    </div>
-                  </div>
-                ))}
+                    Pre-Tax Cash: {portfolioStats.preTaxCashFlow >= 0 ? "+" : ""}
+                    {fmtMoney(portfolioStats.preTaxCashFlow)}/yr
+                  </span>
+                </div>
+
+                {/* Row 1: 4 Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-[14px]">
+                  {renderMetricCard(
+                    "Annual Gross Rent",
+                    fmtMoney(portfolioStats.totalAnnualRent),
+                    `${fmtMoney(portfolioStats.totalWeeklyRent)} / week`,
+                    "/images/review/90cea.svg"
+                  )}
+                  {renderMetricCard(
+                    "Operating Expenses",
+                    fmtMoney(portfolioStats.totalAnnualExpenses),
+                    `${(
+                      (portfolioStats.totalAnnualExpenses /
+                        Math.max(1, portfolioStats.totalAnnualRent)) *
+                      100
+                    ).toFixed(1)}% Expense Ratio`,
+                    "/images/review/89393.svg"
+                  )}
+                  {renderMetricCard(
+                    "Net Operating Income",
+                    fmtMoney(
+                      Math.max(
+                        0,
+                        portfolioStats.totalAnnualRent -
+                          portfolioStats.totalAnnualExpenses
+                      )
+                    ),
+                    "Pre-Debt Net Revenue",
+                    "/images/review/38829.svg"
+                  )}
+                  {renderMetricCard(
+                    "Net Rental Yield",
+                    `${portfolioStats.portfolioNetYield.toFixed(2)}%`,
+                    "Yield After Outgoings",
+                    "/images/review/61b85.svg"
+                  )}
+                </div>
+
+                {/* Row 2: 3 Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-[14px] pt-1">
+                  {renderMetricCard(
+                    "Annual Debt Service",
+                    fmtMoney(portfolioStats.totalDebtService),
+                    "Est. Mortgage Interest & Fees",
+                    "/images/review/90cea.svg"
+                  )}
+                  {renderMetricCard(
+                    "Net Pre-Tax Cash Flow",
+                    `${portfolioStats.preTaxCashFlow >= 0 ? "+" : ""}${fmtMoney(
+                      portfolioStats.preTaxCashFlow
+                    )}`,
+                    `${fmtMoney(
+                      Math.round(portfolioStats.preTaxCashFlow / 52)
+                    )}/wk Net Holding Position`,
+                    "/images/review/89393.svg"
+                  )}
+                  {renderMetricCard(
+                    "Cash Cover Buffer",
+                    "150 wks",
+                    "Reserve Liquidity Cover",
+                    "/images/review/30184.svg"
+                  )}
+                </div>
               </div>
+
+              {/* Bottom 2-Column Grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-[24px]">
+                {renderNetYieldChart("Portfolio Cash Flow & Revenue Trend")}
+
+                {/* Right: Property Cash Flow Breakdown Table */}
+                <div className="bg-white rounded-[12px] p-[20px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)] min-h-[267px]">
+                  <div className="flex items-center justify-between mb-5">
+                    <div className="flex items-center gap-[10px]">
+                      <div className="bg-white drop-shadow-[0px_4px_2px_rgba(0,0,0,0.05)] flex items-start p-[5px] rounded-full">
+                        <img
+                          src="/images/review/ce848.svg"
+                          alt=""
+                          className="w-[16px] h-[15.5px]"
+                        />
+                      </div>
+                      <h3 className="text-[14px] font-semibold text-[#0e2841] tracking-[-0.28px]">
+                        Property Cash Flow Breakdown
+                      </h3>
+                    </div>
+                    <span className="text-[13px] font-medium text-[#6b6b6b]">
+                      Annual Cash Flows
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-[13px]">
+                      <thead>
+                        <tr className="border-b border-[#F0F1F3] text-[#8C9BA8] font-medium">
+                          <th className="pb-2.5 px-2">#</th>
+                          <th className="pb-2.5 px-2">Property</th>
+                          <th className="pb-2.5 px-2 text-right">Gross Rent</th>
+                          <th className="pb-2.5 px-2 text-right">Expenses</th>
+                          <th className="pb-2.5 px-2 text-right">Debt Service</th>
+                          <th className="pb-2.5 px-2 text-right">Net Cash Flow</th>
+                          <th className="pb-2.5 px-2 text-right">Net Yield</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {portfolioStats.validProps.map((p, idx) => {
+                          return (
+                            <tr
+                              key={p.id}
+                              className="border-b border-[#F6F7F9] last:border-b-0 hover:bg-[#FAFAFB]"
+                            >
+                              <td className="py-3 px-2 font-medium text-[#1a1c1e]">
+                                {idx + 1}
+                              </td>
+                              <td
+                                className="py-3 px-2 font-medium text-[#1a1c1e] max-w-[170px] truncate"
+                                title={p.address}
+                              >
+                                {p.address}
+                              </td>
+                              <td className="py-3 px-2 text-right text-[#1a1c1e]">
+                                {p.isOwnerOccupied ? "----" : fmtMoney(p.rawGrossRent)}
+                              </td>
+                              <td className="py-3 px-2 text-right text-[#E11D48]">
+                                {p.isOwnerOccupied
+                                  ? "----"
+                                  : `-${fmtMoney(p.rawExpenses)}`}
+                              </td>
+                              <td className="py-3 px-2 text-right text-[#6B7280]">
+                                {fmtMoney(p.rawDebtService)}
+                              </td>
+                              <td
+                                className={`py-3 px-2 text-right font-semibold ${
+                                  (p.rawNetCashFlow || 0) >= 0
+                                    ? "text-[#18794E]"
+                                    : "text-[#C66900]"
+                                }`}
+                              >
+                                {p.isOwnerOccupied
+                                  ? "----"
+                                  : `${(p.rawNetCashFlow || 0) >= 0 ? "+" : ""}${fmtMoney(
+                                      p.rawNetCashFlow || 0
+                                    )}`}
+                              </td>
+                              <td className="py-3 px-2 text-right font-medium text-[#0e2841]">
+                                {p.isOwnerOccupied
+                                  ? "----"
+                                  : `${(p.rawNetYield || 0).toFixed(2)}%`}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom Insights Carousel for Portfolio Cash */}
+              {renderInsightsCarousel(selectedMetric, "Portfolio-Wide")}
             </div>
-          </div>
+          )}
         </div>
       )}
 
@@ -1994,50 +4159,70 @@ interface ReviewPropertyCard {
           {/* MAIN PROPERTY ANALYSIS OVERVIEW (Figma 1044:9276 — exact match to 186/media_0.png) */}
           {propertySubView === "overview" && (
             <>
-              {/* Second underlined < Back to Review Workspace link (1044:9717) */}
+              {/* Second underlined < Back to Reports link (1044:9717) */}
               <button
                 type="button"
                 onClick={onBack}
-                className="flex gap-[4px] items-center cursor-pointer pt-1"
+                className="flex gap-[4px] items-center cursor-pointer pt-0.5 pb-0.5"
               >
                 <img
                   src="/images/review/74f5d.svg"
                   alt=""
-                  className="size-[20px]"
+                  className="size-[16px]"
                 />
-                <span className="font-['Inter',sans-serif] font-medium text-[#1a1c1e] text-[14px] leading-[20px] tracking-[-0.084px] underline">
-                  Back to Review Workspace
+                <span className="font-['Inter',sans-serif] font-medium text-[#1a1c1e] text-[13px] leading-[18px] tracking-[-0.084px] underline">
+                  {readOnly ? "Back to Reports" : "Back to Review Workspace"}
                 </span>
               </button>
 
-              {/* Property Overview Card (1044:9657) */}
-              <div className="bg-white rounded-[12px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)] px-[28px] py-[18px]">
-                <p className="font-['Poppins',sans-serif] font-bold text-[#0e2841] text-[18px] tracking-[-0.36px] capitalize mb-2">
-                  Property Overview
-                </p>
+              {/* Property Overview Card (1044:9657) - Compact Non-Scrolling Layout */}
+              <div className="bg-white rounded-[10px] shadow-[0px_4px_12px_rgba(0,0,0,0.03)] px-4 py-2.5 border border-[#E2E8F0]">
+                <div className="flex items-center justify-between mb-1.5">
+                  <p className="font-['Poppins',sans-serif] font-bold text-[#0e2841] text-[16px] tracking-[-0.3px] capitalize">
+                    Property Overview
+                  </p>
+                  {/* Subtle Sub-view Navigation Pills */}
+                  <div className="flex items-center gap-1 bg-[#F1F5F9] p-0.5 rounded-[6px]">
+                    <span className="text-[11.5px] font-semibold text-[#0e2841] bg-white px-2.5 py-0.5 rounded shadow-2xs">
+                      Overview
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setPropertySubView("cash-management")}
+                      className="text-[11.5px] font-medium text-[#64748B] hover:text-[#0e2841] px-2 py-0.5 rounded cursor-pointer transition-colors"
+                    >
+                      Cash Management
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPropertySubView("capital-management")}
+                      className="text-[11.5px] font-medium text-[#64748B] hover:text-[#0e2841] px-2 py-0.5 rounded cursor-pointer transition-colors"
+                    >
+                      Capital Management
+                    </button>
+                  </div>
+                </div>
 
-                <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-6">
-                  {/* Left: 88x88 Image + Address + Features */}
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-[16px]">
-                    <div className="border-t-[0.82px] border-[rgba(122,116,116,0.1)] pt-1 shrink-0">
-                      <div className="relative rounded-[1px] shrink-0 size-[88px] overflow-hidden">
-                        <img
-                          src={currentProperty.image}
-                          alt={currentProperty.address}
-                          className="absolute h-[126.42%] left-[-0.46%] max-w-none top-[-24.53%] w-[100.93%]"
-                        />
-                      </div>
+                <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-3">
+                  {/* Left: Compact Image + Address + Features */}
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                    <div className="relative rounded-[4px] shrink-0 size-[58px] overflow-hidden border border-[#E2E8F0]">
+                      <img
+                        src={currentProperty.image}
+                        alt={currentProperty.address}
+                        className="absolute inset-0 size-full object-cover"
+                      />
                     </div>
 
-                    <div className="flex flex-col gap-[8px]">
+                    <div className="flex flex-col gap-[3px]">
                       {/* Address + Light Blue Pill + Square Dropdown Button */}
-                      <div className="flex flex-wrap items-center gap-[9px] relative">
-                        <p className="font-['Poppins',sans-serif] font-bold text-[#0e2841] text-[18px] tracking-[-0.36px]">
+                      <div className="flex flex-wrap items-center gap-2 relative">
+                        <p className="font-['Poppins',sans-serif] font-bold text-[#0e2841] text-[16px] tracking-[-0.3px]">
                           {currentProperty.address}
                         </p>
 
-                        <div className="bg-[rgba(56,125,215,0.06)] border border-[#1255ad] border-solid flex h-[29px] items-center justify-center px-[15px] rounded-[68px]">
-                          <span className="font-['Poppins',sans-serif] font-semibold text-[#1255ad] text-[12px] whitespace-nowrap">
+                        <div className="bg-[rgba(56,125,215,0.06)] border border-[#1255ad] border-solid flex h-[24px] items-center justify-center px-2.5 rounded-[68px]">
+                          <span className="font-['Poppins',sans-serif] font-semibold text-[#1255ad] text-[11px] whitespace-nowrap">
                             {currentProperty.badge}
                           </span>
                         </div>
@@ -2047,13 +4232,13 @@ interface ReviewPropertyCard {
                           onClick={() =>
                             setIsPropertyDropdownOpen(!isPropertyDropdownOpen)
                           }
-                          className="bg-white border border-[#ebebeb] flex h-[33px] w-[36px] items-center justify-center rounded-[10px] shadow-[0px_1px_2px_0px_rgba(10,13,20,0.03)] cursor-pointer hover:bg-gray-50 transition-colors"
+                          className="bg-white border border-[#ebebeb] flex h-[26px] w-[28px] items-center justify-center rounded-[6px] shadow-2xs cursor-pointer hover:bg-gray-50 transition-colors"
                           title="Switch Property"
                         >
                           <img
                             src="/images/review/5d15e.svg"
                             alt=""
-                            className="w-[14px] h-[7px]"
+                            className="w-[12px] h-[6px]"
                           />
                         </button>
 
@@ -2084,91 +4269,68 @@ interface ReviewPropertyCard {
                       </div>
 
                       {/* Investment Property | House */}
-                      <p className="font-['Poppins',sans-serif] font-semibold text-[#1a1c1e] text-[12px] tracking-[-0.24px]">
+                      <p className="font-['Poppins',sans-serif] font-medium text-[#64748B] text-[11px] tracking-[-0.2px]">
                         {currentProperty.subtitle}
                       </p>
 
-                      {/* 4 Feature Columns (Icon + Number on top, Label below) */}
-                      <div className="flex flex-wrap items-center gap-[36px] mt-0.5">
-                        <div className="flex flex-col gap-[4px] items-start">
-                          <div className="flex gap-[6.5px] items-center">
-                            <img
-                              src="/images/review/f4098.svg"
-                              alt=""
-                              className="size-[19.68px]"
-                            />
-                            <span className="font-['Inter',sans-serif] font-medium text-[#1a1c1e] text-[13.12px]">
-                              {currentProperty.beds}
-                            </span>
-                          </div>
-                          <span className="font-medium text-[#1a1c1e] text-[11.48px]">
-                            Bedrooms
+                      {/* 4 Feature Columns */}
+                      <div className="flex flex-wrap items-center gap-[18px] sm:gap-[24px] mt-0.5">
+                        <div className="flex items-center gap-1.5">
+                          <img
+                            src="/images/review/f4098.svg"
+                            alt=""
+                            className="size-[15px]"
+                          />
+                          <span className="font-medium text-[#1a1c1e] text-[11.5px]">
+                            {currentProperty.beds} Beds
                           </span>
                         </div>
-
-                        <div className="flex flex-col gap-[4px] items-start">
-                          <div className="flex gap-[6.5px] items-center">
-                            <img
-                              src="/images/review/70fd5.svg"
-                              alt=""
-                              className="size-[19.68px]"
-                            />
-                            <span className="font-['Inter',sans-serif] font-medium text-[#1a1c1e] text-[13.12px]">
-                              {currentProperty.baths}
-                            </span>
-                          </div>
-                          <span className="font-medium text-[#1a1c1e] text-[11.48px]">
-                            Bathrooms
+                        <div className="flex items-center gap-1.5">
+                          <img
+                            src="/images/review/70fd5.svg"
+                            alt=""
+                            className="size-[15px]"
+                          />
+                          <span className="font-medium text-[#1a1c1e] text-[11.5px]">
+                            {currentProperty.baths} Baths
                           </span>
                         </div>
-
-                        <div className="flex flex-col gap-[4px] items-start">
-                          <div className="flex gap-[6.5px] items-center">
-                            <img
-                              src="/images/review/08785.svg"
-                              alt=""
-                              className="size-[19.68px]"
-                            />
-                            <span className="font-['Inter',sans-serif] font-medium text-[#1a1c1e] text-[13.12px]">
-                              {currentProperty.area}
-                            </span>
-                          </div>
-                          <span className="font-medium text-[#1a1c1e] text-[11.48px]">
-                            Total area
+                        <div className="flex items-center gap-1.5">
+                          <img
+                            src="/images/review/08785.svg"
+                            alt=""
+                            className="size-[15px]"
+                          />
+                          <span className="font-medium text-[#1a1c1e] text-[11.5px]">
+                            {currentProperty.area}
                           </span>
                         </div>
-
-                        <div className="flex flex-col gap-[4px] items-start">
-                          <div className="flex gap-[6.5px] items-center">
-                            <img
-                              src="/images/review/a544d.svg"
-                              alt=""
-                              className="size-[19.68px]"
-                            />
-                            <span className="font-['Inter',sans-serif] font-medium text-[#1a1c1e] text-[13.12px]">
-                              {currentProperty.garages}
-                            </span>
-                          </div>
-                          <span className="font-medium text-[#1a1c1e] text-[11.48px]">
-                            Garages
+                        <div className="flex items-center gap-1.5">
+                          <img
+                            src="/images/review/a544d.svg"
+                            alt=""
+                            className="size-[15px]"
+                          />
+                          <span className="font-medium text-[#1a1c1e] text-[11.5px]">
+                            {currentProperty.garages} Garages
                           </span>
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Right: Purchase Details & Ownership (1044:9713) */}
-                  <div className="flex items-center justify-end gap-[48px] sm:gap-[62px]">
-                    <div className="font-medium leading-[20px] text-[#1a1c1e] text-[14px] text-right whitespace-nowrap">
-                      <p>Purchase Details:</p>
+                  {/* Right: Purchase Details & Ownership */}
+                  <div className="flex items-center justify-end gap-[24px] sm:gap-[36px] text-right">
+                    <div className="font-medium leading-[16px] text-[#1a1c1e] text-[12px] whitespace-nowrap">
+                      <p className="text-[#8C9BA8] text-[11px]">Purchase Details:</p>
                       <p>Price: {currentProperty.purchasePrice}</p>
-                      <p>Purchase Date: {currentProperty.purchaseDate}</p>
+                      <p className="text-[#8C9BA8]">{currentProperty.purchaseDate}</p>
                     </div>
 
-                    <div className="h-[56px] w-[1px] bg-[#1a1c1e]/20 shrink-0" />
+                    <div className="h-[36px] w-[1px] bg-[#E2E8F0] shrink-0" />
 
-                    <div className="font-medium leading-[20px] text-[#1a1c1e] text-[14px] text-right whitespace-nowrap">
-                      <p>Ownership:</p>
+                    <div className="font-medium leading-[16px] text-[#1a1c1e] text-[12px] whitespace-nowrap">
+                      <p className="text-[#8C9BA8] text-[11px]">Ownership:</p>
                       {currentProperty.owners.map((line) => (
                         <p key={line}>{line}</p>
                       ))}
@@ -2177,76 +4339,69 @@ interface ReviewPropertyCard {
                 </div>
               </div>
 
-              {/* Portfolio Summary (Balance Sheet) — Section Title + 5 #f6f9fb Cards directly on page (1044:9376) */}
-              <div className="pt-2">
-                <p className="font-['Poppins',sans-serif] font-medium leading-[1.4] text-[#0e2841] text-[16px] tracking-[-0.32px] mb-3">
-                  Portfolio Summary (Balance Sheet)
-                </p>
+              {/* Portfolio Summary (Balance Sheet) — 5 Clickable Metric Cards directly on page */}
+              <div className="pt-0.5">
+                <div className="flex items-center justify-between mb-1.5">
+                  <p className="font-['Poppins',sans-serif] font-semibold text-[#0e2841] text-[14px] tracking-[-0.2px]">
+                    Portfolio Summary (Balance Sheet)
+                  </p>
+                  <span className="text-[11.5px] text-[#8C9BA8]">
+                    Click a card to filter charts &amp; recommendations
+                  </span>
+                </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-[14px]">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
                   {renderMetricCard(
                     "Property Value",
                     currentProperty.propertyValue,
                     "12.4% vs FY2025",
-                    "/images/review/90cea.svg"
+                    "/images/review/90cea.svg",
+                    () => setSelectedMetric("Property Value"),
+                    selectedMetric === "Property Value"
                   )}
                   {renderMetricCard(
                     "Total Loans",
                     currentProperty.totalLoans,
                     "12.4% vs FY2025",
-                    "/images/review/89393.svg"
+                    "/images/review/89393.svg",
+                    () => setSelectedMetric("Total Loans"),
+                    selectedMetric === "Total Loans"
                   )}
                   {renderMetricCard(
                     "Total Equity",
                     currentProperty.totalEquity,
                     "12.4% vs FY2025",
-                    "/images/review/38829.svg"
+                    "/images/review/38829.svg",
+                    () => setSelectedMetric("Total Equity"),
+                    selectedMetric === "Total Equity"
                   )}
                   {renderMetricCard(
                     "Total Property Return",
                     currentProperty.totalReturn,
                     "12.4% vs FY2025",
-                    "/images/review/61b85.svg"
+                    "/images/review/61b85.svg",
+                    () => setSelectedMetric("Total Property Return"),
+                    selectedMetric === "Total Property Return"
                   )}
                   {renderMetricCard(
                     "LVR (Loan-to-Value Ratio)",
                     currentProperty.lvr,
                     "12.4% vs FY2025",
-                    "/images/review/30184.svg"
+                    "/images/review/30184.svg",
+                    () => setSelectedMetric("LVR (Loan-to-Value Ratio)"),
+                    selectedMetric === "LVR (Loan-to-Value Ratio)"
                   )}
                 </div>
               </div>
 
-              {/* Bottom 2 Charts (1044:9551) */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-[24px] pt-2">
-                {renderNetYieldChart("Net Yield History & Trend")}
-                {renderBenchmarkBarChart("Benchmark comparison")}
+              {/* 2 Charts — Interactive and Metric-reactive */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5 pt-0.5">
+                {renderNetYieldChart()}
+                {renderBenchmarkBarChart()}
               </div>
 
-              {/* Bottom-Right 3 Dark Navy Action Buttons (1044:9650) */}
-              <div className="flex flex-wrap items-center justify-end gap-[13px] pt-3">
-                <button
-                  type="button"
-                  onClick={() => setPropertySubView("cash-management")}
-                  className="bg-[#0e2841] hover:bg-[#163859] text-white h-[48px] w-[177px] rounded-[8px] text-[14px] font-['Poppins',sans-serif] font-medium flex items-center justify-center transition-colors cursor-pointer"
-                >
-                  Cash Management
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPropertySubView("capital-management")}
-                  className="bg-[#0e2841] hover:bg-[#163859] text-white h-[48px] w-[177px] rounded-[8px] text-[14px] font-['Poppins',sans-serif] font-medium flex items-center justify-center transition-colors cursor-pointer"
-                >
-                  Capital Management
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsAddInsightOpen(true)}
-                  className="bg-[#0e2841] hover:bg-[#163859] text-white h-[48px] w-[177px] rounded-[8px] text-[14px] font-['Poppins',sans-serif] font-medium flex items-center justify-center transition-colors cursor-pointer"
-                >
-                  + Add Insight
-                </button>
-              </div>
+              {/* Bottom Insights & Recommendations Carousel — Metric Reactive & Scrollable */}
+              {renderInsightsCarousel(selectedMetric, currentProperty?.address)}
             </>
           )}
 
@@ -2408,13 +4563,22 @@ interface ReviewPropertyCard {
                 >
                   Back
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setIsAddInsightOpen(true)}
-                  className="bg-[#0e2841] hover:bg-[#163859] text-white h-[40px] w-[177px] rounded-[8px] text-[14px] font-medium flex items-center justify-center transition-colors cursor-pointer"
-                >
-                  + Add Insight
-                </button>
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openAddInsightModal(
+                        currentProperty?.address,
+                        cashSubTab === "operational-efficiency"
+                          ? "Operating Expenses"
+                          : "Rental Income"
+                      )
+                    }
+                    className="bg-[#0e2841] hover:bg-[#163859] text-white h-[40px] w-[177px] rounded-[8px] text-[14px] font-medium flex items-center justify-center transition-colors cursor-pointer"
+                  >
+                    + Add Insight
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -2576,13 +4740,22 @@ interface ReviewPropertyCard {
                 >
                   Back
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setIsAddInsightOpen(true)}
-                  className="bg-[#0e2841] hover:bg-[#163859] text-white h-[40px] w-[177px] rounded-[8px] text-[14px] font-medium flex items-center justify-center transition-colors cursor-pointer"
-                >
-                  + Add Insight
-                </button>
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openAddInsightModal(
+                        currentProperty?.address,
+                        capitalSubTab === "debt-management"
+                          ? "Debt & Refinancing"
+                          : "Capital Growth"
+                      )
+                    }
+                    className="bg-[#0e2841] hover:bg-[#163859] text-white h-[40px] w-[177px] rounded-[8px] text-[14px] font-medium flex items-center justify-center transition-colors cursor-pointer"
+                  >
+                    + Add Insight
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -3090,13 +5263,17 @@ interface ReviewPropertyCard {
                 <span className="text-[12.5px] text-[#64748B]">
                   Based on {forecastHorizon}-year compounding model from FY2026
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setIsAddInsightOpen(true)}
-                  className="bg-[#0E2841] hover:bg-[#163859] text-white px-4 py-2 rounded-[6px] text-[13px] font-medium transition-colors cursor-pointer"
-                >
-                  + Add Insight
-                </button>
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openAddInsightModal("Portfolio-Wide", "Capital Growth")
+                    }
+                    className="bg-[#0E2841] hover:bg-[#163859] text-white px-4 py-2 rounded-[6px] text-[13px] font-medium transition-colors cursor-pointer"
+                  >
+                    + Add Insight
+                  </button>
+                )}
               </div>
             </div>
 
@@ -3212,353 +5389,752 @@ interface ReviewPropertyCard {
       )}
 
       {/* ================================================================= */}
-      {/* TAB 5: PORTFOLIO MANAGEMENT INSIGHTS (Figma 555:13584 & 852:19901)*/}
+      {/* TAB 5: PORTFOLIO MANAGEMENT INSIGHTS                              */}
       {/* ================================================================= */}
       {activeTab === "insights" && (
         <div className="space-y-6 pt-2">
-          {/* Card 1: Property Insights & Recommendations Table (555:13584) */}
+          {/* Card: Property Insights & Recommendations Table */}
           <div className="bg-white rounded-[12px] p-[24px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)]">
-            <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-              <h2 className="text-[18px] font-bold text-[#0e2841]">
-                Property Insights &amp; Recommendations (
-                {filteredInsights.length})
-              </h2>
+            {/* Table Header & Filters Toolbar */}
+            <div className="flex flex-wrap items-center justify-between gap-y-4 gap-x-6 mb-6">
+              {/* Left: Section Title */}
+              <div className="flex items-center gap-3 shrink-0">
+                <h2 className="text-[18px] font-bold text-[#0e2841] whitespace-nowrap">
+                  Property Insights &amp; Recommendations (
+                  {filteredInsights.length})
+                </h2>
+                {(propertyFilter !== "All" ||
+                  yearFilter !== "All" ||
+                  priorityFilter !== "All") && (
+                  <span className="text-[11.5px] font-medium text-[#64748B] bg-[#F1F5F9] px-2 py-0.5 rounded-full whitespace-nowrap">
+                    Filtered of {insights.length} total
+                  </span>
+                )}
+              </div>
 
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-[13px] text-[#6b6b6b]">Filter by:</span>
-                  <div className="bg-[#f2f1f2] rounded-[8px] p-[4px] inline-flex items-center gap-1">
-                    {(["All", "High", "Medium", "Low"] as const).map((prio) => {
-                      const isActive = priorityFilter === prio;
+              {/* Center: Dedicated prominent "Filter by Property" control */}
+              <div className="flex items-center gap-2 bg-[#F8FAFC] border border-[#E2E8F0] px-3 py-1.5 rounded-[10px] shrink-0">
+                <span className="text-[13px] font-bold text-[#0e2841] whitespace-nowrap flex items-center gap-1.5">
+                  <Building2 className="w-4 h-4 text-[#0e2841]" />
+                  Filter by Property:
+                </span>
+                <div className="relative">
+                  <select
+                    value={propertyFilter}
+                    onChange={(e) => setPropertyFilter(e.target.value)}
+                    className={`h-[32px] pl-2.5 pr-7 text-[12.5px] rounded-[6px] border font-medium cursor-pointer transition-colors appearance-none focus:outline-none focus:ring-2 focus:ring-[#0e2841]/20 ${
+                      propertyFilter !== "All"
+                        ? "bg-[#0e2841] text-white border-[#0e2841] font-semibold"
+                        : "bg-white border-[#CBD5E1] text-[#0e2841] hover:border-[#94A3B8]"
+                    }`}
+                  >
+                    <option value="All" className="bg-white text-[#0e2841]">
+                      All Properties ({insights.length})
+                    </option>
+                    {availableProperties.map((p) => {
+                      const count = insights.filter(
+                        (i) => i.property === p
+                      ).length;
                       return (
-                        <button
-                          key={prio}
-                          type="button"
-                          onClick={() => setPriorityFilter(prio)}
-                          className={`h-[28px] px-[12px] text-[12px] transition-all cursor-pointer ${
-                            isActive
-                              ? "bg-white rounded-[4px] font-semibold text-[#1a1c1e] shadow-2xs"
-                              : "bg-transparent rounded-[5px] font-medium text-[#a0a0a0] hover:text-[#1a1c1e]"
-                          }`}
+                        <option
+                          key={p}
+                          value={p}
+                          className="bg-white text-[#0e2841]"
                         >
-                          {prio === "All"
-                            ? `All Priorities (${insights.length})`
-                            : prio}
-                        </button>
+                          {p} {count > 0 ? `(${count})` : ""}
+                        </option>
                       );
                     })}
+                  </select>
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none ${
+                      propertyFilter !== "All"
+                        ? "text-white"
+                        : "text-[#64748B]"
+                    }`}
+                  />
+                </div>
+
+                {/* Companion Year filter */}
+                <div className="relative">
+                  <select
+                    value={yearFilter}
+                    onChange={(e) => setYearFilter(e.target.value)}
+                    title="Filter by Financial Year"
+                    className={`h-[32px] pl-2 pr-6 text-[12px] rounded-[6px] border font-medium cursor-pointer transition-colors appearance-none focus:outline-none focus:ring-2 focus:ring-[#0e2841]/20 ${
+                      yearFilter !== "All"
+                        ? "bg-[#0e2841] text-white border-[#0e2841] font-semibold"
+                        : "bg-white border-[#CBD5E1] text-[#64748B] hover:border-[#94A3B8]"
+                    }`}
+                  >
+                    <option value="All" className="bg-white text-[#0e2841]">
+                      All FY
+                    </option>
+                    {availableYears.map((fy) => {
+                      const count = insights.filter(
+                        (i) => String(i.fy) === String(fy)
+                      ).length;
+                      return (
+                        <option
+                          key={fy}
+                          value={fy}
+                          className="bg-white text-[#0e2841]"
+                        >
+                          FY{fy} {count > 0 ? `(${count})` : ""}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <ChevronDown
+                    className={`w-3 h-3 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none ${
+                      yearFilter !== "All" ? "text-white" : "text-[#64748B]"
+                    }`}
+                  />
+                </div>
+
+                {/* Quick clear button if filtered */}
+                {(propertyFilter !== "All" || yearFilter !== "All") && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPropertyFilter("All");
+                      setYearFilter("All");
+                    }}
+                    className="p-1 text-[#64748B] hover:text-[#DC2626] rounded-[4px] hover:bg-white transition-colors cursor-pointer"
+                    title="Clear property & year filters"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Right: Priority Pills & Add Insight Button */}
+              <div className="flex flex-wrap items-center gap-3 shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-[12.5px] text-[#8C9BA8] whitespace-nowrap">
+                    Filter by:
+                  </span>
+                  <div className="bg-[#f2f1f2] rounded-[8px] p-[3px] inline-flex items-center gap-1">
+                    {(["All", "High", "Medium", "Low"] as const).map(
+                      (prio) => {
+                        const isActive = priorityFilter === prio;
+                        const count =
+                          prio === "All"
+                            ? priorityCounts.all
+                            : prio === "High"
+                            ? priorityCounts.high
+                            : prio === "Medium"
+                            ? priorityCounts.medium
+                            : priorityCounts.low;
+                        return (
+                          <button
+                            key={prio}
+                            type="button"
+                            onClick={() => setPriorityFilter(prio)}
+                            className={`h-[28px] px-[10px] text-[12px] transition-all cursor-pointer whitespace-nowrap ${
+                              isActive
+                                ? "bg-white rounded-[5px] font-semibold text-[#1a1c1e] shadow-2xs"
+                                : "bg-transparent rounded-[5px] font-medium text-[#64748B] hover:text-[#1a1c1e]"
+                            }`}
+                          >
+                            {prio === "All"
+                              ? `All Priorities (${count})`
+                              : `${prio} (${count})`}
+                          </button>
+                        );
+                      }
+                    )}
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setIsAddInsightOpen(true)}
-                  className="bg-[#0e2841] hover:bg-[#163859] text-white h-[36px] px-[18px] rounded-[8px] text-[13px] font-medium flex items-center justify-center transition-colors cursor-pointer"
-                >
-                  + Add Insight
-                </button>
+                {/* Reset Filters button if any filter is active */}
+                {(propertyFilter !== "All" ||
+                  yearFilter !== "All" ||
+                  priorityFilter !== "All") && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPropertyFilter("All");
+                      setYearFilter("All");
+                      setPriorityFilter("All");
+                    }}
+                    className="text-[12px] font-medium text-[#DC2626] hover:underline cursor-pointer px-1 whitespace-nowrap"
+                    title="Reset all filters"
+                  >
+                    Reset
+                  </button>
+                )}
+
+                {/* Add Insight Button */}
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => openAddInsightModal()}
+                    className="bg-[#0e2841] hover:bg-[#163859] text-white h-[36px] px-[16px] rounded-[8px] text-[13px] font-medium flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs ml-auto xl:ml-0 whitespace-nowrap"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ Add Insight</span>
+                  </button>
+                )}
               </div>
             </div>
 
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse min-w-[1100px]">
                 <thead>
-                  <tr className="border-b border-[#F0F1F3] text-[12px] font-medium text-[#8C9BA8]">
-                    <th className="py-3.5 px-2.5">
-                      <div className="flex items-center gap-1">
-                        <span>FY</span>
-                        <ChevronDown className="w-3.5 h-3.5" />
+                  <tr className="border-b border-[#F0F1F3] text-[12px] font-semibold text-[#8C9BA8] uppercase tracking-wider">
+                    <th className="py-3.5 px-3">
+                      <span className="inline-flex items-center gap-1 select-none">
+                        FY <ChevronDown className="w-3 h-3 text-[#A0AEC0]" />
+                      </span>
+                    </th>
+                    <th className="py-3.5 px-3">
+                      <span className="inline-flex items-center gap-1 select-none">
+                        Screen <ChevronDown className="w-3 h-3 text-[#A0AEC0]" />
+                      </span>
+                    </th>
+                    <th className="py-3.5 px-3 relative">
+                      <div className="relative inline-block">
+                        <button
+                          type="button"
+                          onClick={() => setIsPropertyHeaderMenuOpen((prev) => !prev)}
+                          className="inline-flex items-center gap-1 select-none text-[#0e2841] font-bold hover:text-[#163859] transition-colors cursor-pointer"
+                          title="Click to filter by property"
+                        >
+                          <span>Property</span>
+                          <ChevronDown className="w-3 h-3 text-[#0e2841]" />
+                        </button>
+                        {isPropertyHeaderMenuOpen && (
+                          <>
+                            <div
+                              className="fixed inset-0 z-20"
+                              onClick={() => setIsPropertyHeaderMenuOpen(false)}
+                            />
+                            <div className="absolute left-0 top-full mt-1.5 w-[240px] bg-white rounded-[10px] shadow-2xl border border-[#CBD5E1] p-2 z-30 normal-case tracking-normal">
+                              <div className="text-[11px] font-bold text-[#64748B] uppercase px-2.5 py-1 mb-1 border-b border-[#F1F5F9] flex items-center justify-between">
+                                <span>Filter by Property</span>
+                                {propertyFilter !== "All" && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setPropertyFilter("All");
+                                      setIsPropertyHeaderMenuOpen(false);
+                                    }}
+                                    className="text-[10.5px] text-[#DC2626] hover:underline cursor-pointer lowercase"
+                                  >
+                                    clear
+                                  </button>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPropertyFilter("All");
+                                  setIsPropertyHeaderMenuOpen(false);
+                                }}
+                                className={`w-full text-left px-2.5 py-2 rounded-[6px] text-[12.5px] font-medium flex items-center justify-between transition-colors ${
+                                  propertyFilter === "All"
+                                    ? "bg-[#0e2841] text-white font-semibold"
+                                    : "text-[#1A1C1E] hover:bg-[#F8FAFC]"
+                                }`}
+                              >
+                                <span>All Properties</span>
+                                <span
+                                  className={`text-[11px] ${
+                                    propertyFilter === "All"
+                                      ? "text-white/80"
+                                      : "text-[#64748B]"
+                                  }`}
+                                >
+                                  ({insights.length})
+                                </span>
+                              </button>
+                              {availableProperties.map((p) => {
+                                const count = insights.filter(
+                                  (i) => i.property === p
+                                ).length;
+                                const isSelected = propertyFilter === p;
+                                return (
+                                  <button
+                                    key={p}
+                                    type="button"
+                                    onClick={() => {
+                                      setPropertyFilter(p);
+                                      setIsPropertyHeaderMenuOpen(false);
+                                    }}
+                                    className={`w-full text-left px-2.5 py-2 rounded-[6px] text-[12.5px] font-medium flex items-center justify-between transition-colors mt-0.5 ${
+                                      isSelected
+                                        ? "bg-[#0e2841] text-white font-semibold"
+                                        : "text-[#1A1C1E] hover:bg-[#F8FAFC]"
+                                    }`}
+                                  >
+                                    <span className="truncate pr-2">{p}</span>
+                                    {count > 0 && (
+                                      <span
+                                        className={`text-[11px] shrink-0 ${
+                                          isSelected
+                                            ? "text-white/80"
+                                            : "text-[#64748B]"
+                                        }`}
+                                      >
+                                        ({count})
+                                      </span>
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </>
+                        )}
                       </div>
                     </th>
-                    <th className="py-3.5 px-2.5">
-                      <div className="flex items-center gap-1">
-                        <span>Screen</span>
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </div>
+                    <th className="py-3.5 px-3">
+                      <span className="inline-flex items-center gap-1 select-none">
+                        Maintenance insight <ChevronDown className="w-3 h-3 text-[#A0AEC0]" />
+                      </span>
                     </th>
-                    <th className="py-3.5 px-2.5">
-                      <div className="flex items-center gap-1">
-                        <span>Property</span>
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </div>
+                    <th className="py-3.5 px-3">
+                      <span className="inline-flex items-center gap-1 select-none">
+                        Metric <ChevronDown className="w-3 h-3 text-[#A0AEC0]" />
+                      </span>
                     </th>
-                    <th className="py-3.5 px-2.5">
-                      <div className="flex items-center gap-1">
-                        <span>Maintenance insight</span>
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </div>
+                    <th className="py-3.5 px-3">
+                      <span className="inline-flex items-center gap-1 select-none">
+                        Heading <ChevronDown className="w-3 h-3 text-[#A0AEC0]" />
+                      </span>
                     </th>
-                    <th className="py-3.5 px-2.5">
-                      <div className="flex items-center gap-1">
-                        <span>Metric</span>
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </div>
+                    <th className="py-3.5 px-3">
+                      <span className="inline-flex items-center gap-1 select-none">
+                        Insight <ChevronDown className="w-3 h-3 text-[#A0AEC0]" />
+                      </span>
                     </th>
-                    <th className="py-3.5 px-2.5">
-                      <div className="flex items-center gap-1">
-                        <span>Heading</span>
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </div>
+                    <th className="py-3.5 px-3">
+                      <span className="inline-flex items-center gap-1 select-none">
+                        Recommendation <ChevronDown className="w-3 h-3 text-[#A0AEC0]" />
+                      </span>
                     </th>
-                    <th className="py-3.5 px-2.5">
-                      <div className="flex items-center gap-1">
-                        <span>Insight</span>
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </div>
+                    <th className="py-3.5 px-3">
+                      <span className="inline-flex items-center gap-1 select-none text-[#8C9BA8] font-semibold uppercase tracking-wider text-[12px]">
+                        PRIORITY <span className="text-[#1A1C1E] text-[8px] leading-none">▼</span>
+                      </span>
                     </th>
-                    <th className="py-3.5 px-2.5">
-                      <div className="flex items-center gap-1">
-                        <span>RECOMMENDATION</span>
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </div>
+                    <th className="py-3.5 px-3">
+                      <span className="inline-flex items-center gap-1 select-none">
+                        Owner <ChevronDown className="w-3 h-3 text-[#A0AEC0]" />
+                      </span>
                     </th>
-                    <th className="py-3.5 px-2.5">
-                      <div className="flex items-center gap-1">
-                        <span>PRIORITY</span>
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </div>
+                    <th className="py-3.5 px-3">
+                      <span className="inline-flex items-center gap-1 select-none">
+                        Action <ChevronDown className="w-3 h-3 text-[#A0AEC0]" />
+                      </span>
                     </th>
-                    <th className="py-3.5 px-2.5">
-                      <div className="flex items-center gap-1">
-                        <span>Owner</span>
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </div>
-                    </th>
-                    <th className="py-3.5 px-2.5">
-                      <div className="flex items-center gap-1">
-                        <span>Action</span>
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </div>
-                    </th>
-                    <th className="py-3.5 px-2.5">
-                      <div className="flex items-center gap-1">
-                        <span>Notes</span>
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </div>
-                    </th>
+                    <th className="py-3.5 px-3">Notes</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#F6F7F9] text-[13px] text-[#1A1C1E]">
-                  {filteredInsights.map((item) => (
-                    <tr
-                      key={item.id}
-                      className="hover:bg-[#FBFBFC] transition-colors"
-                    >
-                      <td className="py-4 px-2.5">{item.fy}</td>
-                      <td className="py-4 px-2.5 whitespace-nowrap">
-                        {item.screen}
-                      </td>
-                      <td className="py-4 px-2.5 font-medium whitespace-nowrap">
-                        {item.property}
-                      </td>
-                      <td className="py-4 px-2.5 whitespace-nowrap">
-                        {item.maintenanceInsight}
-                      </td>
-                      <td className="py-4 px-2.5 whitespace-nowrap">
-                        {item.metric}
-                      </td>
-                      <td className="py-4 px-2.5 font-semibold text-[#0e2841] whitespace-nowrap">
-                        {item.heading}
-                      </td>
-                      <td className="py-4 px-2.5 max-w-[200px] truncate">
-                        {item.insight}
-                      </td>
-                      <td className="py-4 px-2.5 max-w-[210px] truncate">
-                        {item.recommendation}
-                      </td>
-                      <td className="py-4 px-2.5 font-medium">
-                        {item.priority}
-                      </td>
-                      <td className="py-4 px-2.5">{item.owner}</td>
-                      <td className="py-4 px-2.5 whitespace-nowrap">
-                        {item.action}
-                      </td>
-                      <td className="py-4 px-2.5 text-[#6b6b6b] whitespace-nowrap">
-                        {item.notes}
+                  {filteredInsights.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={12}
+                        className="py-12 text-center text-[#64748B]"
+                      >
+                        <p className="text-[15px] font-medium text-[#0e2841] mb-1">
+                          No insights found matching the selected filters
+                        </p>
+                        <p className="text-[13px] text-[#64748B] mb-4">
+                          Try adjusting your property, year, or priority
+                          filters, or add a new insight.
+                        </p>
+                        <div className="flex items-center justify-center gap-3">
+                          {(propertyFilter !== "All" ||
+                            yearFilter !== "All" ||
+                            priorityFilter !== "All") && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPropertyFilter("All");
+                                setYearFilter("All");
+                                setPriorityFilter("All");
+                              }}
+                              className="text-[12.5px] font-medium text-[#0e2841] border border-[#CBD5E1] px-3.5 py-1.5 rounded-[8px] hover:bg-[#F1F5F9] transition-colors cursor-pointer"
+                            >
+                              Reset Filters
+                            </button>
+                          )}
+                          {canEdit && (
+                            <button
+                              type="button"
+                              onClick={() => openAddInsightModal()}
+                              className="bg-[#0e2841] hover:bg-[#163859] text-white px-3.5 py-1.5 rounded-[8px] text-[12.5px] font-medium transition-colors cursor-pointer"
+                            >
+                              + Add Insight
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    filteredInsights.map((item) => (
+                      <tr
+                        key={item.id}
+                        onClick={() => canEdit && handleSelectRow(item)}
+                        className={`transition-colors ${
+                          canEdit
+                            ? "hover:bg-[#F4F7FA] cursor-pointer group"
+                            : "hover:bg-[#F8FAFC]"
+                        }`}
+                        title={
+                          canEdit
+                            ? "Click to review / edit this insight"
+                            : undefined
+                        }
+                      >
+                        <td className="py-3.5 px-3 font-medium text-[#0e2841] whitespace-nowrap">
+                          {item.fy}
+                        </td>
+                        <td className="py-3.5 px-3 whitespace-nowrap text-[#475569]">
+                          {item.screen}
+                        </td>
+                        <td className="py-3.5 px-3 font-semibold text-[#0e2841] whitespace-nowrap">
+                          {item.property}
+                        </td>
+                        <td className="py-3.5 px-3 whitespace-nowrap text-[#475569]">
+                          {item.maintenanceInsight}
+                        </td>
+                        <td className="py-3.5 px-3 whitespace-nowrap text-[#475569]">
+                          {item.metric}
+                        </td>
+                        <td className="py-3.5 px-3 font-semibold text-[#0e2841] whitespace-nowrap group-hover:text-[#163859] group-hover:underline">
+                          {item.heading}
+                        </td>
+                        <td
+                          className="py-3.5 px-3 max-w-[220px] truncate text-[#475569]"
+                          title={item.insight}
+                        >
+                          {item.insight}
+                        </td>
+                        <td
+                          className="py-3.5 px-3 max-w-[220px] truncate text-[#475569]"
+                          title={item.recommendation}
+                        >
+                          {item.recommendation}
+                        </td>
+                        <td className="py-3.5 px-3 font-semibold text-[#1A1C1E] whitespace-nowrap text-[13.5px]">
+                          {item.priority}
+                        </td>
+                        <td className="py-3.5 px-3 whitespace-nowrap text-[#475569]">
+                          {item.owner}
+                        </td>
+                        <td className="py-3.5 px-3 whitespace-nowrap text-[#475569]">
+                          {item.action}
+                        </td>
+                        <td className="py-3.5 px-3 text-[#8C9BA8] whitespace-nowrap">
+                          {item.notes}
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
-            </div>
-          </div>
-
-          {/* Priority Cards Breakdown (Figma 852:19901 / 853:20587) */}
-          <div className="space-y-5">
-            {/* High Priority Section */}
-            <div className="bg-white rounded-[12px] p-[24px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)]">
-              <p className="text-[13px] font-semibold text-[#DC2626] mb-2">
-                High Priority
-              </p>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-[15px] font-semibold text-[#0e2841] uppercase tracking-wide">
-                  PROPERTY ANALYSIS – INSIGHTS &amp; RECOMMENDATIONS
-                </h3>
-              </div>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <div className="bg-[#f6f9fb] rounded-[10px] p-5 text-[13.5px] leading-relaxed text-[#434750] space-y-1.5">
-                  <p className="font-semibold text-[#0e2841] text-[14.5px]">
-                    Rental Income Review
-                  </p>
-                  <p>
-                    <span className="font-medium text-[#1a1c1e]">
-                      Observation:
-                    </span>{" "}
-                    Current rental income may differ from the local market rent
-                    benchmark.
-                  </p>
-                  <p>
-                    <span className="font-medium text-[#1a1c1e]">
-                      Recommendation:
-                    </span>{" "}
-                    Review the current rent against the relevant market
-                    benchmark.
-                  </p>
-                </div>
-
-                <div className="bg-[#f6f9fb] rounded-[10px] p-5 text-[13.5px] leading-relaxed text-[#434750] space-y-1.5">
-                  <p className="font-semibold text-[#0e2841] text-[14.5px]">
-                    Property Valuation Review
-                  </p>
-                  <p>
-                    <span className="font-medium text-[#1a1c1e]">
-                      Observation:
-                    </span>{" "}
-                    The property&apos;s current valuation should be reviewed
-                    against its previous valuation.
-                  </p>
-                  <p>
-                    <span className="font-medium text-[#1a1c1e]">
-                      Recommendation:
-                    </span>{" "}
-                    Verify the latest valuation and record the review date and
-                    source.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Medium Priority Section */}
-            <div className="bg-white rounded-[12px] p-[24px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)]">
-              <p className="text-[13px] font-semibold text-[#D97706] mb-2">
-                Medium Priority
-              </p>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-[15px] font-semibold text-[#0e2841] uppercase tracking-wide">
-                  PROPERTY ANALYSIS – INSIGHTS &amp; RECOMMENDATIONS
-                </h3>
-              </div>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <div className="bg-[#f6f9fb] rounded-[10px] p-5 text-[13.5px] leading-relaxed text-[#434750] space-y-1.5">
-                  <p className="font-semibold text-[#0e2841] text-[14.5px]">
-                    Reduce Operating Expenses
-                  </p>
-                  <p>
-                    <span className="font-medium text-[#1a1c1e]">
-                      Observation:
-                    </span>{" "}
-                    Property operating expenses should be reviewed against
-                    available records and relevant benchmarks.
-                  </p>
-                  <p>
-                    <span className="font-medium text-[#1a1c1e]">
-                      Recommendation:
-                    </span>{" "}
-                    Review insurance premiums, property management fees and
-                    maintenance costs for potential savings.
-                  </p>
-                </div>
-
-                <div className="bg-[#f6f9fb] rounded-[10px] p-5 text-[13.5px] leading-relaxed text-[#434750] space-y-1.5">
-                  <p className="font-semibold text-[#0e2841] text-[14.5px]">
-                    Rental Income &amp; Cash Flow
-                  </p>
-                  <p>
-                    <span className="font-medium text-[#1a1c1e]">
-                      Observation:
-                    </span>{" "}
-                    Rental income and property expenses determine the
-                    property&apos;s operating cash position.
-                  </p>
-                  <p>
-                    <span className="font-medium text-[#1a1c1e]">
-                      Recommendation:
-                    </span>{" "}
-                    Review rental income, vacancy periods and recurring expenses
-                    to identify possible cash-flow improvements.
-                  </p>
-                </div>
-              </div>
             </div>
           </div>
         </div>
       )}
 
       {/* ================================================================= */}
-      {/* MODAL: ADD INSIGHT & RECOMMENDATION FY2026 (Figma 537:6786)        */}
+      {/* MODAL: ADD / REVIEW INSIGHT & RECOMMENDATION                      */}
       {/* ================================================================= */}
       {isAddInsightOpen && (
-        <div className="fixed inset-0 z-50 bg-black/45 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-[16px] w-full max-w-[588px] p-6 sm:p-8 shadow-2xl relative my-8">
-            <button
-              type="button"
-              onClick={() => setIsAddInsightOpen(false)}
-              className="absolute top-6 right-6 w-[36px] h-[36px] rounded-full bg-[#0e2841] text-white flex items-center justify-center hover:bg-[#163859] transition-colors cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
+        <div className="fixed inset-0 z-50 bg-black/50 flex justify-center items-start sm:items-center p-2 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-[16px] w-full max-w-[620px] shadow-2xl relative my-auto flex flex-col max-h-[calc(100vh-2rem)] animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
+            {/* Header with Navigation Arrows to scroll forward and back across recorded insights */}
+            <div className="shrink-0 p-4 sm:p-5 pb-3 border-b border-[#F0F1F3] flex items-center justify-between bg-white">
+              {/* Left Arrow (Previous recorded insight) */}
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <button
+                  type="button"
+                  onClick={handlePrevInsight}
+                  disabled={!hasPrevInsight}
+                  className="w-[34px] h-[34px] rounded-full bg-[#f0f4f8] text-[#0e2841] hover:bg-[#e2eaf0] disabled:opacity-25 disabled:cursor-not-allowed flex items-center justify-center transition-colors cursor-pointer shadow-2xs"
+                  title={
+                    hasPrevInsight
+                      ? isNewInsightMode
+                        ? "Back to last recorded insight"
+                        : "Previous recorded insight"
+                      : "No previous insight"
+                  }
+                >
+                  <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+                </button>
+                {filteredInsights.length > 0 && (
+                  <span className="text-[11.5px] font-medium text-[#64748B] hidden sm:inline">
+                    {isNewInsightMode
+                      ? "New"
+                      : `${currentInsightIndex + 1}/${filteredInsights.length}`}
+                  </span>
+                )}
+              </div>
 
-            <h2 className="text-[20px] font-bold text-[#0e2841] font-['Poppins',sans-serif] text-center pr-8">
-              Add Insight &amp; Recommendation FY{reviewYear}
-            </h2>
+              {/* Center Title and Status Badge */}
+              <div className="text-center px-1">
+                <h2 className="text-[17px] sm:text-[19px] font-bold text-[#0e2841] font-['Poppins',sans-serif] leading-tight">
+                  {isNewInsightMode
+                    ? `Add Insight & Recommendation FY${newInsightFy || reviewYear}`
+                    : `Review Insight FY${
+                        filteredInsights[currentInsightIndex]?.fy ||
+                        newInsightFy ||
+                        reviewYear
+                      }`}
+                </h2>
+                <div className="flex items-center justify-center gap-2 mt-0.5">
+                  <span
+                    className={`text-[10.5px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                      isNewInsightMode
+                        ? "bg-[#EBF7EE] text-[#18794E]"
+                        : "bg-[#EEF4F9] text-[#0e2841]"
+                    }`}
+                  >
+                    {isNewInsightMode
+                      ? `New Insight (${filteredInsights.length} matching)`
+                      : `Insight ${currentInsightIndex + 1} of ${
+                          filteredInsights.length
+                        } matching`}
+                  </span>
+                  {!isNewInsightMode && (
+                    <button
+                      type="button"
+                      onClick={() => openAddInsightModal()}
+                      className="text-[11px] font-semibold text-[#0e2841] hover:underline cursor-pointer flex items-center gap-0.5"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Add New</span>
+                    </button>
+                  )}
+                </div>
+              </div>
 
+              {/* Right Arrow (Next recorded insight / New) & Close Button */}
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <button
+                  type="button"
+                  onClick={handleNextInsight}
+                  disabled={!hasNextInsight && !(!isNewInsightMode && currentInsightIndex === filteredInsights.length - 1)}
+                  className="w-[34px] h-[34px] rounded-full bg-[#f0f4f8] text-[#0e2841] hover:bg-[#e2eaf0] disabled:opacity-25 disabled:cursor-not-allowed flex items-center justify-center transition-colors cursor-pointer shadow-2xs"
+                  title={
+                    currentInsightIndex < filteredInsights.length - 1
+                      ? "Next recorded insight"
+                      : currentInsightIndex === filteredInsights.length - 1
+                      ? "Go to new insight form"
+                      : "At latest entry"
+                  }
+                >
+                  <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsAddInsightOpen(false)}
+                  className="w-[34px] h-[34px] rounded-full bg-[#0e2841] text-white flex items-center justify-center hover:bg-[#163859] transition-colors cursor-pointer shadow-2xs"
+                  title="Close"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* In-Modal Filter Bar: Filter what you scroll through in this popup */}
+            <div className="bg-[#F8FAFC] border-b border-[#E2E8F0] px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-2 text-[12px]">
+              <div className="flex items-center gap-1.5 font-medium text-[#475569]">
+                <Filter className="w-3.5 h-3.5 text-[#0e2841]" />
+                <span>Filter list:</span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Property Filter */}
+                <select
+                  value={propertyFilter}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setPropertyFilter(val);
+                    const nextList = insights.filter((i) => {
+                      if (priorityFilter !== "All" && i.priority !== priorityFilter)
+                        return false;
+                      if (val !== "All" && i.property !== val) return false;
+                      if (yearFilter !== "All" && String(i.fy) !== String(yearFilter))
+                        return false;
+                      return true;
+                    });
+                    if (nextList.length > 0) {
+                      loadInsightFromItem(nextList[0], 0);
+                    }
+                  }}
+                  className="h-[28px] px-2 rounded-[6px] bg-white border border-[#CBD5E1] text-[#0e2841] font-medium text-[12px] focus:outline-none cursor-pointer max-w-[140px] truncate"
+                  title="Filter insights by property"
+                >
+                  <option value="All">All Properties</option>
+                  {availableProperties.map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Year Filter */}
+                <select
+                  value={yearFilter}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setYearFilter(val);
+                    const nextList = insights.filter((i) => {
+                      if (priorityFilter !== "All" && i.priority !== priorityFilter)
+                        return false;
+                      if (propertyFilter !== "All" && i.property !== propertyFilter)
+                        return false;
+                      if (val !== "All" && String(i.fy) !== String(val))
+                        return false;
+                      return true;
+                    });
+                    if (nextList.length > 0) {
+                      loadInsightFromItem(nextList[0], 0);
+                    }
+                  }}
+                  className="h-[28px] px-2 rounded-[6px] bg-white border border-[#CBD5E1] text-[#0e2841] font-medium text-[12px] focus:outline-none cursor-pointer"
+                  title="Filter insights by financial year"
+                >
+                  <option value="All">All Years</option>
+                  {availableYears.map((fy) => (
+                    <option key={fy} value={fy}>
+                      FY{fy}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Priority Filter */}
+                <select
+                  value={priorityFilter}
+                  onChange={(e) => {
+                    const val = e.target.value as any;
+                    setPriorityFilter(val);
+                    const nextList = insights.filter((i) => {
+                      if (val !== "All" && i.priority !== val) return false;
+                      if (propertyFilter !== "All" && i.property !== propertyFilter)
+                        return false;
+                      if (yearFilter !== "All" && String(i.fy) !== String(yearFilter))
+                        return false;
+                      return true;
+                    });
+                    if (nextList.length > 0) {
+                      loadInsightFromItem(nextList[0], 0);
+                    }
+                  }}
+                  className="h-[28px] px-2 rounded-[6px] bg-white border border-[#CBD5E1] text-[#0e2841] font-medium text-[12px] focus:outline-none cursor-pointer"
+                  title="Filter insights by priority"
+                >
+                  <option value="All">All Priorities</option>
+                  <option value="High">High</option>
+                  <option value="Medium">Medium</option>
+                  <option value="Low">Low</option>
+                </select>
+
+                {(propertyFilter !== "All" ||
+                  yearFilter !== "All" ||
+                  priorityFilter !== "All") && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPropertyFilter("All");
+                      setYearFilter("All");
+                      setPriorityFilter("All");
+                      if (insights.length > 0) {
+                        loadInsightFromItem(insights[0], 0);
+                      }
+                    }}
+                    className="text-[11.5px] text-[#DC2626] hover:underline font-semibold cursor-pointer"
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Form wrapping body and sticky footer */}
             <form
+              id="insightForm"
               onSubmit={handleAddInsightSubmit}
-              className="mt-6 space-y-4 text-[13.5px]"
+              className="flex flex-col flex-1 overflow-hidden"
             >
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Scrollable Form Body */}
+              <div className="overflow-y-auto px-5 sm:px-6 py-4 space-y-3.5 text-[13px] flex-1">
+                {/* Top Row: Year, Property, Metric */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block font-medium text-[#1a1c1e] mb-1.5">
+                  <label className="block font-medium text-[#1a1c1e] mb-1 text-[12.5px]">
+                    Financial Year (FY)
+                  </label>
+                  <select
+                    value={newInsightFy}
+                    onChange={(e) => setNewInsightFy(e.target.value)}
+                    className="w-full h-[40px] px-3 rounded-[8px] bg-[#f6f9fb] border border-[#dce4e8] text-[#1a1c1e] text-[13px] focus:outline-none focus:border-[#0e2841] transition-colors cursor-pointer"
+                  >
+                    {availableYears.map((fy) => (
+                      <option key={fy} value={fy}>
+                        FY{fy}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-medium text-[#1a1c1e] mb-1 text-[12.5px]">
                     Select Property
                   </label>
                   <select
                     value={newInsightProperty}
                     onChange={(e) => setNewInsightProperty(e.target.value)}
-                    className="w-full h-[44px] px-3.5 rounded-[8px] bg-[#f6f9fb] border border-[#dce4e8] text-[#1a1c1e] focus:outline-none focus:border-[#0e2841]"
+                    className="w-full h-[40px] px-3 rounded-[8px] bg-[#f6f9fb] border border-[#dce4e8] text-[#1a1c1e] text-[13px] focus:outline-none focus:border-[#0e2841] transition-colors cursor-pointer"
                   >
-                    {propertiesList.map((p) => (
-                      <option key={p.id} value={p.address}>
-                        {p.address}
-                      </option>
-                    ))}
                     <option value="Portfolio-Wide">Portfolio-Wide</option>
+                    {propertiesList
+                      .filter((p) => p.id !== "empty-prop")
+                      .map((p) => (
+                        <option key={p.id} value={p.address}>
+                          {p.address}
+                        </option>
+                      ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block font-medium text-[#1a1c1e] mb-1.5">
+                  <label className="block font-medium text-[#1a1c1e] mb-1 text-[12.5px]">
                     Metric / Area
                   </label>
                   <select
                     value={newInsightMetric}
                     onChange={(e) => setNewInsightMetric(e.target.value)}
-                    className="w-full h-[44px] px-3.5 rounded-[8px] bg-[#f6f9fb] border border-[#dce4e8] text-[#1a1c1e] focus:outline-none focus:border-[#0e2841]"
+                    className="w-full h-[40px] px-3 rounded-[8px] bg-[#f6f9fb] border border-[#dce4e8] text-[#1a1c1e] text-[13px] focus:outline-none focus:border-[#0e2841] transition-colors cursor-pointer"
                   >
                     <option value="Rental Income">Rental Income</option>
+                    <option value="Rental Yield">Rental Yield</option>
                     <option value="Valuation">Valuation</option>
+                    <option value="Capital Growth">Capital Growth</option>
                     <option value="Operating Expenses">
                       Operating Expenses
                     </option>
                     <option value="Debt & Refinancing">
                       Debt &amp; Refinancing
                     </option>
-                    <option value="Capital Growth">Capital Growth</option>
+                    <option value="Cash Flow">Cash Flow</option>
+                    <option value="Equity & LVR">Equity &amp; LVR</option>
+                    <option value="Portfolio Performance">
+                      Portfolio Performance
+                    </option>
+                    <option value="Future Outlook">Future Outlook</option>
                   </select>
                 </div>
               </div>
 
               <div>
-                <label className="block font-medium text-[#1a1c1e] mb-1.5">
+                <label className="block font-medium text-[#1a1c1e] mb-1 text-[12.5px]">
                   Heading <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -3566,48 +6142,50 @@ interface ReviewPropertyCard {
                   required
                   value={newInsightHeading}
                   onChange={(e) => setNewInsightHeading(e.target.value)}
-                  placeholder="e.g. Rental Income Review"
-                  className="w-full h-[44px] px-3.5 rounded-[8px] bg-[#f6f9fb] border border-[#dce4e8] text-[#1a1c1e] focus:outline-none focus:border-[#0e2841]"
+                  placeholder={`e.g. ${
+                    newInsightMetric || "Rental Income"
+                  } Review`}
+                  className="w-full h-[40px] px-3 rounded-[8px] bg-[#f6f9fb] border border-[#dce4e8] text-[#1a1c1e] text-[13px] focus:outline-none focus:border-[#0e2841]"
                 />
               </div>
 
               <div>
-                <label className="block font-medium text-[#1a1c1e] mb-1.5">
+                <label className="block font-medium text-[#1a1c1e] mb-1 text-[12.5px]">
                   Observation / Insight
                 </label>
                 <textarea
-                  rows={3}
+                  rows={2}
                   value={newInsightObservation}
                   onChange={(e) => setNewInsightObservation(e.target.value)}
                   placeholder="Enter observation..."
-                  className="w-full p-3.5 rounded-[8px] bg-[#f6f9fb] border border-[#dce4e8] text-[#1a1c1e] focus:outline-none focus:border-[#0e2841]"
+                  className="w-full p-2.5 sm:p-3 rounded-[8px] bg-[#f6f9fb] border border-[#dce4e8] text-[#1a1c1e] text-[13px] focus:outline-none focus:border-[#0e2841]"
                 />
               </div>
 
               <div>
-                <label className="block font-medium text-[#1a1c1e] mb-1.5">
+                <label className="block font-medium text-[#1a1c1e] mb-1 text-[12.5px]">
                   Recommendation
                 </label>
                 <textarea
-                  rows={3}
+                  rows={2}
                   value={newInsightRecommendation}
                   onChange={(e) => setNewInsightRecommendation(e.target.value)}
                   placeholder="Enter recommendation..."
-                  className="w-full p-3.5 rounded-[8px] bg-[#f6f9fb] border border-[#dce4e8] text-[#1a1c1e] focus:outline-none focus:border-[#0e2841]"
+                  className="w-full p-2.5 sm:p-3 rounded-[8px] bg-[#f6f9fb] border border-[#dce4e8] text-[#1a1c1e] text-[13px] focus:outline-none focus:border-[#0e2841]"
                 />
               </div>
 
               <div>
-                <label className="block font-medium text-[#1a1c1e] mb-1.5">
+                <label className="block font-medium text-[#1a1c1e] mb-1 text-[12.5px]">
                   Priority
                 </label>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-3 gap-2.5">
                   {(["High", "Medium", "Low"] as const).map((p) => (
                     <button
                       key={p}
                       type="button"
                       onClick={() => setNewInsightPriority(p)}
-                      className={`h-[40px] rounded-[8px] font-medium border transition-colors cursor-pointer ${
+                      className={`h-[36px] rounded-[8px] font-medium text-[13px] border transition-colors cursor-pointer ${
                         newInsightPriority === p
                           ? "bg-[#0e2841] text-white border-[#0e2841]"
                           : "bg-[#f6f9fb] text-[#434750] border-[#dce4e8] hover:border-[#0e2841]"
@@ -3619,15 +6197,15 @@ interface ReviewPropertyCard {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-medium text-[#1a1c1e] mb-1.5">
+                  <label className="block font-medium text-[#1a1c1e] mb-1 text-[12.5px]">
                     Owner
                   </label>
                   <select
                     value={newInsightOwner}
                     onChange={(e) => setNewInsightOwner(e.target.value)}
-                    className="w-full h-[44px] px-3.5 rounded-[8px] bg-[#f6f9fb] border border-[#dce4e8] text-[#1a1c1e] focus:outline-none focus:border-[#0e2841]"
+                    className="w-full h-[40px] px-3 rounded-[8px] bg-[#f6f9fb] border border-[#dce4e8] text-[#1a1c1e] text-[13px] focus:outline-none focus:border-[#0e2841] transition-colors cursor-pointer"
                   >
                     <option value="Adviser">Adviser</option>
                     <option value="Client">Client</option>
@@ -3637,7 +6215,7 @@ interface ReviewPropertyCard {
                 </div>
 
                 <div>
-                  <label className="block font-medium text-[#1a1c1e] mb-1.5">
+                  <label className="block font-medium text-[#1a1c1e] mb-1 text-[12.5px]">
                     Target Action
                   </label>
                   <input
@@ -3645,13 +6223,13 @@ interface ReviewPropertyCard {
                     value={newInsightAction}
                     onChange={(e) => setNewInsightAction(e.target.value)}
                     placeholder="e.g. Reset rent Q3"
-                    className="w-full h-[44px] px-3.5 rounded-[8px] bg-[#f6f9fb] border border-[#dce4e8] text-[#1a1c1e] focus:outline-none focus:border-[#0e2841]"
+                    className="w-full h-[40px] px-3 rounded-[8px] bg-[#f6f9fb] border border-[#dce4e8] text-[#1a1c1e] text-[13px] focus:outline-none focus:border-[#0e2841]"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block font-medium text-[#1a1c1e] mb-1.5">
+                <label className="block font-medium text-[#1a1c1e] mb-1 text-[12.5px]">
                   Notes
                 </label>
                 <input
@@ -3659,17 +6237,65 @@ interface ReviewPropertyCard {
                   value={newInsightNotes}
                   onChange={(e) => setNewInsightNotes(e.target.value)}
                   placeholder="Optional notes..."
-                  className="w-full h-[44px] px-3.5 rounded-[8px] bg-[#f6f9fb] border border-[#dce4e8] text-[#1a1c1e] focus:outline-none focus:border-[#0e2841]"
+                  className="w-full h-[40px] px-3 rounded-[8px] bg-[#f6f9fb] border border-[#dce4e8] text-[#1a1c1e] text-[13px] focus:outline-none focus:border-[#0e2841]"
                 />
               </div>
+              </div>
 
-              <div className="pt-3 flex justify-center">
-                <button
-                  type="submit"
-                  className="bg-[#0e2841] hover:bg-[#163859] text-white h-[44px] px-[42px] rounded-[8px] text-[14px] font-medium transition-colors cursor-pointer"
-                >
-                  Save Insight
-                </button>
+              {/* Sticky Modal Footer */}
+              <div className="shrink-0 px-5 sm:px-6 py-3 border-t border-[#F0F1F3] bg-[#FAFAFA] flex items-center justify-between gap-3">
+                <div>
+                  {editingInsightId && (
+                    <button
+                      type="button"
+                      onClick={handleDeleteCurrentInsight}
+                      className="h-[38px] px-3.5 rounded-[8px] border border-red-200 text-red-600 hover:bg-red-50 text-[12.5px] font-medium transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Delete</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2.5">
+                  {insightSaveMsg && (
+                    <span
+                      className={`text-[12.5px] font-medium animate-in fade-in ${
+                        insightSaveMsg.includes("Failed") ||
+                        insightSaveMsg.includes("Please")
+                          ? "text-[#DC2626]"
+                          : "text-[#18794E]"
+                      }`}
+                    >
+                      {insightSaveMsg}
+                    </span>
+                  )}
+                  {editingInsightId && (
+                    <button
+                      type="button"
+                      onClick={() => openAddInsightModal()}
+                      className="h-[38px] px-3.5 rounded-[8px] border border-[#0e2841] text-[#0e2841] hover:bg-[#f0f4f8] text-[12.5px] font-medium transition-colors cursor-pointer"
+                    >
+                      + New Insight
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={isSubmittingInsight}
+                    className="bg-[#0e2841] hover:bg-[#163859] disabled:opacity-50 disabled:cursor-not-allowed text-white h-[38px] px-6 rounded-[8px] text-[13px] font-medium transition-colors cursor-pointer shadow-xs flex items-center gap-2"
+                  >
+                    {isSubmittingInsight ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span>Updating...</span>
+                      </>
+                    ) : (
+                      <span>
+                        {editingInsightId ? "Update Insight" : "Save Insight"}
+                      </span>
+                    )}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
