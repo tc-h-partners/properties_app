@@ -1,8 +1,8 @@
 # Interactive Future Outlook: Calculation Reference & Technical Specification
 
-> **Module Overview**: The **Interactive Future Outlook** module projects client wealth accumulation, mortgage debt amortization, superannuation compound growth, property portfolio appreciation, downsizing liquidity events, and post-retirement net cash flows across a 5-to-35-year investment horizon.
+> **Module Overview**: The **Interactive Future Outlook** module projects client wealth accumulation, mortgage debt amortization, superannuation compound growth, property portfolio appreciation, downsizing liquidity events, transitional & CPI-indexed Capital Gains Tax (CGT), and post-retirement net cash flows across a 5-to-35-year investment horizon.
 
-This document outlines all underlying variables, baseline sources, interactive levers, mathematical formulas, and algorithms used in both the **Frontend Real-Time Interactive Engine** and the **Backend Discrete Simulation Engine**.
+This document outlines all underlying variables, baseline sources, interactive levers, global settings assumptions, mathematical formulas, and algorithms used in both the **Frontend Real-Time Interactive Engine** and the **Backend Discrete Simulation Engine**.
 
 ---
 
@@ -10,18 +10,21 @@ This document outlines all underlying variables, baseline sources, interactive l
 
 The system operates across two complementary layers:
 
-1. **Frontend Real-Time Interactive Engine** ([`ReviewWorkspaceReport.tsx`](file:///Users/ritika/Desktop/Work/Binny/properties_app/Frontend/src/components/household/ReviewWorkspaceReport.tsx#L870-L1020))
+1. **Frontend Real-Time Interactive Engine** ([`ReviewWorkspaceReport.tsx`](file:///Users/ritika/Desktop/Work/Binny/properties_app/Frontend/src/components/household/ReviewWorkspaceReport.tsx))
    - Reactive client-side model executed in a React `useMemo` hook.
    - Evaluates closed-form compound growth equations instantly as sliders are dragged.
    - Renders a multi-series Catmull-Rom cubic Bézier spline SVG chart with real-time hover inspection.
-2. **Backend Discrete Simulation Engine** ([`future-outlook.service.ts`](file:///Users/ritika/Desktop/Work/Binny/properties_app/Backend/src/modules/future-outlook/future-outlook.service.ts#L41-L173))
+   - Compares user scenario sliders directly against client portfolio actuals (e.g., Growth CAGR vs "Your portfolio: 3.8%").
+2. **Backend Discrete Simulation Engine** ([`future-outlook.service.ts`](file:///Users/ritika/Desktop/Work/Binny/properties_app/Backend/src/modules/future-outlook/future-outlook.service.ts))
    - NestJS service utilizing arbitrary-precision decimal arithmetic (`Decimal.js`).
-   - Simulates discrete year-by-year cash flows, operating expenses, debt servicing, home downsizing asset rebalancing, and post-retirement safe pension drawdowns.
+   - Simulates discrete year-by-year cash flows, operating expenses, accelerated debt servicing via Net Yield improvements, home downsizing asset rebalancing with ATO downsizer contribution caps, pre/post-reform CGT deductions, and post-retirement after-tax safe drawdowns.
    - Persists scenario levers in the `FutureOutlookScenario` database table.
+3. **Global System Settings Governance** ([`settings/page.tsx`](file:///Users/ritika/Desktop/Work/Binny/properties_app/Frontend/src/app/settings/page.tsx), [`benchmarks.service.ts`](file:///Users/ritika/Desktop/Work/Binny/properties_app/Backend/src/modules/benchmarks/benchmarks.service.ts))
+   - Configures platform-wide assumptions (CPI, Tax Reform Date, CGT Tax Rate, Investment Return, and Income Tax Rate) centrally managed by institutional administrators.
 
 ---
 
-## 2. Comprehensive Variable Inventory
+## 2. Comprehensive Variable & Assumption Inventory
 
 ### A. Baseline Variables (Year $t = 0$)
 
@@ -35,12 +38,27 @@ The system operates across two complementary layers:
 | **Investment Net Equity** | `baseInvEquity` | $\max(0, \text{baseInvVal} - \text{baseInvLoans})$ | \$1,630,000 | AUD (\$) | Opening net equity across investment properties |
 | **Superannuation Balance** | `baseSuper` / `superBalance` | Sum of `member.currentSuperBalance` across household | \$650,000 | AUD (\$) | Total opening household superannuation balance |
 | **Annual Super Contribution** | `annualContrib` / `annualSuperContrib` | Sum of `member.annualSuperContribution` | \$0 | AUD (\$/yr) | Opening recurring employer / concessional super contributions |
-| **Gross Annual Rent** | `invGrossRent` | Sum of `annualGrossRent` across investment properties | Extracted from DB | AUD (\$/yr) | Total portfolio gross rental income |
-| **Average Cost of Debt** | `avgInterestRate` | Baseline weighted mortgage interest rate | `5.95%` (`0.0595`) | Rate p.a. | Weighted average interest rate across investment loans |
+| **Client Portfolio CAGR** | `clientPortfolioCagr` | Weighted average 5-yr CAGR across client investment properties | `3.8%` | $\%$ p.a. | Actual performance displayed under Growth CAGR slider |
+| **Client Portfolio Net Yield**| `clientPortfolioNetYield` | Portfolio actual Net Yield: $(\text{GrossRent} \times 0.65) / \text{InvVal}$ | `3.1%` | $\%$ p.a. | Actual net yield displayed under Net Yield slider |
+| **Adult Member Count** | `adultCount` | Count of adult household members / entities | `2` | Count | Used for Downsizer Superannuation Cap (\$300,000/adult) |
 
 ---
 
-### B. Interactive Levers & Sliders
+### B. Global System Settings Assumptions
+
+Managed in **System Settings > Future Outlook Assumptions**:
+
+| Setting Name | Code Identifier | Default Value | Description |
+| :--- | :--- | :--- | :--- |
+| **Forecast CPI** | `forecastCpi` | `3.0%` p.a. | Inflation indexation rate applied to post-reform cost base |
+| **Tax Reform Date** | `taxReformDate` | `1/7/2027` | Cut-off date transitioning from 50% CGT discount to CPI indexation |
+| **CGT Tax Rate** | `cgtTaxRate` | `30.0%` | Capital Gains Tax rate applied to taxable capital gains |
+| **Global Investment Return** | `investmentReturn` | `5.0%` p.a. | Pre-tax gross investment return on non-super Invested Capital |
+| **Global Income Tax Rate** | `incomeTaxRate` | `30.0%` | Tax rate on investment returns, yielding $5\% \times (1 - 30\%) = \mathbf{3.5\%}$ net |
+
+---
+
+### C. Interactive Levers & Sliders
 
 | Lever Name | Variable Identifier | Math Symbol | UI Range | Step | Default | Unit | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -49,21 +67,16 @@ The system operates across two complementary layers:
 | **Home Extra Repayment** | `homeExtraRepayment` | $E_H$ | \$0 – \$5,000 | \$50 | \$0 | \$/mo | Additional monthly principal reduction on home loan |
 | **Downsizer Price Today** | `homeDownsizerPrice` | $D_P$ | \$0 – \$1,000k | \$25k | \$0 | \$ | Estimated cost of replacement downsized home today |
 | **Investment Growth Rate** | `invGrowthRate` / `propGrowth` | $g_I$ | $1.0\% - 12.0\%$ | $0.1\%$ | $5.0\%$ | $\%$ p.a. | Compound annual growth rate for investment properties |
-| **Investment Extra Repayment** | `invExtraRepayment` | $E_I$ | \$0 – \$5,000 | \$50 | \$0 | \$/mo | Additional monthly principal reduction on inv debt |
+| **Net Yield** | `invNetYield` | $y_N$ | $1.0\% - 8.0\%$ | $0.1\%$ | $3.5\%$ | $\%$ p.a. | Investment property Net Yield slider |
+| **Investment Extra Repayment** | `invExtraRepayment` | $E_I$ | \$0 – \$5,000 | \$50 | \$0 | \$/mo | Direct additional monthly principal reduction |
 | **Additional Investment** | `invAddlInvestment` | $A_I$ | \$0 – \$300,000 | \$10,000 | \$0 | \$ | New investment capital committed over projection |
 | **Super Return Rate** | `superReturnRate` / `superReturn` | $r_S$ | $1.0\% - 12.0\%$ | $0.1\%$ | $7.0\%$ | $\%$ p.a. | Expected annual net return inside superannuation |
 | **Super Extra Contribution** | `superExtraContrib` | $C_S$ | \$0 – \$5,000 | \$50 | \$0 | \$/mo | Additional voluntary monthly super contributions |
 | **Target Retirement Income** | `incomeGoal` / `targetIncome` | $Y_{target}$ | \$20k – \$200k | \$5k | \$140,000 | \$/yr | Desired post-tax annual retirement living income |
-| **Rental Growth Rate** | `rentalGrowthRate` | $g_R$ | $0.0\% - 10.0\%$ | $0.5\%$ | $3.5\%$ | $\%$ p.a. | Annual growth rate of gross rental yields (backend) |
-| **Downsizing Toggle** | `downsizeEnabled` | — | `true` / `false` | — | `false` | Boolean | Whether home downsizing event is scheduled |
-| **Downsize Year Offset** | `downsizeYearOffset` | $T_{down}$ | $1 - 30$ | $1$ | $10$ | Year | Year offset at which downsizing occurs |
-| **Downsize Proceeds to Super** | `downsizeNetProceedsToSuper` | $P_{down}$ | $\ge 0$ | — | \$0 | \$ | Net equity released from downsizing injected into super |
 
 ---
 
-## 3. Frontend Real-Time Calculation Engine
-
-Implemented inside `ReviewWorkspaceReport.tsx` under the `futureOutlookData` memoized calculation.
+## 3. Mathematical Models & Calculation Formulas
 
 ### 1. Owner-Occupied Home Trajectory ($t$)
 $$g_H = \frac{\text{homeGrowthRate}}{100}$$
@@ -76,23 +89,30 @@ $$\text{hEquity}(t) = \max\Big(0, \;\text{hVal}(t) - \text{hDebt}(t)\Big)$$
 
 ---
 
-### 2. Investment Portfolio Trajectory ($t$)
+### 2. Investment Portfolio Trajectory & Net Yield Debt Reduction ($t$)
+
+#### Net Yield Debt Reduction Mechanism:
+Additional cash generated from improved Net Yield above the client's current baseline portfolio net yield flows directly into accelerated debt reduction:
+
+$$\Delta\text{Yield} = \max\left(0, \;\frac{\text{invNetYield} - \text{clientPortfolioNetYield}}{100}\right)$$
+
+$$\text{ExtraAnnualCashFromYield} = \text{baseInvVal} \times \Delta\text{Yield}$$
+
+$$\text{TotalAnnualInvDebtReduction} = (\text{invExtraRepayment} \times 12) + \text{ExtraAnnualCashFromYield}$$
+
+#### Valuation & Net Equity:
 $$g_I = \frac{\text{invGrowthRate}}{100}$$
 
 $$\text{iVal}(t) = \left(\text{baseInvVal} + \text{invAddlInvestment} \times \frac{t}{25}\right) \times (1 + g_I)^t$$
 
-$$\text{iDebt}(t) = \max\Big(0, \;\text{baseInvLoans} - \big(\text{invExtraRepayment} \times 12 \times t\big)\Big)$$
+$$\text{iDebt}(t) = \max\Big(0, \;\text{baseInvLoans} - (\text{TotalAnnualInvDebtReduction} \times t)\Big)$$
 
 $$\text{iEquity}(t) = \max\Big(0, \;\text{iVal}(t) - \text{iDebt}(t)\Big)$$
-
-> **Note on Additional Investment**: The additional capital $A_I$ scales progressively into the portfolio valuation over a 25-year horizon ($\frac{t}{25}$) and participates in compounding at rate $g_I$.
 
 ---
 
 ### 3. Superannuation Trajectory ($t$)
-$$r_S = \frac{\text{superReturnRate}}{100}$$
-
-$$\text{annualContrib} = \text{superExtraContrib} \times 12$$
+$$r_S = \frac{\text{superReturnRate}}{100}, \quad \text{annualContrib} = \text{superExtraContrib} \times 12$$
 
 When $r_S > 0$:
 $$\text{sBal}(t) = \text{baseSuper} \times (1 + r_S)^t + \text{annualContrib} \times \left[\frac{(1 + r_S)^t - 1}{r_S}\right]$$
@@ -100,134 +120,89 @@ $$\text{sBal}(t) = \text{baseSuper} \times (1 + r_S)^t + \text{annualContrib} \t
 When $r_S = 0$:
 $$\text{sBal}(t) = \text{baseSuper} + (\text{annualContrib} \times t)$$
 
-> **Mathematical Foundation**: Employs the **Future Value of an Ordinary Annuity** formula to calculate the accumulated value of ongoing contributions compounded annually at $r_S$, summed with the initial balance compounded at $r_S$.
+---
+
+### 4. Downsizing at Retirement Horizon ($T = \text{forecastHorizon}$)
+
+When a replacement home price today ($D_P$) is specified:
+1. **Inflated Replacement Home Cost**:
+   $$\text{ReplacementHomeCost} = D_P \times (1 + g_H)^T$$
+   $$\text{finalProjectedHomeVal} = \text{round}(\text{ReplacementHomeCost})$$
+
+2. **Released Capital**:
+   $$\text{ReleasedCapital} = \max\Big(0, \;\text{hVal}(T) - \text{hDebt}(T) - \text{ReplacementHomeCost}\Big)$$
+   *(Existing OO mortgage debt is completely extinguished from sale proceeds).*
+
+3. **Allocation into Superannuation & Invested Capital**:
+   Under ATO downsizer contribution provisions, eligible individuals may contribute up to \$300,000 into superannuation:
+   $$\text{MaxDownsizeToSuper} = \$300,000 \times \text{adultCount}$$
+   $$\text{downsizeToSuper} = \min\big(\text{ReleasedCapital}, \;\text{MaxDownsizeToSuper}\big)$$
+   $$\text{downsizeToInvestedCapital} = \max\big(0, \;\text{ReleasedCapital} - \text{downsizeToSuper}\big)$$
 
 ---
 
-### 4. Forecast Outputs at Selected Retirement Horizon ($t = \text{forecastHorizon}$)
+### 5. Investment Property Capital Gains Tax (CGT) Treatment at Retirement
 
-The target calendar year is established as:
-$$\text{Target Year} = 2026 + \text{forecastHorizon}$$
+At retirement ($T$), CGT is evaluated across two statutory regimes:
 
-The values output to the forecast cards are:
+#### Component 1: Pre-1 July 2027 Capital Gains (Transitional Treatment)
+- Evaluation date: $t_{\text{reform}} = 1$ year from FY2026 baseline (1 July 2027).
+- Property value at reform date:
+  $$V_{\text{reform}} = \text{baseInvVal} \times (1 + g_I)^{t_{\text{reform}}}$$
+- Original cost base: $V_0 = \text{totalPurchasePrice}$ (or $\text{baseInvVal}$ if historical purchase price unrecorded).
+- Capital gain:
+  $$\text{Gain}_{\text{pre}} = \max(0, \; V_{\text{reform}} - V_0)$$
+- **Transitional Treatment**: $50\%$ of the pre-reform capital gain is taxable:
+  $$\text{TaxableGain}_{\text{pre}} = \text{Gain}_{\text{pre}} \times 0.50$$
+  $$\text{CGT}_{\text{pre}} = \text{round}\big(\text{TaxableGain}_{\text{pre}} \times \text{cgtTaxRate}\big)$$
 
-#### Card 1: Home — Owner Occupied
-$$\text{projectedHomeVal} = \text{round}\big(\text{hVal}(\text{forecastHorizon})\big)$$
+#### Component 2: Post-1 July 2027 Capital Gains (CPI-Indexed Cost Base)
+- Post-reform horizon: $t_{\text{post}} = \max(0, \; T - t_{\text{reform}})$.
+- Cost base indexed for inflation:
+  $$\text{CostBase}_{\text{post}} = V_{\text{reform}} \times (1 + \text{CPI})^{t_{\text{post}}}$$
+- Real post-reform capital gain above indexed cost base:
+  $$\text{Gain}_{\text{post}} = \max(0, \; \text{iVal}(T) - \text{CostBase}_{\text{post}})$$
+- **CPI Indexation Treatment**: $100\%$ of the real gain is taxable at the CGT rate ($\ge 30\%$):
+  $$\text{CGT}_{\text{post}} = \text{round}\big(\text{Gain}_{\text{post}} \times \text{cgtTaxRate}\big)$$
 
-#### Card 2: Investment Properties
-$$\text{projectedInvEquity} = \text{round}\big(\text{iEquity}(\text{forecastHorizon})\big)$$
-
-$$\text{projectedAfterTaxIncome} = \text{round}\big(\text{projectedInvEquity} \times 0.024888\big)$$
-
-*(The $2.4888\%$ multiplier represents the modelled net after-tax cash yield distributed from net property equity).*
-
-#### Card 3: Superannuation
-$$\text{projectedSuperBal} = \text{round}\big(\text{sBal}(\text{forecastHorizon})\big)$$
-
-#### Dark Navy Card: Total Projected Retirement Income
-$$\text{projectIncomeTotal} = \text{round}\Big(\text{projectedInvEquity} \times 0.05 + \text{projectedSuperBal} \times 0.045 + \text{incomeGoal} \times 0.60\Big)$$
-
-- **5.0%**: Income distribution rate from investment equity.
-- **4.5%**: Safe pension distribution rate from superannuation assets.
-- **60.0%**: Floor allocation relative to user's targeted retirement income goal.
-
----
-
-### 5. Multi-Series SVG Spline Chart Geometry
-
-The chart renders 3 continuous curves across 6 evaluation knots: $t \in [0, 5, 10, 15, 20, 25]$ within a $320 \times 150$ SVG coordinate space.
-
-#### Scale Transformations
-- **Horizontal Axis ($X$)**:
-  $$x(t) = 15 + \left(\frac{\text{clamp}(t, 0, 25)}{25}\right) \times 290$$
-  Maps $t \in [0, 25 \text{ yrs}]$ to pixel range $[15, 305]$.
-
-- **Vertical Axis ($Y$)**:
-  $$\text{maxVal} = \max\left(6,500,000, \;\max_{\forall t}\{\text{hEquity}(t), \text{iEquity}(t), \text{sBal}(t)\} \times 1.08\right)$$
-  $$\text{minVal} = 0$$
-  $$y(\text{val}) = 135 - \left(\frac{\text{clamp}(\text{val}, \text{minVal}, \text{maxVal}) - \text{minVal}}{\text{maxVal} - \text{minVal}}\right) \times 120$$
-  Maps value to SVG pixel height between $y=135$ (baseline zero) and $y=15$ (top ceiling).
-
-#### Catmull-Rom to Cubic Bézier Spline Form
-For each adjacent pair of coordinates $P_1(x_1, y_1)$ and $P_2(x_2, y_2)$ bounded by previous point $P_0$ and subsequent point $P_3$, control points are derived as:
-$$CP_1 = P_1 + \frac{P_2 - P_0}{6}$$
-$$CP_2 = P_2 - \frac{P_3 - P_1}{6}$$
-
-The resulting SVG path command for each segment is:
-$$\text{path} += \text{" C } CP_{1x}\; CP_{1y}, \; CP_{2x}\; CP_{2y}, \; P_{2x}\; P_{2y}\text{"}$$
+#### Total Capital Gains Tax:
+$$\text{TotalCGT} = \text{CGT}_{\text{pre}} + \text{CGT}_{\text{post}}$$
 
 ---
 
-## 4. Backend Discrete Simulation Engine
+### 6. Invested Capital & Post-Retirement Cash Flows
 
-Implemented in `future-outlook.service.ts` using `Decimal.js` for precise annual accounting over $yr = 1, 2, \dots, \text{forecastYears}$.
+#### Total Invested Capital:
+CGT is deducted directly from invested capital upon realization at retirement:
+$$\text{InvestedCapital} = \max\Big(0, \;\text{iEquity}(T) + \text{downsizeToInvestedCapital} - \text{TotalCGT}\Big)$$
 
-### 1. Annual Compounding Recurrence
-For each year $yr$:
+#### Projected After-Tax Income from Invested Capital:
+Using global assumptions ($5.0\%$ p.a. return less $30\%$ income tax):
+$$\text{NetReturnRate} = 5.0\% \times (1 - 0.30) = \mathbf{3.5\% \text{ net p.a.}}$$
+$$\text{projectedAfterTaxIncome} = \text{round}\big(\text{InvestedCapital} \times 0.035\big)$$
 
-1. **Property Capital Appreciation**:
-   $$V_{oo}(yr) = V_{oo}(yr - 1) \times (1 + \text{propGrowth})$$
-   $$V_{inv}(yr) = V_{inv}(yr - 1) \times (1 + \text{propGrowth})$$
+#### Total Superannuation Balance & Pension Drawdown:
+$$\text{projectedSuperBal} = \text{round}\big(\text{sBal}(T) + \text{downsizeToSuper}\big)$$
+$$\text{projectedSuperPensionIncome} = \text{round}\big(\text{projectedSuperBal} \times 0.05\big)$$
+*(Assumes safe $5.0\%$ annual tax-free pension drawdown in retirement phase).*
 
-2. **Gross Rental Growth**:
-   $$R_{inv}(yr) = R_{inv}(yr - 1) \times (1 + \text{rentGrowth})$$
-
-3. **Home Loan Principal Reduction**:
-   $$\Delta D = \text{extraMonthlyHomeLoanRepayment} \times 12$$
-   $$D_{oo}(yr) = \max\Big(0, \; D_{oo}(yr - 1) - \Delta D\Big)$$
-
-4. **Superannuation Compounding & Additions**:
-   $$S(yr) = S(yr - 1) \times (1 + \text{superReturn}) + \text{annualSuperContrib}$$
+#### Total Projected Retirement Income:
+$$\text{projectIncomeTotal} = \text{round}\big(\text{projectedAfterTaxIncome} + \text{projectedSuperPensionIncome} + \text{incomeGoal} \times 0.60\big)$$
 
 ---
 
-### 2. Downsizing Transaction Logic
-When $\text{downsizeEnabled} = \text{true}$ and $yr = \text{downsizeYearOffset}$:
-1. **Replacement Home Value Adjustment**:
-   $$V_{oo}(yr) = V_{oo}(yr) \times 0.60$$
-   *(Models downsizing from primary residence into a replacement home worth 60% of the inflated market value).*
-2. **Mortgage Elimination**:
-   $$D_{oo}(yr) = 0$$
-3. **Super Capital Influx**:
-   $$S(yr) = S(yr) + \text{downsizeNetProceedsToSuper}$$
+## 4. UI Metric Display & Client Portfolio Comparison
 
----
+Each interactive lever displays actual client portfolio metrics where relevant to provide immediate context:
 
-### 3. Net Operating Income (NOI) & Rental Cash Flow
-For each year $yr$:
-
-1. **Net Operating Income (NOI)**:
-   $$\text{NOI}(yr) = R_{inv}(yr) \times 0.65$$
-   *(Reflects a benchmark $35\%$ property expense ratio for agent management commissions, council/water rates, landlord insurance, strata levies, and ongoing maintenance).*
-
-2. **Mortgage Interest Expense**:
-   $$\text{Interest}(yr) = D_{inv}(yr) \times \text{avgInterestRate} \quad (\text{default: } 0.0595)$$
-
-3. **Net Rental Cash Flow**:
-   $$\text{NetRentalCashFlow}(yr) = \text{NOI}(yr) - \text{Interest}(yr)$$
-
-4. **Portfolio Balance Sheet Totals**:
-   $$\text{TotalPropertyValuation}(yr) = V_{oo}(yr) + V_{inv}(yr)$$
-   $$\text{TotalDebt}(yr) = D_{oo}(yr) + D_{inv}(yr)$$
-   $$\text{NetEquity}(yr) = \text{TotalPropertyValuation}(yr) - \text{TotalDebt}(yr)$$
-   $$\text{TotalNetAssets}(yr) = \text{NetEquity}(yr) + S(yr)$$
-
----
-
-### 4. Retirement Adequacy Analysis (`heroOutputs`)
-At $yr = \text{forecastYears}$:
-
-1. **Superannuation Safe Pension Drawdown (5% Rule)**:
-   $$\text{SuperPensionIncome} = S(\text{forecastYears}) \times 0.05$$
-
-2. **Total Projected After-Tax Retirement Income**:
-   $$\text{TotalProjectedIncome} = \text{round}\Big(\text{SuperPensionIncome} + \max\big(0, \;\text{NetRentalCashFlow}(\text{forecastYears})\big)\Big)$$
-
-3. **Retirement Income Surplus / Shortfall**:
-   $$\text{IncomeSurplusOrShortfall} = \text{TotalProjectedIncome} - \text{targetRetirementIncomeAfterTax}$$
-
-4. **Retirement Goal Feasibility Status**:
-   $$\text{isTargetMet} = \big(\text{IncomeSurplusOrShortfall} \ge 0\big)$$
+- **Capital Growth CAGR**: Displays `"Your portfolio: 3.8%"` (dynamically calculated from client investment holdings).
+- **Net Yield**: Displays `"Your portfolio: 3.1%"` (actual net yield after operating costs).
+- **Home Growth CAGR**: Displays `"Your home: 3.0%"`.
+- **Downsizing Card**: Informs adviser of available capital released and highlights the \$300,000/adult super cap.
+- **Outcome Cards**:
+  - **Card 1 (Home)**: Displays projected replacement home value if downsized, notes original home valuation, and confirms mortgage clearance.
+  - **Card 2 (Invested Capital)**: Displays After-Tax Income at $3.5\%$ net yield, total Invested Capital, and an explicit breakdown of Pre-2027 (50% disc) and Post-2027 (CPI-indexed) CGT deductions.
+  - **Card 3 (Superannuation)**: Displays accumulated super balance, downsizer contribution influx, and safe 5% tax-free pension drawdown.
 
 ---
 
@@ -235,9 +210,11 @@ At $yr = \text{forecastYears}$:
 
 | Concept | Frontend Implementation File | Backend Implementation File |
 | :--- | :--- | :--- |
-| **Baseline Extraction** | [`ReviewWorkspaceReport.tsx#L872-L895`](file:///Users/ritika/Desktop/Work/Binny/properties_app/Frontend/src/components/household/ReviewWorkspaceReport.tsx#L872-L895) | [`future-outlook.service.ts#L235-L283`](file:///Users/ritika/Desktop/Work/Binny/properties_app/Backend/src/modules/future-outlook/future-outlook.service.ts#L235-L283) |
-| **Compounding Equations** | [`ReviewWorkspaceReport.tsx#L897-L918`](file:///Users/ritika/Desktop/Work/Binny/properties_app/Frontend/src/components/household/ReviewWorkspaceReport.tsx#L897-L918) | [`future-outlook.service.ts#L82-L132`](file:///Users/ritika/Desktop/Work/Binny/properties_app/Backend/src/modules/future-outlook/future-outlook.service.ts#L82-L132) |
-| **Horizon Projections** | [`ReviewWorkspaceReport.tsx#L920-L929`](file:///Users/ritika/Desktop/Work/Binny/properties_app/Frontend/src/components/household/ReviewWorkspaceReport.tsx#L920-L929) | [`future-outlook.service.ts#L134-L172`](file:///Users/ritika/Desktop/Work/Binny/properties_app/Backend/src/modules/future-outlook/future-outlook.service.ts#L134-L172) |
-| **Spline Chart Geometry**| [`ReviewWorkspaceReport.tsx#L940-L986`](file:///Users/ritika/Desktop/Work/Binny/properties_app/Frontend/src/components/household/ReviewWorkspaceReport.tsx#L940-L986) | — |
-| **Downsizing Event** | Handled via slider baseline input | [`future-outlook.service.ts#L98-L104`](file:///Users/ritika/Desktop/Work/Binny/properties_app/Backend/src/modules/future-outlook/future-outlook.service.ts#L98-L104) |
-| **Retirement Income Metric**| Card projection: equity + super + goal | Safe super pension (5%) + positive net rental cash flow |
+| **System Settings Assumptions** | [`api.ts`](file:///Users/ritika/Desktop/Work/Binny/properties_app/Frontend/src/lib/api.ts), [`settings/page.tsx`](file:///Users/ritika/Desktop/Work/Binny/properties_app/Frontend/src/app/settings/page.tsx) | [`benchmarks.service.ts`](file:///Users/ritika/Desktop/Work/Binny/properties_app/Backend/src/modules/benchmarks/benchmarks.service.ts) |
+| **Baseline Extraction** | [`ReviewWorkspaceReport.tsx#L1624-L1676`](file:///Users/ritika/Desktop/Work/Binny/properties_app/Frontend/src/components/household/ReviewWorkspaceReport.tsx) | [`future-outlook.service.ts#L270-L325`](file:///Users/ritika/Desktop/Work/Binny/properties_app/Backend/src/modules/future-outlook/future-outlook.service.ts) |
+| **Net Yield Debt Reduction** | [`ReviewWorkspaceReport.tsx#L1685-L1691`](file:///Users/ritika/Desktop/Work/Binny/properties_app/Frontend/src/components/household/ReviewWorkspaceReport.tsx) | [`future-outlook.service.ts#L98-L102`](file:///Users/ritika/Desktop/Work/Binny/properties_app/Backend/src/modules/future-outlook/future-outlook.service.ts) |
+| **Downsizing & Super Split** | [`ReviewWorkspaceReport.tsx#L1730-L1757`](file:///Users/ritika/Desktop/Work/Binny/properties_app/Frontend/src/components/household/ReviewWorkspaceReport.tsx) | [`future-outlook.service.ts#L107-L125`](file:///Users/ritika/Desktop/Work/Binny/properties_app/Backend/src/modules/future-outlook/future-outlook.service.ts) |
+| **Transitional & CPI CGT** | [`ReviewWorkspaceReport.tsx#L1760-L1786`](file:///Users/ritika/Desktop/Work/Binny/properties_app/Frontend/src/components/household/ReviewWorkspaceReport.tsx) | [`future-outlook.service.ts#L159-L180`](file:///Users/ritika/Desktop/Work/Binny/properties_app/Backend/src/modules/future-outlook/future-outlook.service.ts) |
+| **Invested Capital & 3.5% Net Yield**| [`ReviewWorkspaceReport.tsx#L1789-L1814`](file:///Users/ritika/Desktop/Work/Binny/properties_app/Frontend/src/components/household/ReviewWorkspaceReport.tsx) | [`future-outlook.service.ts#L182-L203`](file:///Users/ritika/Desktop/Work/Binny/properties_app/Backend/src/modules/future-outlook/future-outlook.service.ts) |
+| **Spline Chart Geometry**| [`ReviewWorkspaceReport.tsx#L1815-L1872`](file:///Users/ritika/Desktop/Work/Binny/properties_app/Frontend/src/components/household/ReviewWorkspaceReport.tsx) | — |
+| **Scenario Persistence** | [`ReviewWorkspaceReport.tsx`](file:///Users/ritika/Desktop/Work/Binny/properties_app/Frontend/src/components/household/ReviewWorkspaceReport.tsx) | [`future-outlook.service.ts#L240-L280`](file:///Users/ritika/Desktop/Work/Binny/properties_app/Backend/src/modules/future-outlook/future-outlook.service.ts) |

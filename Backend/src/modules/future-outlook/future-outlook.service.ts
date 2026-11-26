@@ -46,8 +46,18 @@ export class FutureOutlookService {
     const extraMonthlyHomeLoan = levers.extraMonthlyHomeLoanRepayment || 0;
     const downsizeEnabled = levers.downsizeEnabled || false;
     const downsizeYear = levers.downsizeYearOffset || 10;
-    const downsizeProceeds = levers.downsizeNetProceedsToSuper || 0;
+    let downsizeProceeds = levers.downsizeNetProceedsToSuper || 0;
     const targetIncome = levers.targetRetirementIncomeAfterTax || 140000;
+
+    // Global Assumptions & Enhanced Levers
+    const baselineNetYield = baselineData.baselineNetYield || 0.035;
+    const netYield = levers.netYield !== undefined ? levers.netYield : baselineNetYield;
+    const forecastCpi = levers.forecastCpi !== undefined ? levers.forecastCpi : 0.030;
+    const cgtTaxRate = levers.cgtTaxRate !== undefined ? levers.cgtTaxRate : 0.30;
+    const investmentReturn = levers.investmentReturn !== undefined ? levers.investmentReturn : 0.05;
+    const incomeTaxRate = levers.incomeTaxRate !== undefined ? levers.incomeTaxRate : 0.30;
+    const downsizeHomePriceToday = levers.downsizeHomePriceToday || 0;
+    const adultCount = baselineData.adultCount || 2;
 
     // Baselines at Year 0
     let ooValuation = new Decimal(baselineData.ooValuation || 0);
@@ -58,6 +68,10 @@ export class FutureOutlookService {
     let superBalance = new Decimal(baselineData.superBalance || 0);
     const annualSuperContrib = new Decimal(baselineData.annualSuperContrib || 0);
     const avgInterestRate = new Decimal(baselineData.avgInterestRate || 0.0595);
+
+    let downsizeReleasedCapital = 0;
+    let downsizeToSuper = 0;
+    let downsizeToInvestedCapital = 0;
 
     const yearByYear = [];
 
@@ -91,16 +105,36 @@ export class FutureOutlookService {
       const annualExtraHomeLoanRepayment = new Decimal(extraMonthlyHomeLoan).times(12);
       ooDebt = Decimal.max(0, ooDebt.minus(annualExtraHomeLoanRepayment));
 
+      // Net Yield improved cash flow into investment debt reduction
+      const yieldSurplus = Math.max(0, netYield - baselineNetYield);
+      const extraAnnualCashFromYield = invValuation.times(yieldSurplus);
+      invDebt = Decimal.max(0, invDebt.minus(extraAnnualCashFromYield));
+
       // Superannuation growth + contributions
       superBalance = superBalance.times(1 + superReturn).plus(annualSuperContrib);
 
       // Downsizing event check
       if (downsizeEnabled && yr === downsizeYear) {
-        event = `Home Downsizing Event: Injected $${downsizeProceeds.toLocaleString()} to Super; OO Debt Cleared.`;
-        superBalance = superBalance.plus(downsizeProceeds);
-        ooDebt = new Decimal(0);
-        // OO home valuation downsized to 60% of inflated value
-        ooValuation = ooValuation.times(0.6);
+        if (downsizeHomePriceToday > 0) {
+          const replacementHomeCost = downsizeHomePriceToday * Math.pow(1 + propGrowth, yr);
+          const rawEquity = ooValuation.minus(ooDebt).toNumber();
+          downsizeReleasedCapital = Math.max(0, rawEquity - replacementHomeCost);
+          const maxSuperDownsize = 300000 * adultCount;
+          downsizeToSuper = Math.min(downsizeReleasedCapital, maxSuperDownsize);
+          downsizeToInvestedCapital = Math.max(0, downsizeReleasedCapital - downsizeToSuper);
+          downsizeProceeds = downsizeToSuper;
+
+          ooValuation = new Decimal(Math.round(replacementHomeCost));
+          ooDebt = new Decimal(0);
+          superBalance = superBalance.plus(downsizeToSuper);
+
+          event = `Downsizing Event: Purchased replacement home ($${Math.round(replacementHomeCost).toLocaleString()}); cleared OO debt; injected $${Math.round(downsizeToSuper).toLocaleString()} to Super and $${Math.round(downsizeToInvestedCapital).toLocaleString()} to Invested Capital.`;
+        } else {
+          event = `Home Downsizing Event: Injected $${downsizeProceeds.toLocaleString()} to Super; OO Debt Cleared.`;
+          superBalance = superBalance.plus(downsizeProceeds);
+          ooDebt = new Decimal(0);
+          ooValuation = ooValuation.times(0.6);
+        }
       }
 
       const totalPropVal = ooValuation.plus(invValuation);
@@ -133,10 +167,46 @@ export class FutureOutlookService {
 
     const finalYear = yearByYear[yearByYear.length - 1];
 
-    // Retirement Drawdown: 5% safe pension drawdown from super + net rental cash flow
-    const superPensionIncome = finalYear.superBalance * 0.05;
+    // =========================================================================
+    // CAPITAL GAINS TAX (CGT) TREATMENT AT RETIREMENT (forecastYears)
+    // =========================================================================
+    // Component 1: Pre-1 July 2027 capital gains (transitional 50% discount @ cgtTaxRate)
+    // Component 2: Post-1 July 2027 gains (CPI-indexed cost base; 100% real gain taxed @ cgtTaxRate)
+    const tReform = 1; // 1 July 2027 is 1 year from FY2026 baseline
+    const v0 = baselineData.invPurchasePrice > 0 ? baselineData.invPurchasePrice : (baselineData.invValuation || 0);
+    const vReform = (baselineData.invValuation || 0) * Math.pow(1 + propGrowth, tReform);
+    const vRetirement = finalYear.investmentValuation;
+
+    const preReformGain = Math.max(0, vReform - v0);
+    const taxablePreGain = preReformGain * 0.50; // 50% transitional discount
+    const cgtPre = Math.round(taxablePreGain * cgtTaxRate);
+
+    const postYears = Math.max(0, forecastYears - tReform);
+    const indexedCostBasePost = vReform * Math.pow(1 + forecastCpi, postYears);
+    const postReformGain = Math.max(0, vRetirement - indexedCostBasePost);
+    const taxablePostGain = postReformGain; // 100% taxable
+    const cgtPost = Math.round(taxablePostGain * cgtTaxRate);
+
+    const totalCgt = cgtPre + cgtPost;
+
+    // =========================================================================
+    // INVESTED CAPITAL & RETIREMENT INCOME
+    // =========================================================================
+    // Net investment equity + released downsizing capital proceeds - total CGT
+    const netInvEquityAtRetirement = Math.max(0, finalYear.investmentValuation - finalYear.investmentDebt);
+    const rawInvestedCapital = netInvEquityAtRetirement + downsizeToInvestedCapital - totalCgt;
+    const projectedInvestedCapital = Math.round(Math.max(0, rawInvestedCapital));
+
+    // Global investment return assumption: 5% p.a., income tax assumption: 30% (3.5% net)
+    const netReturnRate = investmentReturn * (1 - incomeTaxRate);
+    const projectedInvestedCapitalIncome = Math.round(projectedInvestedCapital * netReturnRate);
+
+    // Superannuation: 5% safe pension drawdown (tax-free in retirement phase)
+    const superPensionIncome = Math.round(finalYear.superBalance * 0.05);
+
+    // Total Projected After-Tax Income in Retirement
     const totalProjectedAfterTaxIncomeAtRetirement = Math.round(
-      superPensionIncome + Math.max(0, finalYear.netRentalCashFlow),
+      projectedInvestedCapitalIncome + superPensionIncome,
     );
 
     const incomeSurplusOrShortfall =
@@ -154,6 +224,12 @@ export class FutureOutlookService {
         downsizeYearOffset: downsizeYear,
         downsizeNetProceedsToSuper: downsizeProceeds,
         targetRetirementIncomeAfterTax: targetIncome,
+        netYield,
+        forecastCpi,
+        cgtTaxRate,
+        investmentReturn,
+        incomeTaxRate,
+        downsizeHomePriceToday,
       },
       heroOutputs: {
         totalProjectedAfterTaxIncomeAtRetirement,
@@ -165,6 +241,15 @@ export class FutureOutlookService {
         totalPropertyValuationAtRetirement: finalYear.totalPropertyValuation,
         totalDebtAtRetirement: finalYear.totalDebt,
         totalNetEquityAtRetirement: finalYear.netEquity,
+        projectedInvestedCapital,
+        projectedInvestedCapitalIncome,
+        superPensionIncome,
+        totalCgtAtRetirement: totalCgt,
+        cgtPreReform: cgtPre,
+        cgtPostReform: cgtPost,
+        downsizeReleasedCapital,
+        downsizeToSuper,
+        downsizeToInvestedCapital,
       },
       yearByYearProjections: yearByYear,
       methodologyDisclosures:
@@ -177,6 +262,8 @@ export class FutureOutlookService {
     const baseline = this.extractBaselines(review);
 
     const saved = review.futureOutlook;
+    const assumptions = (saved?.assumptionsJson as any) || {};
+
     const levers: FutureOutlookLeversDto = {
       forecastYears: saved?.forecastYears || 15,
       propertyGrowthRate: saved ? Number(saved.propertyGrowthRate) : 0.05,
@@ -188,6 +275,13 @@ export class FutureOutlookService {
       downsizeYearOffset: saved?.downsizeYearOffset || 10,
       downsizeNetProceedsToSuper: saved ? Number(saved.downsizeNetProceedsToSuper) : 0,
       targetRetirementIncomeAfterTax: saved ? Number(saved.targetRetirementIncomeAfterTax) : 140000,
+      netYield: assumptions.netYield !== undefined ? assumptions.netYield : baseline.baselineNetYield,
+      forecastCpi: assumptions.forecastCpi !== undefined ? assumptions.forecastCpi : 0.030,
+      cgtTaxRate: assumptions.cgtTaxRate !== undefined ? assumptions.cgtTaxRate : 0.30,
+      taxReformDate: assumptions.taxReformDate || '1/7/2027',
+      investmentReturn: assumptions.investmentReturn !== undefined ? assumptions.investmentReturn : 0.05,
+      incomeTaxRate: assumptions.incomeTaxRate !== undefined ? assumptions.incomeTaxRate : 0.30,
+      downsizeHomePriceToday: assumptions.downsizeHomePriceToday !== undefined ? assumptions.downsizeHomePriceToday : 0,
     };
 
     return this.calculateProjections(baseline, levers);
@@ -201,6 +295,16 @@ export class FutureOutlookService {
 
   async saveScenario(adviserId: string, reviewId: string, dto: FutureOutlookLeversDto) {
     await this.getReviewWithHousehold(adviserId, reviewId);
+
+    const assumptionsJson = {
+      netYield: dto.netYield,
+      forecastCpi: dto.forecastCpi,
+      cgtTaxRate: dto.cgtTaxRate,
+      taxReformDate: dto.taxReformDate || '1/7/2027',
+      investmentReturn: dto.investmentReturn,
+      incomeTaxRate: dto.incomeTaxRate,
+      downsizeHomePriceToday: dto.downsizeHomePriceToday,
+    };
 
     return this.prisma.futureOutlookScenario.upsert({
       where: { annualReviewId: reviewId },
@@ -216,6 +320,7 @@ export class FutureOutlookService {
         downsizeYearOffset: dto.downsizeYearOffset || 10,
         downsizeNetProceedsToSuper: dto.downsizeNetProceedsToSuper || 0,
         targetRetirementIncomeAfterTax: dto.targetRetirementIncomeAfterTax || 140000,
+        assumptionsJson,
       },
       update: {
         forecastYears: dto.forecastYears,
@@ -228,6 +333,7 @@ export class FutureOutlookService {
         downsizeYearOffset: dto.downsizeYearOffset,
         downsizeNetProceedsToSuper: dto.downsizeNetProceedsToSuper,
         targetRetirementIncomeAfterTax: dto.targetRetirementIncomeAfterTax,
+        assumptionsJson,
       },
     });
   }
@@ -235,15 +341,18 @@ export class FutureOutlookService {
   private extractBaselines(review: any) {
     let ooVal = 0;
     let ooDebt = 0;
+    let ooPurchasePrice = 0;
     let invVal = 0;
     let invDebt = 0;
     let invGrossRent = 0;
+    let invPurchasePrice = 0;
 
     for (const prop of review.household.properties) {
       const snap =
         review.propertySnapshots.find((s: any) => s.propertyId === prop.id) ||
         null;
       const val = snap ? Number(snap.valuation) : Number(prop.purchasePrice);
+      const purchasePrice = Number(prop.purchasePrice || 0);
 
       let propDebt = 0;
       for (const loan of prop.loans) {
@@ -256,10 +365,12 @@ export class FutureOutlookService {
       if (prop.type === 'OWNER_OCCUPIED') {
         ooVal += val;
         ooDebt += propDebt;
+        ooPurchasePrice += purchasePrice;
       } else {
         invVal += val;
         invDebt += propDebt;
         invGrossRent += snap ? Number(snap.annualGrossRent) : 0;
+        invPurchasePrice += purchasePrice;
       }
     }
 
@@ -270,12 +381,21 @@ export class FutureOutlookService {
       annualSuperContrib += Number(member.annualSuperContribution || 0);
     }
 
+    const baselineNetYield =
+      invVal > 0 && invGrossRent > 0 ? (invGrossRent * 0.65) / invVal : 0.035;
+
+    const adultCount = Math.max(1, review.household.members?.length || 2);
+
     return {
       ooValuation: ooVal,
       ooDebt,
+      ooPurchasePrice,
       invValuation: invVal,
       invDebt,
       invGrossRent,
+      invPurchasePrice,
+      baselineNetYield,
+      adultCount,
       superBalance,
       annualSuperContrib,
       avgInterestRate: 0.0595,

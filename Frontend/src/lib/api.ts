@@ -717,12 +717,50 @@ export function setCachedDropdownSettings(settings: DropdownOptionsSettings) {
   } catch {}
 }
 
+export interface FutureOutlookGlobalAssumptions {
+  forecastCpi: number; // e.g. 3.0 (%)
+  taxReformDate: string; // e.g. "1/7/2027"
+  cgtTaxRate: number; // e.g. 30.0 (%)
+  investmentReturn: number; // e.g. 5.0 (%)
+  incomeTaxRate: number; // e.g. 30.0 (%)
+}
+
+export const DEFAULT_FUTURE_OUTLOOK_ASSUMPTIONS: FutureOutlookGlobalAssumptions = {
+  forecastCpi: 3.0,
+  taxReformDate: "1/7/2027",
+  cgtTaxRate: 30.0,
+  investmentReturn: 5.0,
+  incomeTaxRate: 30.0,
+};
+
+const FUTURE_OUTLOOK_ASSUMPTIONS_CACHE_KEY = "picfo_future_outlook_assumptions_v1";
+
+export function getCachedFutureOutlookAssumptions(): FutureOutlookGlobalAssumptions {
+  if (typeof window === "undefined") return DEFAULT_FUTURE_OUTLOOK_ASSUMPTIONS;
+  try {
+    const raw = localStorage.getItem(FUTURE_OUTLOOK_ASSUMPTIONS_CACHE_KEY);
+    if (!raw) return DEFAULT_FUTURE_OUTLOOK_ASSUMPTIONS;
+    return { ...DEFAULT_FUTURE_OUTLOOK_ASSUMPTIONS, ...JSON.parse(raw) };
+  } catch {
+    return DEFAULT_FUTURE_OUTLOOK_ASSUMPTIONS;
+  }
+}
+
+export function setCachedFutureOutlookAssumptions(assumptions: FutureOutlookGlobalAssumptions) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(FUTURE_OUTLOOK_ASSUMPTIONS_CACHE_KEY, JSON.stringify(assumptions));
+    window.dispatchEvent(new CustomEvent("picfo-assumptions-changed", { detail: assumptions }));
+  } catch {}
+}
+
 export function fetchSystemSettingsApi() {
   return apiFetch<{
     benchmarks: any[];
     picfoMetrics: any[];
     advisors?: AdvisorItem[];
     dropdowns?: DropdownOptionsSettings;
+    futureOutlookAssumptions?: FutureOutlookGlobalAssumptions;
   }>("/benchmarks/system-settings");
 }
 
@@ -731,12 +769,14 @@ export function saveSystemSettingsApi(payload: {
   picfoMetrics: any[];
   advisors?: AdvisorItem[];
   dropdowns?: DropdownOptionsSettings;
+  futureOutlookAssumptions?: FutureOutlookGlobalAssumptions;
 }) {
   return apiFetch<{
     benchmarks: any[];
     picfoMetrics: any[];
     advisors?: AdvisorItem[];
     dropdowns?: DropdownOptionsSettings;
+    futureOutlookAssumptions?: FutureOutlookGlobalAssumptions;
   }>("/benchmarks/system-settings", {
     method: "PUT",
     body: JSON.stringify(payload),

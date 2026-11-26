@@ -53,4 +53,38 @@ export class FutureOutlookLeversDto {
   @IsNumber()
   @IsOptional()
   targetRetirementIncomeAfterTax?: number;
+
+  @ApiPropertyOptional({ example: 0.035, description: 'Investment property net yield (e.g. 0.035 for 3.5%)' })
+  @IsNumber()
+  @IsOptional()
+  netYield?: number;
+
+  @ApiPropertyOptional({ example: 0.03, description: 'Annual forecast CPI inflation rate (e.g. 0.03 for 3.0%)' })
+  @IsNumber()
+  @IsOptional()
+  forecastCpi?: number;
+
+  @ApiPropertyOptional({ example: 0.30, description: 'Capital Gains Tax (CGT) rate (e.g. 0.30 for 30%)' })
+  @IsNumber()
+  @IsOptional()
+  cgtTaxRate?: number;
+
+  @ApiPropertyOptional({ example: '1/7/2027', description: 'Tax Reform Effective Date' })
+  @IsOptional()
+  taxReformDate?: string;
+
+  @ApiPropertyOptional({ example: 0.05, description: 'Global investment return assumption (e.g. 0.05 for 5.0% p.a.)' })
+  @IsNumber()
+  @IsOptional()
+  investmentReturn?: number;
+
+  @ApiPropertyOptional({ example: 0.30, description: 'Global income tax assumption (e.g. 0.30 for 30%)' })
+  @IsNumber()
+  @IsOptional()
+  incomeTaxRate?: number;
+
+  @ApiPropertyOptional({ example: 1500000, description: 'Today estimated purchase price of downsized replacement home ($)' })
+  @IsNumber()
+  @IsOptional()
+  downsizeHomePriceToday?: number;
 }

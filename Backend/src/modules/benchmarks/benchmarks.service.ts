@@ -109,6 +109,13 @@ const DEFAULT_SYSTEM_SETTINGS = {
     ],
     propertyPurposes: ['Investment', 'Owner-Occupied'],
   },
+  futureOutlookAssumptions: {
+    forecastCpi: 3.0,
+    taxReformDate: '1/7/2027',
+    cgtTaxRate: 30.0,
+    investmentReturn: 5.0,
+    incomeTaxRate: 30.0,
+  },
 };
 
 @Injectable()
@@ -131,6 +138,9 @@ export class BenchmarksService {
         }
         if (!parsed.dropdowns || typeof parsed.dropdowns !== 'object') {
           parsed.dropdowns = DEFAULT_SYSTEM_SETTINGS.dropdowns;
+        }
+        if (!parsed.futureOutlookAssumptions || typeof parsed.futureOutlookAssumptions !== 'object') {
+          parsed.futureOutlookAssumptions = DEFAULT_SYSTEM_SETTINGS.futureOutlookAssumptions;
         }
         return parsed;
       } catch {

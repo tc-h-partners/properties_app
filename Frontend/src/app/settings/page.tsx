@@ -28,6 +28,10 @@ import {
   DEFAULT_DROPDOWN_SETTINGS,
   getCachedDropdownSettings,
   setCachedDropdownSettings,
+  FutureOutlookGlobalAssumptions,
+  DEFAULT_FUTURE_OUTLOOK_ASSUMPTIONS,
+  getCachedFutureOutlookAssumptions,
+  setCachedFutureOutlookAssumptions,
 } from "@/lib/api";
 
 export interface HistoricalValueItem {
@@ -231,7 +235,7 @@ function ColumnHeader({
 export default function SettingsPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<
-    "associations" | "annual" | "metrics" | "advisors" | "dropdowns"
+    "associations" | "annual" | "metrics" | "advisors" | "dropdowns" | "assumptions"
   >("associations");
 
   const [benchmarks, setBenchmarks] =
@@ -242,6 +246,11 @@ export default function SettingsPage() {
   const [advisors, setAdvisors] = useState<AdvisorItem[]>(getCachedAdvisors());
   const [dropdownSettings, setDropdownSettings] =
     useState<DropdownOptionsSettings>(getCachedDropdownSettings());
+  const [assumptionsInput, setAssumptionsInput] =
+    useState<FutureOutlookGlobalAssumptions>(
+      getCachedFutureOutlookAssumptions()
+    );
+  const [assumptionsSaveMsg, setAssumptionsSaveMsg] = useState("");
 
   const [newStateInput, setNewStateInput] = useState("");
   const [newTypeInput, setNewTypeInput] = useState("");
@@ -268,19 +277,22 @@ export default function SettingsPage() {
   ]);
   const [bmMultiDropdownOpen, setBmMultiDropdownOpen] = useState(false);
 
-  // Modal 2: Annual Historical Values (935:8373)
+  // Modal 2: Annual Historical Values (Single Unified Modal)
   const [activeHistoryBenchmarkId, setActiveHistoryBenchmarkId] = useState<
     string | null
   >(null);
   const [editingHistoryItemId, setEditingHistoryItemId] = useState<
     string | null
   >(null);
-  const [editingHistoryText, setEditingHistoryText] = useState("");
+  const [editingHistoryDate, setEditingHistoryDate] = useState("");
+  const [editingHistoryFy, setEditingHistoryFy] = useState("");
+  const [editingHistoryValue, setEditingHistoryValue] = useState("");
 
-  // Modal 3: Add Financial Year Value (+ FY) (936:8529)
-  const [showAddFyModal, setShowAddFyModal] = useState(false);
-  const [fyDateInput, setFyDateInput] = useState("30/6/2027");
-  const [fyLabelInput, setFyLabelInput] = useState("2027");
+  // Inline Add New FY row in Modal 2 (replaces Modal 3)
+  const [isAddingFy, setIsAddingFy] = useState(false);
+  const [newFyDate, setNewFyDate] = useState("");
+  const [newFyLabel, setNewFyLabel] = useState("");
+  const [newFyValue, setNewFyValue] = useState("");
 
   // Modal 4: Add / Edit PICFO Metric (940:8892)
   const [showAddMetricModal, setShowAddMetricModal] = useState(false);
@@ -302,12 +314,17 @@ export default function SettingsPage() {
       const data = await fetchSystemSettingsApi();
       if (data) {
         if (Array.isArray(data.benchmarks) && data.benchmarks.length > 0) {
-          setBenchmarks(
-            data.benchmarks.map((b: BenchmarkMeasureItem) => ({
+          const cleanedBenchmarks = data.benchmarks.map((b: BenchmarkMeasureItem) => {
+            const cleanedHvs = (b.historicalValues || []).filter(
+              (hv) => !(hv.date === "30/6/2027" && hv.value === "20,160")
+            );
+            return {
               ...b,
-              latestFy: computeLatestFy(b.historicalValues || []),
-            }))
-          );
+              historicalValues: cleanedHvs,
+              latestFy: computeLatestFy(cleanedHvs),
+            };
+          });
+          setBenchmarks(cleanedBenchmarks);
         }
         if (Array.isArray(data.picfoMetrics) && data.picfoMetrics.length > 0) {
           setPicfoMetrics(data.picfoMetrics);
@@ -319,6 +336,10 @@ export default function SettingsPage() {
         if (data.dropdowns) {
           setDropdownSettings(data.dropdowns);
           setCachedDropdownSettings(data.dropdowns);
+        }
+        if (data.futureOutlookAssumptions) {
+          setAssumptionsInput(data.futureOutlookAssumptions);
+          setCachedFutureOutlookAssumptions(data.futureOutlookAssumptions);
         }
       }
     } catch (err) {
@@ -335,7 +356,8 @@ export default function SettingsPage() {
         tabParam === "annual" ||
         tabParam === "metrics" ||
         tabParam === "associations" ||
-        tabParam === "dropdowns"
+        tabParam === "dropdowns" ||
+        tabParam === "assumptions"
       ) {
         setActiveTab(tabParam as any);
       }
@@ -347,7 +369,8 @@ export default function SettingsPage() {
     nextBenchmarks: BenchmarkMeasureItem[],
     nextMetrics: PicfoMetricItem[],
     nextAdvisors?: AdvisorItem[],
-    nextDropdowns?: DropdownOptionsSettings
+    nextDropdowns?: DropdownOptionsSettings,
+    nextAssumptions?: FutureOutlookGlobalAssumptions
   ) => {
     const normalizedBenchmarks = nextBenchmarks.map((b) => ({
       ...b,
@@ -365,16 +388,35 @@ export default function SettingsPage() {
       setDropdownSettings(nextDropdowns);
       setCachedDropdownSettings(nextDropdowns);
     }
+    const updatedAssumptions = nextAssumptions || assumptionsInput;
+    if (nextAssumptions) {
+      setAssumptionsInput(nextAssumptions);
+      setCachedFutureOutlookAssumptions(nextAssumptions);
+    }
     try {
       await saveSystemSettingsApi({
         benchmarks: normalizedBenchmarks,
         picfoMetrics: nextMetrics,
         advisors: updatedAdvisors,
         dropdowns: updatedDropdowns,
+        futureOutlookAssumptions: updatedAssumptions,
       });
     } catch (err) {
       console.error("Failed to persist system settings:", err);
     }
+  };
+
+  const handleSaveFutureOutlookAssumptions = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await persistSettings(
+      benchmarks,
+      picfoMetrics,
+      advisors,
+      dropdownSettings,
+      assumptionsInput
+    );
+    setAssumptionsSaveMsg("Assumptions saved successfully!");
+    setTimeout(() => setAssumptionsSaveMsg(""), 3500);
   };
 
   const handleSaveAdvisor = async (e: React.FormEvent) => {
@@ -620,34 +662,33 @@ export default function SettingsPage() {
     setShowAddBenchmarkModal(false);
   };
 
-  // Save Modal 3: Add Financial Year Value (+ FY)
-  const handleSaveFinancialYear = async (e: React.FormEvent) => {
+  // Add new Financial Year Value directly in Modal 2 (No second screen, no default values)
+  const handleAddNewHistoricalValue = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeHistoryBenchmarkId) return;
 
-    const dateStr = fyDateInput.trim() || "30/6/2027";
-    const rawSecondInput = fyLabelInput.trim() || "2027";
+    const dateStr = newFyDate.trim();
+    const rawFyInput = newFyLabel.trim();
+    const valInput = newFyValue.trim();
 
-    // Extract year from date (e.g. 30/6/2027 -> 2027) or from rawSecondInput
+    if (!dateStr || !rawFyInput || !valInput) return;
+
     const yearFromDate = dateStr.match(/(\d{4})$/)?.[1];
-    const isFourDigitYear = /^(FY)?\d{4}$/i.test(rawSecondInput);
+    const isFourDigitYear = /^(FY)?\d{4}$/i.test(rawFyInput);
     const resolvedFy = isFourDigitYear
-      ? rawSecondInput.replace(/^FY/i, "")
-      : yearFromDate || "2027";
+      ? rawFyInput.replace(/^FY/i, "")
+      : yearFromDate || rawFyInput;
+
+    const newHv: HistoricalValueItem = {
+      id: `hv-${Date.now()}`,
+      date: dateStr,
+      fy: resolvedFy,
+      value: valInput,
+    };
 
     const next = benchmarks.map((b) => {
       if (b.id !== activeHistoryBenchmarkId) return b;
-      const lastVal =
-        b.historicalValues[b.historicalValues.length - 1]?.value || "20,160";
-      const resolvedValue = !isFourDigitYear ? rawSecondInput : lastVal;
-
-      const newHv: HistoricalValueItem = {
-        id: `hv-${Date.now()}`,
-        date: dateStr,
-        fy: resolvedFy,
-        value: resolvedValue,
-      };
-      const updatedHvs = [...b.historicalValues, newHv];
+      const updatedHvs = [...(b.historicalValues || []), newHv];
       return {
         ...b,
         latestFy: computeLatestFy(updatedHvs),
@@ -657,7 +698,7 @@ export default function SettingsPage() {
 
     await persistSettings(next, picfoMetrics);
 
-    // Also create a market benchmark row in DB so market data stays in sync
+    // Sync to market benchmark in DB if possible
     try {
       const parts = dateStr.split(/[\/\-]/);
       const isoDate =
@@ -668,10 +709,10 @@ export default function SettingsPage() {
               2,
               "0"
             )}T00:00:00.000Z`
-          : "2027-06-30T00:00:00.000Z";
+          : `${resolvedFy}-06-30T00:00:00.000Z`;
       await createBenchmarkApi({
         effectiveDate: isoDate,
-        asxIndexValue: 22521,
+        asxIndexValue: parseFloat(valInput.replace(/[^0-9.]/g, "")) || 0,
         sourceNotes: `FY${resolvedFy}`,
         benchmarkInterestRate: 0.0595,
         benchmarkGrossYield: 0.041,
@@ -680,30 +721,32 @@ export default function SettingsPage() {
       // Non-fatal
     }
 
-    setShowAddFyModal(false);
+    setNewFyDate("");
+    setNewFyLabel("");
+    setNewFyValue("");
+    setIsAddingFy(false);
   };
 
-  // Save inline edit in Modal 2: Annual Historical Values
-  const handleSaveInlineHistoryEdit = async (hvId: string) => {
+  // Save inline edit in Modal 2: Annual Historical Values (saves date, fy, and value)
+  const handleSaveHistoricalValueEdit = async (hvId: string) => {
     if (!activeHistoryBenchmarkId) return;
-    const parts = editingHistoryText.split(/—|--|-/).map((s) => s.trim());
-    const nextDate = parts[0] || "30/6/2024";
-    const nextVal =
-      parts.length > 1 ? parts.slice(1).join(" - ") : parts[0] || "20,160";
-    const yearMatch = nextDate.match(/(\d{4})$/);
 
     const next = benchmarks.map((b) => {
       if (b.id !== activeHistoryBenchmarkId) return b;
-      const updatedHvs = b.historicalValues.map((hv) =>
-        hv.id === hvId
-          ? {
-              ...hv,
-              date: nextDate,
-              fy: yearMatch ? yearMatch[1] : hv.fy,
-              value: nextVal,
-            }
-          : hv
-      );
+      const updatedHvs = (b.historicalValues || []).map((hv) => {
+        if (hv.id !== hvId) return hv;
+        const yearFromDate = editingHistoryDate.match(/(\d{4})$/)?.[1];
+        const isFourDigit = /^(FY)?\d{4}$/i.test(editingHistoryFy);
+        const resolvedFy = isFourDigit
+          ? editingHistoryFy.replace(/^FY/i, "")
+          : yearFromDate || editingHistoryFy || hv.fy;
+        return {
+          ...hv,
+          date: editingHistoryDate.trim() || hv.date,
+          fy: resolvedFy,
+          value: editingHistoryValue.trim() || hv.value,
+        };
+      });
       return {
         ...b,
         latestFy: computeLatestFy(updatedHvs),
@@ -713,6 +756,23 @@ export default function SettingsPage() {
 
     await persistSettings(next, picfoMetrics);
     setEditingHistoryItemId(null);
+  };
+
+  // Delete historical value row from Modal 2
+  const handleDeleteHistoricalValue = async (hvId: string) => {
+    if (!activeHistoryBenchmarkId) return;
+    const next = benchmarks.map((b) => {
+      if (b.id !== activeHistoryBenchmarkId) return b;
+      const updatedHvs = (b.historicalValues || []).filter(
+        (hv) => hv.id !== hvId
+      );
+      return {
+        ...b,
+        latestFy: computeLatestFy(updatedHvs),
+        historicalValues: updatedHvs,
+      };
+    });
+    await persistSettings(next, picfoMetrics);
   };
 
   // Save Modal 4: Add or Edit PICFO Metric
@@ -904,6 +964,17 @@ export default function SettingsPage() {
               }`}
             >
               Drop Downs
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("assumptions")}
+              className={`px-[16px] py-[10px] rounded-[4px] text-[14px] leading-[1.4] tracking-[-0.28px] font-['Poppins',sans-serif] transition-all cursor-pointer ${
+                activeTab === "assumptions"
+                  ? "bg-white font-bold text-[#0e2841] shadow-2xs"
+                  : "font-medium text-[#a0a0a0] hover:text-[#0e2841]"
+              }`}
+            >
+              Future Outlook Assumptions
             </button>
           </div>
 
@@ -1749,6 +1820,184 @@ export default function SettingsPage() {
               </div>
             </>
           )}
+
+          {/* ========================================================================= */}
+          {/* TAB 6: FUTURE OUTLOOK ASSUMPTIONS                                        */}
+          {/* ========================================================================= */}
+          {activeTab === "assumptions" && (
+            <>
+              <div className="mt-[21px] py-[10px] flex flex-col lg:flex-row lg:items-center justify-between gap-4 w-full">
+                <div className="max-w-[1100px]">
+                  <h2 className="font-['Poppins',sans-serif] font-semibold text-[#07315b] text-[18px] leading-[33px] tracking-[-0.64px]">
+                    System Settings – Future Outlook Assumptions
+                  </h2>
+                  <p className="font-['Poppins',sans-serif] font-medium text-[#1a1c1e] text-[16px] leading-[33px] tracking-[-0.64px]">
+                    Configure global macro-economic, taxation, and investment return parameters for the Interactive Future Outlook projections.
+                  </p>
+                </div>
+              </div>
+
+              {assumptionsSaveMsg && (
+                <div className="mt-3 p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-[8px] text-[13px] font-medium max-w-[850px]">
+                  {assumptionsSaveMsg}
+                </div>
+              )}
+
+              <div className="mt-[18px] bg-white rounded-[12px] p-[30px] shadow-[0px_11px_18px_0px_rgba(0,0,0,0.04)] border border-[#F4F5F7] max-w-[850px]">
+                <form onSubmit={handleSaveFutureOutlookAssumptions} className="space-y-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    {/* Forecast CPI */}
+                    <div className="p-4 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[10px]">
+                      <label className="block font-['Poppins',sans-serif] font-semibold text-[14px] text-[#0E2841] mb-1">
+                        Forecast CPI (% p.a.)
+                      </label>
+                      <p className="text-[12px] text-[#64748B] mb-2.5">
+                        Adjusts 1/7/2027 cost base for inflation in post-reform CGT calculations.
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          max="20"
+                          value={assumptionsInput.forecastCpi}
+                          onChange={(e) =>
+                            setAssumptionsInput((prev) => ({
+                              ...prev,
+                              forecastCpi: parseFloat(e.target.value) || 0,
+                            }))
+                          }
+                          className="w-[120px] h-[40px] px-3 bg-white border border-[#CBD5E1] rounded-[6px] text-[14px] font-semibold text-[#0E2841] focus:outline-none focus:border-[#0E2841]"
+                        />
+                        <span className="text-[14px] font-medium text-[#64748B]">% p.a.</span>
+                      </div>
+                    </div>
+
+                    {/* Tax Reform Date */}
+                    <div className="p-4 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[10px]">
+                      <label className="block font-['Poppins',sans-serif] font-semibold text-[14px] text-[#0E2841] mb-1">
+                        Tax Reform Date
+                      </label>
+                      <p className="text-[12px] text-[#64748B] mb-2.5">
+                        Transitional boundary date (pre-reform: 50% discount; post-reform: CPI-indexed).
+                      </p>
+                      <input
+                        type="text"
+                        value={assumptionsInput.taxReformDate}
+                        onChange={(e) =>
+                          setAssumptionsInput((prev) => ({
+                            ...prev,
+                            taxReformDate: e.target.value,
+                          }))
+                        }
+                        placeholder="1/7/2027"
+                        className="w-[160px] h-[40px] px-3 bg-white border border-[#CBD5E1] rounded-[6px] text-[14px] font-semibold text-[#0E2841] focus:outline-none focus:border-[#0E2841]"
+                      />
+                    </div>
+
+                    {/* CGT Tax Rate */}
+                    <div className="p-4 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[10px]">
+                      <label className="block font-['Poppins',sans-serif] font-semibold text-[14px] text-[#0E2841] mb-1">
+                        CGT Tax Rate (%)
+                      </label>
+                      <p className="text-[12px] text-[#64748B] mb-2.5">
+                        Minimum tax rate applied to net taxable capital gains at retirement.
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          max="100"
+                          value={assumptionsInput.cgtTaxRate}
+                          onChange={(e) =>
+                            setAssumptionsInput((prev) => ({
+                              ...prev,
+                              cgtTaxRate: parseFloat(e.target.value) || 0,
+                            }))
+                          }
+                          className="w-[120px] h-[40px] px-3 bg-white border border-[#CBD5E1] rounded-[6px] text-[14px] font-semibold text-[#0E2841] focus:outline-none focus:border-[#0E2841]"
+                        />
+                        <span className="text-[14px] font-medium text-[#64748B]">%</span>
+                      </div>
+                    </div>
+
+                    {/* Global Investment Return */}
+                    <div className="p-4 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[10px]">
+                      <label className="block font-['Poppins',sans-serif] font-semibold text-[14px] text-[#0E2841] mb-1">
+                        Global Investment Return (% p.a.)
+                      </label>
+                      <p className="text-[12px] text-[#64748B] mb-2.5">
+                        Expected gross return rate across personal invested capital in retirement.
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          max="25"
+                          value={assumptionsInput.investmentReturn}
+                          onChange={(e) =>
+                            setAssumptionsInput((prev) => ({
+                              ...prev,
+                              investmentReturn: parseFloat(e.target.value) || 0,
+                            }))
+                          }
+                          className="w-[120px] h-[40px] px-3 bg-white border border-[#CBD5E1] rounded-[6px] text-[14px] font-semibold text-[#0E2841] focus:outline-none focus:border-[#0E2841]"
+                        />
+                        <span className="text-[14px] font-medium text-[#64748B]">% p.a.</span>
+                      </div>
+                    </div>
+
+                    {/* Global Income Tax Rate */}
+                    <div className="p-4 bg-[#F8FAFC] border border-[#E2E8F0] rounded-[10px]">
+                      <label className="block font-['Poppins',sans-serif] font-semibold text-[14px] text-[#0E2841] mb-1">
+                        Global Income Tax Assumption (%)
+                      </label>
+                      <p className="text-[12px] text-[#64748B] mb-2.5">
+                        Estimated effective tax rate on personal invested capital distributions.
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          max="100"
+                          value={assumptionsInput.incomeTaxRate}
+                          onChange={(e) =>
+                            setAssumptionsInput((prev) => ({
+                              ...prev,
+                              incomeTaxRate: parseFloat(e.target.value) || 0,
+                            }))
+                          }
+                          className="w-[120px] h-[40px] px-3 bg-white border border-[#CBD5E1] rounded-[6px] text-[14px] font-semibold text-[#0E2841] focus:outline-none focus:border-[#0E2841]"
+                        />
+                        <span className="text-[14px] font-medium text-[#64748B]">%</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-4 border-t border-[#E2E8F0]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAssumptionsInput(DEFAULT_FUTURE_OUTLOOK_ASSUMPTIONS);
+                      }}
+                      className="px-4 h-[40px] border border-[#CBD5E1] rounded-[8px] text-[13px] font-medium text-[#64748B] hover:text-[#0E2841] hover:bg-gray-50 cursor-pointer"
+                    >
+                      Reset to Defaults
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-6 h-[40px] bg-[#0E2841] hover:bg-[#163859] text-white rounded-[8px] text-[13px] font-semibold transition-colors cursor-pointer"
+                    >
+                      Save Assumptions
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </>
+          )}
         </main>
       </div>
 
@@ -1889,146 +2138,232 @@ export default function SettingsPage() {
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 2: ANNUAL HISTORICAL VALUES (Figma 935:8373)                        */}
+      {/* MODAL 2: ANNUAL HISTORICAL VALUES (Unified Single Modal with FY Label)    */}
       {/* ========================================================================= */}
-      {activeHistoryBenchmark && !showAddFyModal && (
+      {activeHistoryBenchmark && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-2xs">
-          <div className="relative w-full max-w-[588px] sm:w-[588px] bg-white rounded-[20px] shadow-2xl px-[20px] pt-[36px] pb-[36px]">
+          <div className="relative w-full max-w-[588px] sm:w-[588px] bg-white rounded-[20px] shadow-2xl px-[24px] pt-[36px] pb-[36px]">
             <CircleCrossCloseButton
-              onClick={() => setActiveHistoryBenchmarkId(null)}
+              onClick={() => {
+                setActiveHistoryBenchmarkId(null);
+                setIsAddingFy(false);
+                setEditingHistoryItemId(null);
+              }}
             />
 
-            <h2 className="font-['Poppins',sans-serif] font-bold text-[#0e2841] text-[20px] text-center mb-[32px]">
+            <h2 className="font-['Poppins',sans-serif] font-bold text-[#0e2841] text-[20px] text-center mb-[28px]">
               {activeHistoryBenchmark.measure}
             </h2>
 
-            <div className="flex items-center justify-between mb-[14px]">
+            <div className="flex items-center justify-between mb-[16px]">
               <span className="font-['Poppins',sans-serif] font-bold text-[#1a1c1e] text-[15px]">
                 Annual Historical Values
               </span>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setFyDateInput("30/6/2027");
-                  setFyLabelInput("2027");
-                  setShowAddFyModal(true);
-                }}
-                className="bg-[#0e2841] hover:bg-[#163859] text-white font-['Poppins',sans-serif] font-medium text-[12px] w-[80px] h-[38px] rounded-[8px] flex items-center justify-center cursor-pointer transition-colors"
-              >
-                +Add Fy
-              </button>
+              {!isAddingFy && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewFyDate("");
+                    setNewFyLabel("");
+                    setNewFyValue("");
+                    setIsAddingFy(true);
+                  }}
+                  className="bg-[#0e2841] hover:bg-[#163859] text-white font-['Poppins',sans-serif] font-medium text-[12px] px-3.5 h-[36px] rounded-[8px] flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  +Add Fy
+                </button>
+              )}
             </div>
 
-            <div className="space-y-[10px]">
-              {activeHistoryBenchmark.historicalValues.length === 0 && (
-                <div className="w-full h-[48px] bg-[#F9F9F9] border border-[#DEDEDE] rounded-[10px] px-[14px] flex items-center justify-between text-[13.5px] font-['Poppins',sans-serif] text-[#9EA5AD]">
-                  <span>No financial year values added yet. Click +Add Fy.</span>
+            {/* Inline Add New Financial Year Row (No second screen, no default values) */}
+            {isAddingFy && (
+              <form
+                onSubmit={handleAddNewHistoricalValue}
+                className="mb-4 p-3.5 bg-[#F8FAFC] border border-[#CBD5E1] rounded-[12px] space-y-3"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[12px] font-bold text-[#0E2841] uppercase tracking-wider">
+                    Add Financial Year Value
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsAddingFy(false)}
+                    className="text-[12px] text-[#64748B] hover:text-[#0E2841]"
+                  >
+                    Cancel
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#475569] mb-1">
+                      Date *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. 30/6/2025"
+                      value={newFyDate}
+                      onChange={(e) => setNewFyDate(e.target.value)}
+                      className="w-full h-[36px] px-2.5 bg-white border border-[#CBD5E1] rounded-[6px] text-[13px] text-[#1E293B] placeholder-[#94A3B8] focus:outline-none focus:border-[#0E2841]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#475569] mb-1">
+                      FY Label *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. 2025"
+                      value={newFyLabel}
+                      onChange={(e) => setNewFyLabel(e.target.value)}
+                      className="w-full h-[36px] px-2.5 bg-white border border-[#CBD5E1] rounded-[6px] text-[13px] text-[#1E293B] placeholder-[#94A3B8] focus:outline-none focus:border-[#0E2841]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#475569] mb-1">
+                      Value *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. 21,450 or 4.8%"
+                      value={newFyValue}
+                      onChange={(e) => setNewFyValue(e.target.value)}
+                      className="w-full h-[36px] px-2.5 bg-white border border-[#CBD5E1] rounded-[6px] text-[13px] text-[#1E293B] placeholder-[#94A3B8] focus:outline-none focus:border-[#0E2841]"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end pt-1">
+                  <button
+                    type="submit"
+                    className="h-[34px] px-4 bg-[#0E2841] hover:bg-[#163859] text-white font-semibold text-[12px] rounded-[6px] transition-colors cursor-pointer"
+                  >
+                    Save Financial Year
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* List of Historical Values with FY Label and Remove defaults */}
+            <div className="space-y-[10px] max-h-[340px] overflow-y-auto pr-1">
+              {activeHistoryBenchmark.historicalValues.length === 0 && !isAddingFy && (
+                <div className="w-full py-4 bg-[#F9F9F9] border border-[#DEDEDE] rounded-[10px] px-[14px] text-center text-[13.5px] font-['Poppins',sans-serif] text-[#9EA5AD]">
+                  No financial year values added yet. Click +Add Fy to add one.
                 </div>
               )}
+
               {activeHistoryBenchmark.historicalValues.map((hv) => {
                 const isEditing = editingHistoryItemId === hv.id;
+                if (isEditing) {
+                  return (
+                    <div
+                      key={hv.id}
+                      className="w-full p-3 bg-white border-2 border-[#0E2841] rounded-[10px] space-y-2 shadow-xs"
+                    >
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-bold text-[#64748B] mb-0.5">
+                            DATE
+                          </label>
+                          <input
+                            type="text"
+                            value={editingHistoryDate}
+                            onChange={(e) => setEditingHistoryDate(e.target.value)}
+                            className="w-full h-[32px] px-2 bg-[#F8FAFC] border border-[#CBD5E1] rounded-[5px] text-[12.5px] text-[#0E2841] focus:outline-none focus:border-[#0E2841]"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-[#64748B] mb-0.5">
+                            FY LABEL
+                          </label>
+                          <input
+                            type="text"
+                            value={editingHistoryFy}
+                            onChange={(e) => setEditingHistoryFy(e.target.value)}
+                            className="w-full h-[32px] px-2 bg-[#F8FAFC] border border-[#CBD5E1] rounded-[5px] text-[12.5px] text-[#0E2841] focus:outline-none focus:border-[#0E2841]"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-[#64748B] mb-0.5">
+                            VALUE
+                          </label>
+                          <input
+                            type="text"
+                            value={editingHistoryValue}
+                            onChange={(e) => setEditingHistoryValue(e.target.value)}
+                            className="w-full h-[32px] px-2 bg-[#F8FAFC] border border-[#CBD5E1] rounded-[5px] text-[12.5px] text-[#0E2841] focus:outline-none focus:border-[#0E2841]"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-end gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setEditingHistoryItemId(null)}
+                          className="px-2.5 py-1 text-[11px] font-medium text-[#64748B] hover:text-[#0E2841]"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSaveHistoricalValueEdit(hv.id)}
+                          className="px-3 py-1 bg-[#0E2841] text-white text-[11px] font-semibold rounded-[5px] hover:bg-[#163859]"
+                        >
+                          Save
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
                 return (
                   <div
                     key={hv.id}
-                    className="w-full h-[48px] bg-[#F9F9F9] border border-[#DEDEDE] rounded-[10px] px-[14px] flex items-center justify-between"
+                    className="w-full h-[48px] bg-[#F9F9F9] border border-[#DEDEDE] rounded-[10px] px-[14px] flex items-center justify-between hover:bg-[#F3F4F6] transition-colors"
                   >
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={editingHistoryText}
-                        onChange={(e) => setEditingHistoryText(e.target.value)}
-                        onBlur={() => handleSaveInlineHistoryEdit(hv.id)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            handleSaveInlineHistoryEdit(hv.id);
-                          }
-                        }}
-                        autoFocus
-                        className="flex-1 bg-white border border-[#CBD5E1] rounded-[6px] px-2.5 py-1 text-[14px] font-['Poppins',sans-serif] text-[#1a1c1e] mr-3 focus:outline-none"
-                      />
-                    ) : (
-                      <span className="font-['Poppins',sans-serif] text-[14px] text-[#9EA5AD]">
-                        {hv.date} &mdash; {hv.value}
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {/* FY Label Badge */}
+                      <span className="shrink-0 px-2 py-0.5 bg-[#0E2841] text-white text-[11px] font-bold rounded-[5px]">
+                        FY{hv.fy ? String(hv.fy).replace(/^FY/i, "") : String(hv.date).match(/\d{4}$/)?.[0] || ""}
                       </span>
-                    )}
+                      <span className="font-['Poppins',sans-serif] text-[13.5px] text-[#64748B] truncate">
+                        {hv.date}
+                      </span>
+                      <span className="text-[#CBD5E1]">&mdash;</span>
+                      <span className="font-['Poppins',sans-serif] text-[14px] font-semibold text-[#0E2841] truncate">
+                        {hv.value}
+                      </span>
+                    </div>
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (isEditing) {
-                          handleSaveInlineHistoryEdit(hv.id);
-                        } else {
+                    <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                      <button
+                        type="button"
+                        onClick={() => {
                           setEditingHistoryItemId(hv.id);
-                          setEditingHistoryText(`${hv.date} — ${hv.value}`);
-                        }
-                      }}
-                      className="w-[24px] h-[24px] flex items-center justify-center text-[#475569] hover:text-[#0e2841] cursor-pointer"
-                      title="Edit Historical Value"
-                    >
-                      <Pencil className="w-[14px] h-[14px]" />
-                    </button>
+                          setEditingHistoryDate(hv.date);
+                          setEditingHistoryFy(hv.fy || "");
+                          setEditingHistoryValue(hv.value);
+                        }}
+                        className="w-[28px] h-[28px] rounded-[6px] hover:bg-white flex items-center justify-center text-[#475569] hover:text-[#0e2841] transition-colors cursor-pointer"
+                        title="Edit Historical Value"
+                      >
+                        <Pencil className="w-[14px] h-[14px]" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteHistoricalValue(hv.id)}
+                        className="w-[28px] h-[28px] rounded-[6px] hover:bg-white flex items-center justify-center text-[#94A3B8] hover:text-red-600 transition-colors cursor-pointer"
+                        title="Delete Historical Value"
+                      >
+                        <Trash2 className="w-[14px] h-[14px]" />
+                      </button>
+                    </div>
                   </div>
                 );
               })}
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* MODAL 3: ADD FINANCIAL YEAR VALUE (+ FY) (Figma 936:8529)                 */}
-      {/* ========================================================================= */}
-      {showAddFyModal && activeHistoryBenchmark && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-2xs">
-          <div className="relative w-full max-w-[588px] sm:w-[588px] bg-white rounded-[20px] shadow-2xl px-[22.5px] pt-[36px] pb-[38px]">
-            <CircleCrossCloseButton
-              onClick={() => setShowAddFyModal(false)}
-            />
-
-            <h2 className="font-['Poppins',sans-serif] font-bold text-[#0e2841] text-[20px] text-center mb-[34px]">
-              Add Financial Year Value (+ FY)
-            </h2>
-
-            <form onSubmit={handleSaveFinancialYear} className="space-y-[16px]">
-              <div>
-                <label className="block font-['Poppins',sans-serif] font-medium text-[#1a1c1e] text-[14px] mb-[10px]">
-                  Date (e.g. 30/6/2027)
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={fyDateInput}
-                  onChange={(e) => setFyDateInput(e.target.value)}
-                  placeholder="30/6/2027"
-                  className="w-full h-[48px] px-[14px] bg-[#F9F9F9] border border-[#DEDEDE] rounded-[10px] font-['Poppins',sans-serif] text-[14px] text-[#9EA5AD] focus:text-[#1a1c1e] placeholder-[#BCBCBC] focus:outline-none focus:border-[#0e2841]"
-                />
-              </div>
-
-              <div>
-                <label className="block font-['Poppins',sans-serif] font-medium text-[#1a1c1e] text-[14px] mb-[10px]">
-                  Financial Year Label{" "}
-                  <span className="text-[#BCBCBC] ml-1">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={fyLabelInput}
-                  onChange={(e) => setFyLabelInput(e.target.value)}
-                  placeholder="2027"
-                  className="w-full h-[48px] px-[14px] bg-[#F9F9F9] border border-[#DEDEDE] rounded-[10px] font-['Poppins',sans-serif] text-[14px] text-[#9EA5AD] focus:text-[#1a1c1e] placeholder-[#BCBCBC] focus:outline-none focus:border-[#0e2841]"
-                />
-              </div>
-
-              <div className="pt-[14px] flex justify-center">
-                <button
-                  type="submit"
-                  className="w-[335px] max-w-full h-[50px] bg-[#0e2841] hover:bg-[#163859] text-white font-['Poppins',sans-serif] font-semibold text-[13.5px] rounded-[8px] flex items-center justify-center transition-colors cursor-pointer"
-                >
-                  Save Financial Year
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}
