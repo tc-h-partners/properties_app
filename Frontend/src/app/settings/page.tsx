@@ -799,9 +799,20 @@ export default function SettingsPage() {
   const activeHistoryBenchmark =
     benchmarks.find((b) => b.id === activeHistoryBenchmarkId) || null;
 
-  // All PICFO metric options dynamically come from the PICFO Metrics tab
+  // Core metrics + any custom PICFO metrics
+  const standardPicfoMetrics = [
+    "Total Property Return",
+    "Gross Rental Yield",
+    "Net Rental Yield",
+    "Property Capital Growth (CAGR)",
+    "Leveraged Cash ROE",
+    "Property Value",
+    "Total Loans",
+    "Total Equity",
+    "LVR (Loan-to-Value Ratio)",
+  ];
   const allMetricOptions = Array.from(
-    new Set(picfoMetrics.map((m) => m.metric))
+    new Set([...standardPicfoMetrics, ...picfoMetrics.map((m) => m.metric)])
   );
 
   return (
@@ -1022,40 +1033,84 @@ export default function SettingsPage() {
                             </button>
 
                             {isSelectOpen && (
-                              <div className="absolute left-0 top-full mt-1 z-30 w-[235px] bg-white border border-[#E2E8F0] rounded-[8px] shadow-lg py-1.5">
-                                {allMetricOptions.map((opt) => {
-                                  const checked =
-                                    row.picfoMetrics.includes(opt);
-                                  return (
+                              <>
+                                <div
+                                  className="fixed inset-0 z-20 cursor-default"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOpenMetricSelectRowId(null);
+                                  }}
+                                />
+                                <div
+                                  className="absolute left-0 top-full mt-1 z-30 w-[245px] bg-white border border-[#CBD5E1] rounded-[8px] shadow-xl py-1.5 animate-in fade-in zoom-in-95"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <div className="px-3 py-1 border-b border-[#F1F5F9] text-[10.5px] font-semibold text-[#64748B] uppercase tracking-wider flex items-center justify-between">
+                                    <span>Select Metrics</span>
                                     <button
-                                      key={opt}
                                       type="button"
-                                      onClick={() =>
-                                        handleToggleMappedMetric(row.id, opt)
-                                      }
-                                      className="w-full px-3 py-1.5 text-left text-[11.5px] font-['Poppins',sans-serif] text-[#1a1c1e] hover:bg-[#F8FAFC] flex items-center justify-between gap-2 cursor-pointer"
+                                      onClick={() => setOpenMetricSelectRowId(null)}
+                                      className="text-[#DC2626] hover:underline cursor-pointer lowercase text-[10px]"
                                     >
-                                      <span className="truncate">{opt}</span>
-                                      <span
-                                        className={`w-[15px] h-[15px] rounded-[3px] border flex items-center justify-center shrink-0 ${
-                                          checked
-                                            ? "bg-[#0e2841] border-[#0e2841] text-white"
-                                            : "border-[#CBD5E1] bg-white"
-                                        }`}
-                                      >
-                                        {checked && (
-                                          <Check className="w-3 h-3 stroke-[2.5]" />
-                                        )}
-                                      </span>
+                                      close
                                     </button>
-                                  );
-                                })}
-                              </div>
+                                  </div>
+                                  <div className="max-h-[190px] overflow-y-auto divide-y divide-[#F8FAFC]">
+                                    {allMetricOptions.map((opt) => {
+                                      const checked =
+                                        row.picfoMetrics.includes(opt);
+                                      return (
+                                        <button
+                                          key={opt}
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleToggleMappedMetric(row.id, opt);
+                                          }}
+                                          className={`w-full px-3 py-1.5 text-left text-[11.5px] font-['Poppins',sans-serif] hover:bg-[#F1F5F9] flex items-center justify-between gap-2 cursor-pointer transition-colors ${
+                                            checked
+                                              ? "bg-[#F0F5FA] text-[#0e2841] font-semibold"
+                                              : "text-[#1a1c1e]"
+                                          }`}
+                                        >
+                                          <span className="truncate">{opt}</span>
+                                          <span
+                                            className={`w-[16px] h-[16px] rounded-[3px] border flex items-center justify-center shrink-0 transition-colors ${
+                                              checked
+                                                ? "bg-[#0e2841] border-[#0e2841] text-white"
+                                                : "border-[#CBD5E1] bg-white"
+                                            }`}
+                                          >
+                                            {checked && (
+                                              <Check className="w-3 h-3 stroke-[2.5]" />
+                                            )}
+                                          </span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                  <div className="pt-1.5 mt-1 border-t border-[#F1F5F9] px-3 flex items-center justify-between bg-[#FAFAFA]">
+                                    <span className="text-[10.5px] text-[#64748B] font-medium">
+                                      {row.picfoMetrics.length} selected
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenMetricSelectRowId(null);
+                                      }}
+                                      className="bg-[#0e2841] hover:bg-[#163859] text-white text-[11px] font-medium px-3 py-1 rounded-[5px] transition-colors cursor-pointer shadow-2xs"
+                                    >
+                                      Done
+                                    </button>
+                                  </div>
+                                </div>
+                              </>
                             )}
                           </div>
 
                           {/* Include in Review Workspace – Market Data Checkbox (Figma 934:7961) */}
-                          <div className="flex items-center">
+                          <div className="flex items-center justify-center sm:justify-end pr-8">
                             <button
                               type="button"
                               role="checkbox"

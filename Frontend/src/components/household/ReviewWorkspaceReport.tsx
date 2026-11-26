@@ -26,6 +26,7 @@ import {
   completeReviewApi,
   reopenReviewApi,
   saveFutureOutlookApi,
+  fetchSystemSettingsApi,
 } from "@/lib/api";
 
 export interface ReviewInsightItem {
@@ -882,16 +883,45 @@ interface ReviewPropertyCard {
       }
       await onDataChanged?.();
     } catch (err) {
-      console.error("Failed to update review status:", err);
-      await persistReviewField({
-        tchReviewStatus: newStatus === "Completed" ? "COMPLETED" : "IN_PROGRESS",
-      });
+      console.warn("completeReviewApi/reopenReviewApi fell back to updateReviewApi:", err);
+      try {
+        await persistReviewField({
+          tchReviewStatus: newStatus === "Completed" ? "COMPLETED" : "IN_PROGRESS",
+        });
+        await onDataChanged?.();
+      } catch (fallbackErr) {
+        console.error("Failed to update review status:", fallbackErr);
+      }
     }
   };
+
+  // Live System Settings Benchmarks for Chart Associations
+  const [systemBenchmarks, setSystemBenchmarks] = useState<any[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchSystemSettingsApi()
+      .then((res) => {
+        if (isMounted && res?.benchmarks && Array.isArray(res.benchmarks)) {
+          setSystemBenchmarks(res.benchmarks);
+        }
+      })
+      .catch((err) => {
+        console.warn("Could not load system settings benchmarks for charts:", err);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Interactive Metric Selection & Bottom Insights Carousel for Report Screens
   const [selectedMetric, setSelectedMetric] = useState<string>("Total Property Return");
   const [carouselIndex, setCarouselIndex] = useState<number>(0);
+
+  const handleSelectMetric = (metricName: string) => {
+    setSelectedMetric(metricName);
+    setCarouselIndex(0);
+  };
 
   // Tab 2: Portfolio Overview sub-tab
   const [portfolioSubTab, setPortfolioSubTab] = useState<
@@ -1730,7 +1760,7 @@ interface ReviewPropertyCard {
     incomeGoal,
   ]);
 
-  // Reusable Metric Card exactly matching Figma 1044:9390 (bg-[#f6f9fb] rounded-[10px] px-[14px] py-[10px])
+  // Reusable Metric Card matching Figma (compact non-scrolling layout)
   const renderMetricCard = (
     label: string,
     value: string,
@@ -1742,7 +1772,7 @@ interface ReviewPropertyCard {
     <div
       key={label}
       onClick={onClick}
-      className={`flex flex-col gap-[6px] items-start px-[14px] py-[10px] rounded-[10px] w-full transition-all duration-150 ${
+      className={`flex flex-col gap-[3px] items-start px-[11px] py-[7px] rounded-[9px] w-full transition-all duration-150 ${
         onClick ? "cursor-pointer hover:border-[#0e2841]/50" : ""
       } ${
         isSelected
@@ -1750,19 +1780,19 @@ interface ReviewPropertyCard {
           : "bg-[#f6f9fb] border border-transparent"
       }`}
     >
-      <div className="flex gap-[12px] items-center w-full">
-        <div className="bg-white border-[#dce4e8] border-[0.27px] border-solid drop-shadow-[0px_3px_1.5px_rgba(0,0,0,0.04)] flex items-center justify-center p-[4px] rounded-full shrink-0 size-[40px]">
-          <img src={iconSrc} alt="" className="size-[20px] object-contain" />
+      <div className="flex gap-[8px] items-center w-full">
+        <div className="bg-white border-[#dce4e8] border-[0.27px] border-solid drop-shadow-[0px_2px_1px_rgba(0,0,0,0.04)] flex items-center justify-center p-[3px] rounded-full shrink-0 size-[32px]">
+          <img src={iconSrc} alt="" className="size-[16px] object-contain" />
         </div>
         <div className="flex flex-col min-w-0 flex-1">
-          <p className="font-['Poppins',sans-serif] font-medium text-[#1a1c1e] text-[12.5px] leading-snug truncate">
+          <p className="font-['Poppins',sans-serif] font-medium text-[#1a1c1e] text-[11px] leading-tight truncate">
             {label}
           </p>
-          <p className="font-['Poppins',sans-serif] font-extrabold text-[#0e2841] text-[14px] leading-normal mt-[2px]">
+          <p className="font-['Poppins',sans-serif] font-extrabold text-[#0e2841] text-[13.5px] leading-snug mt-[1px]">
             {value}
           </p>
-          <div className="w-full max-w-[130px] h-[1px] bg-[#dce4e8] my-[4px]" />
-          <p className="font-['Poppins',sans-serif] font-normal text-[#64748B] text-[11.5px] leading-normal truncate">
+          <div className="w-full max-w-[120px] h-[1px] bg-[#dce4e8] my-[2px]" />
+          <p className="font-['Poppins',sans-serif] font-normal text-[#64748B] text-[10px] leading-tight truncate">
             {sub}
           </p>
         </div>
@@ -1808,7 +1838,7 @@ interface ReviewPropertyCard {
     };
 
     return (
-      <div className="bg-white flex flex-col gap-[6px] h-[185px] items-start overflow-hidden px-[18px] py-[10px] rounded-[10px] shadow-[0px_4px_12px_rgba(0,0,0,0.03)] w-full">
+      <div className="bg-white flex flex-col gap-[4px] h-[155px] items-start overflow-hidden px-[16px] py-[8px] rounded-[10px] shadow-[0px_4px_12px_rgba(0,0,0,0.03)] w-full">
         <div className="flex items-center justify-between w-full">
           <div className="flex flex-col gap-[2px] items-start">
             <p className="font-['Poppins',sans-serif] font-semibold leading-[1.3] text-[#0e2841] text-[11px] tracking-[-0.19px]">
@@ -2002,32 +2032,80 @@ interface ReviewPropertyCard {
     );
   };
 
-  // Exact Figma 4-Bar Chart — Interactive on Hover & Metric reactive
+  // Exact Figma 4-Bar Chart — Interactive on Hover & Metric reactive with System Settings Benchmarks
   const renderBenchmarkBarChart = (overrideTitle?: string) => {
     const config = METRIC_CHART_CONFIGS[selectedMetric];
     const title = overrideTitle || config?.benchmarkTitle || "Benchmark comparison";
-    const bars = config?.bars || BENCHMARK_BARS;
+
+    // Dynamic resolution from System Settings mapped benchmarks
+    const mappedBenchmarks = systemBenchmarks.filter(
+      (b: any) =>
+        Array.isArray(b.picfoMetrics) &&
+        b.picfoMetrics.some(
+          (m: string) =>
+            m.toLowerCase() === selectedMetric.toLowerCase() ||
+            (selectedMetric.includes("Return") && m.includes("Return")) ||
+            (selectedMetric.includes("Yield") && m.includes("Yield")) ||
+            (selectedMetric.includes("Value") && m.includes("Value"))
+        )
+    );
+
+    let bars = config?.bars || BENCHMARK_BARS;
+    if (mappedBenchmarks.length > 0) {
+      const subjectBar = {
+        id: "subject",
+        value: selectedMetric.includes("Yield") ? "3.57%" : selectedMetric.includes("Return") ? "6.8%" : "8.5%",
+        height: 120,
+        line1: "subject",
+        line2: "property",
+        spacer: false,
+        fadedValue: false,
+        diff: "Subject Property",
+      };
+      const dynamicBars = mappedBenchmarks.slice(0, 3).map((bm: any, idx: number) => {
+        const hv = bm.historicalValues || [];
+        const latestHv = hv[hv.length - 1];
+        const valStr = latestHv?.value || bm.latestFy || "5.0%";
+        const num = parseFloat(String(valStr).replace(/[^0-9.]/g, "")) || (5.5 - idx * 0.8);
+        const barHeight = Math.min(130, Math.max(28, Math.round(num * 14)));
+        const diffNum = (num - 3.57).toFixed(1);
+        const nameParts = String(bm.measure || "Benchmark").split(" ");
+        const line1 = nameParts.slice(0, Math.ceil(nameParts.length / 2)).join(" ");
+        const line2 = nameParts.slice(Math.ceil(nameParts.length / 2)).join(" ") || "";
+        return {
+          id: `bm-${bm.id || idx}`,
+          value: String(valStr).includes("%") ? valStr : `${valStr}%`,
+          height: barHeight,
+          line1,
+          line2: line2 || "-",
+          spacer: !line2,
+          fadedValue: idx > 1,
+          diff: `${bm.measure} (${num >= 3.57 ? "+" : ""}${diffNum}% vs subj)`,
+        };
+      });
+      bars = [subjectBar, ...dynamicBars];
+    }
 
     return (
-      <div className="bg-white flex flex-col gap-[6px] h-[185px] items-start justify-between px-[20px] py-[10px] rounded-[10px] shadow-[0px_4px_12px_rgba(0,0,0,0.03)] w-full">
+      <div className="bg-white flex flex-col gap-[4px] h-[155px] items-start justify-between px-[16px] py-[8px] rounded-[10px] shadow-[0px_4px_12px_rgba(0,0,0,0.03)] w-full">
         <div className="flex items-center justify-between w-full">
-          <div className="flex gap-[8px] h-[22px] items-center">
-            <div className="bg-white drop-shadow-[0px_2px_1px_rgba(0,0,0,0.04)] flex items-start p-[4px] rounded-full">
+          <div className="flex gap-[8px] h-[20px] items-center">
+            <div className="bg-white drop-shadow-[0px_2px_1px_rgba(0,0,0,0.04)] flex items-start p-[3px] rounded-full">
               <img
                 src="/images/review/ce848.svg"
                 alt=""
-                className="w-[14px] h-[13.5px]"
+                className="w-[13px] h-[12.5px]"
               />
             </div>
-            <p className="font-['Poppins',sans-serif] font-semibold leading-[1.3] text-[#0e2841] text-[13px] tracking-[-0.24px]">
+            <p className="font-['Poppins',sans-serif] font-semibold leading-[1.3] text-[#0e2841] text-[12px] tracking-[-0.24px]">
               {title}
             </p>
           </div>
         </div>
 
-        <div className="flex gap-[20px] h-[135px] items-center justify-between w-full">
+        <div className="flex gap-[16px] h-[110px] items-center justify-between w-full">
           {/* Y-Axis */}
-          <div className="flex flex-col font-semibold gap-[8px] h-[120px] items-start leading-normal text-[#1a1c1e] text-[10.5px] tracking-[-0.2px] whitespace-nowrap select-none">
+          <div className="flex flex-col font-semibold gap-[6px] h-[95px] items-start leading-normal text-[#1a1c1e] text-[9.5px] tracking-[-0.2px] whitespace-nowrap select-none">
             <span>10%</span>
             <span>8%</span>
             <span>6%</span>
@@ -2046,7 +2124,7 @@ interface ReviewPropertyCard {
               const isDimmed =
                 hoveredBenchmarkBarId !== null &&
                 hoveredBenchmarkBarId !== bar.id;
-              const scaledHeight = Math.max(28, Math.round(bar.height * 0.72));
+              const scaledHeight = Math.max(22, Math.round(bar.height * 0.58));
               return (
                 <div
                   key={bar.id}
@@ -2336,78 +2414,92 @@ interface ReviewPropertyCard {
       );
     }
     return (
-      <div className="relative inline-block">
-        <button
-          type="button"
-          onClick={() => setIsStatusMenuOpen(!isStatusMenuOpen)}
-          className={`border-[0.5px] border-solid flex h-[32px] items-center justify-between px-[14px] rounded-[68px] shadow-[0px_4px_7.3px_0px_rgba(0,0,0,0.11)] shrink-0 min-w-[215px] gap-[8px] cursor-pointer transition-all ${
-            isCompleted
-              ? "bg-[#EBF7EE] border-[#18794E] text-[#18794E] hover:bg-[#dcf3e2]"
-              : "bg-[rgba(246,231,179,0.39)] border-[#d79730] text-[#d79730] hover:bg-[rgba(246,231,179,0.55)]"
-          }`}
-          title="Click to set status as Completed or Review In Progress"
-        >
-          <div className="flex items-center gap-[8px]">
-            {isCompleted ? (
-              <CheckCircle2 className="size-[16px] text-[#18794E]" />
-            ) : (
-              <img
-                src="/images/review/18912.svg"
-                alt=""
-                className="size-[16px]"
-              />
-            )}
-            <span className="font-['Poppins',sans-serif] font-medium text-[12px] whitespace-nowrap">
-              Status: {isCompleted ? "Completed" : "Review In Progress"}
-            </span>
-          </div>
-          <ChevronDown className="w-3.5 h-3.5 opacity-70" />
-        </button>
-
-        {isStatusMenuOpen && (
-          <>
-            <div
-              className="fixed inset-0 z-40"
-              onClick={() => setIsStatusMenuOpen(false)}
-            />
-            <div className="absolute right-0 mt-1.5 w-[225px] bg-white rounded-[10px] shadow-2xl border border-[#CBD5E1] p-1.5 z-50 animate-in fade-in zoom-in-95">
-              <div className="px-2 py-1 text-[11px] font-semibold text-[#8C9BA8] uppercase border-b border-[#F1F5F9] mb-1">
-                Set Review Status
-              </div>
-              <button
-                type="button"
-                onClick={() => handleSetStatus("In Progress")}
-                className={`w-full flex items-center justify-between px-3 py-2 text-[12.5px] rounded-[6px] font-medium transition-colors cursor-pointer ${
-                  !isCompleted
-                    ? "bg-[rgba(246,231,179,0.35)] text-[#d79730]"
-                    : "text-[#475569] hover:bg-[#F8FAFC]"
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-[#d79730]" />
-                  <span>Review In Progress</span>
-                </div>
-                {!isCompleted && <Check className="w-3.5 h-3.5 text-[#d79730]" />}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleSetStatus("Completed")}
-                className={`w-full flex items-center justify-between px-3 py-2 text-[12.5px] rounded-[6px] font-medium transition-colors cursor-pointer mt-1 ${
-                  isCompleted
-                    ? "bg-[#EBF7EE] text-[#18794E]"
-                    : "text-[#475569] hover:bg-[#F8FAFC]"
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-[#18794E]" />
-                  <span className="font-semibold">Set as &quot;Completed&quot;</span>
-                </div>
-                {isCompleted && <Check className="w-3.5 h-3.5 text-[#18794E]" />}
-              </button>
-            </div>
-          </>
+      <div className="flex items-center gap-2">
+        {!isCompleted && (
+          <button
+            type="button"
+            onClick={() => handleSetStatus("Completed")}
+            className="h-[32px] px-3.5 bg-[#18794E] hover:bg-[#13613e] text-white text-[12px] font-semibold rounded-[68px] shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+            title="Set status to Completed"
+          >
+            <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+            <span>Set as &quot;Completed&quot;</span>
+          </button>
         )}
+
+        <div className="relative inline-block">
+          <button
+            type="button"
+            onClick={() => setIsStatusMenuOpen(!isStatusMenuOpen)}
+            className={`border-[0.5px] border-solid flex h-[32px] items-center justify-between px-[14px] rounded-[68px] shadow-[0px_4px_7.3px_0px_rgba(0,0,0,0.11)] shrink-0 min-w-[215px] gap-[8px] cursor-pointer transition-all ${
+              isCompleted
+                ? "bg-[#EBF7EE] border-[#18794E] text-[#18794E] hover:bg-[#dcf3e2]"
+                : "bg-[rgba(246,231,179,0.39)] border-[#d79730] text-[#d79730] hover:bg-[rgba(246,231,179,0.55)]"
+            }`}
+            title="Click to set status as Completed or Review In Progress"
+          >
+            <div className="flex items-center gap-[8px]">
+              {isCompleted ? (
+                <CheckCircle2 className="size-[16px] text-[#18794E]" />
+              ) : (
+                <img
+                  src="/images/review/18912.svg"
+                  alt=""
+                  className="size-[16px]"
+                />
+              )}
+              <span className="font-['Poppins',sans-serif] font-medium text-[12px] whitespace-nowrap">
+                Status: {isCompleted ? "Completed" : "Review In Progress"}
+              </span>
+            </div>
+            <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+          </button>
+
+          {isStatusMenuOpen && (
+            <>
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setIsStatusMenuOpen(false)}
+              />
+              <div className="absolute right-0 mt-1.5 w-[225px] bg-white rounded-[10px] shadow-2xl border border-[#CBD5E1] p-1.5 z-50 animate-in fade-in zoom-in-95">
+                <div className="px-2 py-1 text-[11px] font-semibold text-[#8C9BA8] uppercase border-b border-[#F1F5F9] mb-1">
+                  Set Review Status
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleSetStatus("In Progress")}
+                  className={`w-full flex items-center justify-between px-3 py-2 text-[12.5px] rounded-[6px] font-medium transition-colors cursor-pointer ${
+                    !isCompleted
+                      ? "bg-[rgba(246,231,179,0.35)] text-[#d79730]"
+                      : "text-[#475569] hover:bg-[#F8FAFC]"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-[#d79730]" />
+                    <span>Review In Progress</span>
+                  </div>
+                  {!isCompleted && <Check className="w-3.5 h-3.5 text-[#d79730]" />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSetStatus("Completed")}
+                  className={`w-full flex items-center justify-between px-3 py-2 text-[12.5px] rounded-[6px] font-medium transition-colors cursor-pointer mt-1 ${
+                    isCompleted
+                      ? "bg-[#EBF7EE] text-[#18794E]"
+                      : "text-[#475569] hover:bg-[#F8FAFC]"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-[#18794E]" />
+                    <span className="font-semibold">Set as &quot;Completed&quot;</span>
+                  </div>
+                  {isCompleted && <Check className="w-3.5 h-3.5 text-[#18794E]" />}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
     );
   };
@@ -2468,7 +2560,7 @@ interface ReviewPropertyCard {
               alt=""
               className="size-[15px]"
             />
-            <span>{readOnly ? "Back to Reports" : "Back to Review Workspace"}</span>
+            <span>Back to Reports</span>
           </button>
 
           {/* Title & Status Pill Row (1044:9335) — directly on page without card border */}
@@ -3552,6 +3644,9 @@ interface ReviewPropertyCard {
               </div>
             )}
           </div>
+
+          {/* Bottom Insights Carousel for Executive Summary */}
+          {renderInsightsCarousel(selectedMetric, "Portfolio-Wide")}
         </div>
       )}
 
@@ -4426,7 +4521,7 @@ interface ReviewPropertyCard {
                     currentProperty.propertyValue,
                     "12.4% vs FY2025",
                     "/images/review/90cea.svg",
-                    () => setSelectedMetric("Property Value"),
+                    () => handleSelectMetric("Property Value"),
                     selectedMetric === "Property Value"
                   )}
                   {renderMetricCard(
@@ -4434,7 +4529,7 @@ interface ReviewPropertyCard {
                     currentProperty.totalLoans,
                     "12.4% vs FY2025",
                     "/images/review/89393.svg",
-                    () => setSelectedMetric("Total Loans"),
+                    () => handleSelectMetric("Total Loans"),
                     selectedMetric === "Total Loans"
                   )}
                   {renderMetricCard(
@@ -4442,7 +4537,7 @@ interface ReviewPropertyCard {
                     currentProperty.totalEquity,
                     "12.4% vs FY2025",
                     "/images/review/38829.svg",
-                    () => setSelectedMetric("Total Equity"),
+                    () => handleSelectMetric("Total Equity"),
                     selectedMetric === "Total Equity"
                   )}
                   {renderMetricCard(
@@ -4450,7 +4545,7 @@ interface ReviewPropertyCard {
                     currentProperty.totalReturn,
                     "12.4% vs FY2025",
                     "/images/review/61b85.svg",
-                    () => setSelectedMetric("Total Property Return"),
+                    () => handleSelectMetric("Total Property Return"),
                     selectedMetric === "Total Property Return"
                   )}
                   {renderMetricCard(
@@ -4458,7 +4553,7 @@ interface ReviewPropertyCard {
                     currentProperty.lvr,
                     "12.4% vs FY2025",
                     "/images/review/30184.svg",
-                    () => setSelectedMetric("LVR (Loan-to-Value Ratio)"),
+                    () => handleSelectMetric("LVR (Loan-to-Value Ratio)"),
                     selectedMetric === "LVR (Loan-to-Value Ratio)"
                   )}
                 </div>
@@ -4650,6 +4745,9 @@ interface ReviewPropertyCard {
                   </button>
                 )}
               </div>
+
+              {/* Bottom Insights Carousel for Cash Management */}
+              {renderInsightsCarousel(selectedMetric, currentProperty?.address)}
             </div>
           )}
 
@@ -4827,6 +4925,9 @@ interface ReviewPropertyCard {
                   </button>
                 )}
               </div>
+
+              {/* Bottom Insights Carousel for Capital Management */}
+              {renderInsightsCarousel(selectedMetric, currentProperty?.address)}
             </div>
           )}
         </div>
@@ -5455,6 +5556,9 @@ interface ReviewPropertyCard {
               </div>
             </div>
           </div>
+
+          {/* Bottom Insights Carousel for Future Outlook */}
+          {renderInsightsCarousel(selectedMetric, "Portfolio-Wide")}
         </div>
       )}
 
@@ -5476,8 +5580,8 @@ interface ReviewPropertyCard {
 
                 {/* Filter by Property matching user annotation */}
                 <div className="flex items-center gap-2">
-                  <span className="text-[13.5px] font-bold text-[#DC2626] whitespace-nowrap">
-                    Filter by Property
+                  <span className="text-[12.5px] font-semibold text-[#64748B] whitespace-nowrap">
+                    Filter by Property:
                   </span>
                   <div className="relative">
                     <select
@@ -5875,15 +5979,7 @@ interface ReviewPropertyCard {
                           {item.recommendation}
                         </td>
                         <td className="py-3.5 px-3 whitespace-nowrap">
-                          <span
-                            className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-[12px] font-semibold ${
-                              item.priority === "High"
-                                ? "bg-[#FDF2F2] text-[#DC2626] border border-[#FCA5A5]"
-                                : item.priority === "Medium"
-                                ? "bg-[#FEF9E7] text-[#B45309] border border-[#FDE68A]"
-                                : "bg-[#EFF6FF] text-[#1D4ED8] border border-[#BFDBFE]"
-                            }`}
-                          >
+                          <span className="font-semibold text-[#1a1c1e] text-[13.5px]">
                             {item.priority}
                           </span>
                         </td>

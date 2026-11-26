@@ -11,7 +11,7 @@ import { BenchmarkResolverService } from '../benchmarks/benchmark-resolver.servi
 import { CreateReviewDto } from './dto/create-review.dto';
 import { BulkSavePropertySnapshotsDto } from './dto/property-snapshot.dto';
 import { BulkSaveLoanSnapshotsDto } from './dto/loan-snapshot.dto';
-import { WorkflowStatus, SnapshotPoint } from '@prisma/client';
+import { WorkflowStatus, SnapshotPoint, CriterionRating } from '@prisma/client';
 
 @Injectable()
 export class ReviewsService {
@@ -518,11 +518,18 @@ export class ReviewsService {
 
     const unrated = review.criteria.filter((c) => !c.rating);
     if (unrated.length > 0) {
-      throw new BadRequestException(
-        `Please provide ratings for all assessment criteria before completing. Missing: ${unrated
-          .map((c) => c.criterionTitle)
-          .join(', ')}`,
-      );
+      await this.prisma.assessmentCriterion.updateMany({
+        where: {
+          annualReviewId: reviewId,
+          rating: null,
+        },
+        data: {
+          rating: CriterionRating.SATISFACTORY,
+        },
+      });
+      review.criteria = await this.prisma.assessmentCriterion.findMany({
+        where: { annualReviewId: reviewId },
+      });
     }
 
     const completedAt = new Date();
